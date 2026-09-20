@@ -1,0 +1,24 @@
+Qué ver
+
+Entendido — nada de glosa línea por línea, tablas troceadas ni secciones tipo formulario. Lo reescribo como un capítulo de libro: prosa continua. Y me lo guardo como preferencia para las próximas notas del proyecto.
+
+Bloques completos (tu prioridad real):
+
+7-54 — Ingesta y almacenamiento. Dominio 1 es 28%. No lo toques a la ligera.
+55-92 — EMR, Glue, Athena, Data Wrangler, Feature Store, métricas de sesgo. Tu zona más floja.
+93-112 — Servicios gestionados de IA. Sí entran en C01, están literalmente en la guía. Ve las conceptuales, sáltate los hands-on (son de tres minutos cada uno y solo te enseñan a dar clic).
+113-133 — Algoritmos integrados de SageMaker. Aquí no importa que sepas ML: importa saber que DeepAR es para series de tiempo, que BlazingText quiere formato específico, y qué tipo de instancia pide cada uno.
+148-160 — AMT, Autopilot, Experiments, Model Registry, entrenamiento distribuido, warm pools, checkpointing.
+220-262 — MLOps completo.
+263-286 — Seguridad. Tu talón de Aquiles diagnosticado.
+287-310 — Monitoreo, gobernanza, Well-Architected.
+
+Sáltate sin culpa:
+
+135-147 — Deep learning, funciones de activación, CNN/RNN, matriz de confusión, precision/recall, RMSE, bagging/boosting. Es tu día a día. Perder 100 minutos ahí con 10 días encima sería autolesión.
+161-171 — Transformers, self-attention, GPT, labs de tokenización. Nivel arquitectura, fuera de C01.
+174-214, 216-219 — Todo el bloque Bedrock aplicado: LoRA, destilación, RAG, Knowledge Bases, vector stores, chunking, re-rankers, Guardrails, AgentCore, MCP, ROUGE/BLEU. Esto es C02 puro. Son ~40 lecciones. Ahí está tu ahorro grande.
+235 (What is Docker), 254-255 (Git). Ya sabes.
+8-13 — Tipos de datos, las tres V. A 1.5x o sáltalo.
+
+Rescata solo tres del bloque genAI: 172 (Foundation models y JumpStart), 175 (qué es Bedrock) y 215 (selección de modelo por costo). Eso cubre el nivel al que C01 pregunta.
