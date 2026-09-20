@@ -27,14 +27,62 @@ tags: [aws, sagemaker, mla-c01, processing, training, boto3, contenedores]
 
 # Anatomía de un job de SageMaker
 
+## SageMaker no es un servicio: es un catálogo con un nombre común
+
+Amazon SageMaker AI es el paraguas bajo el que AWS agrupa dos docenas largas de servicios
+distintos, todos dedicados a alguna fase del ciclo de vida de un modelo: preparar datos,
+etiquetarlos, guardarlos como *features*, entrenar, ajustar, evaluar, registrar versiones,
+desplegar, vigilar en producción. No comparten nada más que el nombre, el prefijo de la API
+y el hecho de que casi todos cobran por segundo de instancia. Hablar de «usar SageMaker» es
+tan poco informativo como hablar de «usar Microsoft Office».
+
+Lo importante es lo que SageMaker **no** es, porque ahí se concentran las expectativas
+equivocadas:
+
+- No es una biblioteca de machine learning. No compite con scikit-learn ni con PyTorch: los
+  ejecuta.
+- No es un servidor ni un clúster que tú administres. No hay nada encendido esperándote, ni
+  nada que se te olvide apagar, salvo que expresamente pidas algo permanente.
+- No es un entorno de desarrollo, aunque incluya uno. El editor web con *notebooks* es una
+  pieza del catálogo, no la puerta obligatoria: todo lo que hace se puede hacer desde tu
+  laptop.
+
+De ese catálogo, esta nota cubre una sola pieza y la cubre entera: **el mecanismo con el que
+SageMaker ejecuta trabajo por ti**. Es la pieza que conviene aprender primero porque casi
+todas las demás son ese mismo mecanismo con otro nombre y otros valores por defecto: entrenar
+un modelo, ajustar sus hiperparámetros, evaluar sesgo, detectar desviaciones en producción o
+transformar un lote de datos son, por debajo, la misma llamada con otra imagen dentro. Quien
+entiende un Processing job y un Training job reconoce media docena de servicios del temario
+la primera vez que los ve.
+
 ## Un job es una máquina que AWS enciende, usa y apaga sin que la veas
 
-Un *job* de SageMaker es una petición a una API que dice, en una sola llamada: enciende
-tantas máquinas de este tipo, corre esta imagen dentro de ellas, deja a su alcance estos
-objetos de S3, guarda lo que produzcan en este otro sitio de S3 y apágalo todo cuando
-terminen. Eso es todo lo que es. No hay un servidor que administres, no hay nada a lo que
-te conectes por SSH, y no existe un botón de «ejecutar» que tengas que pulsar en el momento
-correcto: la petición es el trabajo.
+El trabajo más básico del caso de Kanan es limpiar un CSV de veinte gigabytes que está en
+S3. A mano, en AWS, eso son ocho pasos: lanzar una instancia EC2 del tamaño adecuado,
+esperar a que arranque, conectarte, instalar Python y pandas, copiar los datos desde S3,
+correr el script, copiar el resultado de vuelta, y —el paso que todo el mundo olvida y que
+aparece en la factura— apagar la instancia. Si el script falla a la mitad, además, tienes una
+máquina encendida sin hacer nada hasta que alguien se acuerde de ella.
+
+Un ***job*** de SageMaker es esos ocho pasos convertidos en **una sola llamada a una API**.
+La llamada dice: enciende tantas máquinas de este tipo, corre esta imagen dentro de ellas,
+deja a su alcance estos objetos de S3, guarda lo que produzcan en este otro sitio de S3 y
+apágalo todo cuando terminen. Eso es todo lo que es un job: una petición con esos cinco
+datos. No hay un servidor que administres, no hay nada a lo que te conectes por SSH, y no
+existe un botón de «ejecutar» que tengas que pulsar en el momento correcto: **la petición es
+el trabajo**.
+
+| Paso | A mano con EC2 | Con un job |
+| ---- | -------------- | ---------- |
+| Conseguir la máquina | lanzas la instancia y esperas | un campo de la petición: tipo y número |
+| Tener el software listo | instalas y configuras | un campo: la imagen a ejecutar |
+| Traer los datos | los copias desde S3 | un campo: la ruta de S3 de entrada |
+| Ejecutar | te conectas y lanzas el script | ocurre solo al arrancar la máquina |
+| Guardar el resultado | lo copias a S3 | un campo: la ruta de S3 de salida |
+| Apagar | te acuerdas, o no | ocurre solo al terminar el programa |
+
+Esa tabla es el esqueleto de las peticiones que ocupan el resto de la nota: los JSON de
+cuarenta líneas que vienen son esos cinco campos con sus variantes.
 
 La petición la haces tú, con la CLI o con boto3, firmada con la identidad que te dio la
 nota 1. Quien la recibe es el **plano de control** de SageMaker: el endpoint
