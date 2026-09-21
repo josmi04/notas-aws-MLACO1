@@ -22,3 +22,27 @@ Sáltate sin culpa:
 8-13 — Tipos de datos, las tres V. A 1.5x o sáltalo.
 
 Rescata solo tres del bloque genAI: 172 (Foundation models y JumpStart), 175 (qué es Bedrock) y 215 (selección de modelo por costo). Eso cubre el nivel al que C01 pregunta.
+
+
+Prompt:
+Revisa este archivo .md. El contenido es muy bueno como material de aprendizaje y consulta, pero resulta demasiado extenso para utilizarlo como material de repaso previo al examen.
+
+A partir de él, crea un documento mucho más compacto, orientado específicamente a la preparación y repaso para el examen. Organiza la información en chunks pequeños y autocontenidos, con formato similar a un formulario o cheat sheet de estudio.
+
+Cada chunk debe concentrarse en una idea, servicio, concepto, comparación, regla o patrón importante para el examen. Prioriza:
+
+definiciones y conceptos que conviene recordar;
+diferencias entre servicios o alternativas que puedan confundirse;
+límites, comportamientos y reglas importantes;
+patrones típicos de arquitectura y casos de uso;
+errores conceptuales frecuentes y trampas de examen;
+comandos, parámetros o fragmentos de código únicamente cuando aporten algo que realmente convenga memorizar o reconocer;
+tablas comparativas cuando permitan condensar información de forma efectiva.
+
+Elimina explicaciones largas, motivaciones extensas, ejemplos redundantes y desarrollos pedagógicos que sean útiles para aprender el tema desde cero pero no para repasarlo.
+
+No conviertas el documento en una colección de frases telegráficas sin contexto. Cada chunk debe ser suficientemente breve para repasarse rápidamente, pero suficientemente completo para entenderse por sí solo.
+
+El objetivo final es obtener un documento que permita repasar rápidamente todo el contenido relevante del .md antes del examen, sin tener que releer las notas completas.
+
+No agregues contenido ajeno al documento original salvo que sea necesario para corregir un error factual o aclarar una ambigüedad importante.
