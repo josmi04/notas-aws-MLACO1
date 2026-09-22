@@ -1,0 +1,951 @@
+Chapter 8
+Model Security
+THE AWS CERTIFIED MACHINE LEARNING (ML)
+ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED
+IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT
+LIMITED TO, THE FOLLOWING:
+✔ Domain 4: ML Solution Monitoring, Maintenance, and
+Security
+4.3 Secure AWS resources
+Security Design Principles
+In the last chapter of this guide, a key aspect of your ML solution will be
+examined, i.e., security. As you have learned since Chapter 1, security is a
+pillar of the AWS Well-Architected Framework, and it should be taken into
+consideration in any phase of the ML lifecycle. This way of thinking security
+is referred to as security by design, which can be generalized to any phase of
+the software development lifecycle, not just machine learning.
+AWS offers a broad spectrum of services that you can use to design and build
+a robust security-by-design architecture for your ML workloads.
+In this section, we will introduce the security design principles that can help
+you decide which AWS services suit best the components of your ML
+solution. Any solution you design, architect, and build in AWS should tie back
+to one (or a collection) of these principles.
+Implement a Strong Identity Foundation
+AWS offers several services to help you implement a strong security identity
+foundation for your ML workloads. These services are all centered around
+AWS Identity and Access Management (IAM), which allows you to securely
+control access to AWS services and resources. You can create and manage
+users and groups and use permissions to allow or deny their access to AWS
+resources.
+It all starts by implementing the least privilege principle and enforcing
+separation of duties with appropriate authorization for each interaction with
+AWS resources.
+The least privilege principle dictates that any identity (users, applications, and
+systems) should be granted only the minimal level of access necessary to
+perform its functions. By limiting permissions, the risk of malicious activity or
+accidental misuse is significantly reduced. This approach enhances security by
+ensuring that if credentials are compromised, the potential impact is
+minimized.
+The separation of duties principle involves dividing responsibilities among
+multiple identities or systems to prevent malicious activities, errors, and
+unauthorized actions. By ensuring that no single entity has control over all
+critical operations, this principle introduces checks and balances that enhance
+oversight and security. This approach reduces the risk of insider threats and
+ensures greater accountability within an organization.
+Later in the chapter, you will learn how to implement these principles for your
+ML workloads.
+Apply Security at All Layers
+The application of security at all layers embodies the defense-in-depth
+principle, which is a security strategy that employs multiple layers of security
+controls to protect your workload’s identities, infrastructure, and data. By
+implementing several layers of defense, this approach ensures that if one layer
+fails, others will continue to provide protection. This comprehensive strategy
+helps to delay and mitigate potential security breaches, providing more time
+for detection and response.
+Figure 8.1 illustrates how you can implement this principle for a web
+application exposed to the internet:
+Amazon CloudFront: Acts as the content delivery network (CDN) at the
+edge, distributing content globally and providing distributed denial-of-
+service (DDoS) protection
+AWS Web Application Firewall (WAF): Protects the application from
+common web exploits and attacks at the edge
+Application load balancer (ALB): Distributes incoming traffic across
+multiple targets, such as EC2 instances or containers
+Network access control list (NACL): Provides subnet-level firewall
+control, allowing or denying traffic based on specified rules
+Security Group: Acts as a virtual firewall for controlling inbound and
+outbound traffic at the resource level
+FIGURE 8.1 Defense-in-depth principle.
+The list can continue, for example, with services like Amazon GuardDuty for
+threat detection, AWS Key Management Service (KMS) for data encryption,
+and Amazon Inspector for continuous scanning of EC2 instances and
+container images for software vulnerabilities and unintended network
+exposure.
+Enable Traceability
+The enable traceability security principle originates from the nonrepudiation
+principle, which ensures that actions and transactions cannot be denied after
+they have taken place. Nonrepudiation provides proof of the integrity and
+origin of data, guaranteeing that it has not been tampered with. This
+foundational principle forms the basis for traceability, which is essential for
+accountability and forensic analysis in any security framework.
+To learn more about nonrepudiation, visit
+https://csrc.nist.gov/glossary/term/non_repudiation.
+Enabling traceability involves logging and monitoring actions within your
+AWS environment to maintain an accurate and comprehensive record of
+activities. This principle ensures that every action taken by users, applications,
+and systems is recorded and can be traced back to its origin. By enabling
+traceability, organizations can detect and respond to security incidents more
+effectively, as they have detailed information about what occurred and who
+was responsible. AWS provides several services and tools to facilitate
+traceability, such as AWS CloudTrail and Amazon CloudWatch.
+As you learned in Chapter 7, AWS CloudTrail enables auditing, compliance,
+and operational and risk management of your AWS accounts. As a result, this
+service is a key enabler of traceability, as it records API calls made within
+your AWS environment. AWS CloudTrail logs provide a detailed history of
+AWS API calls, including information about the requestor, the time of the
+request, and the actions performed. This helps organizations monitor and audit
+their AWS resources, detect unusual activities, and investigate security
+incidents. Additionally, integrating CloudTrail with Amazon S3 allows you to
+store and analyze these logs for long-term retention and forensic analysis.
+AWS Config is also instrumental in traceability, monitoring, and recording
+changes to your resource configurations to ensure compliance and facilitate
+auditing. For ML workloads, ensuring traceability also includes monitoring
+model training and inference activities.
+Amazon GuardDuty complements this by providing threat detection and
+monitoring for malicious activity and unauthorized behavior within your AWS
+environment. It uses ML, anomaly detection, and integrated threat intelligence
+to identify potential security threats, ensuring your ML workloads and data are
+protected.
+Amazon CloudWatch complements AWS CloudTrail by providing real-time
+monitoring and alerting capabilities. Amazon CloudWatch collects and tracks
+metrics, collects log files, and sets alarms to help you gain visibility into your
+AWS resources and applications. By analyzing Amazon CloudWatch logs and
+metrics, you can identify patterns, detect anomalies, and respond to potential
+security threats. Together, AWS CloudTrail, AWS Config, and Amazon
+CloudWatch enable comprehensive traceability, empowering organizations to
+maintain a security and compliance posture in their AWS environments.
+Additionally, Amazon EventBridge can be used to centralize events from
+various sources into a single location for processing, providing more
+traceability and enabling automated responses to specific events. By
+integrating Amazon EventBridge with your ML workflows, you can ensure
+that all relevant events are captured, monitored, and acted on, enhancing the
+overall security and traceability of your ML workloads.
+Protect Your Data (At Rest, In Use, and In Transit)
+Data protection is critical for ensuring the confidentiality, integrity, and
+availability of your data. These essential characteristics of your data are
+referred to as the CIA Triad, and they constitute the three key tenets of any
+information security strategy. This principle applies to all forms of data
+storage and processing, but it is particularly important for ML workloads,
+where large volumes of sensitive data are often handled. By implementing
+robust security measures at every stage of the ML lifecycle, you can safeguard
+your data from unauthorized access, tampering, and breaches.
+To protect your data at rest, which refers to data stored on disks or other
+storage devices, AWS offers several services. AWS KMS is a powerful tool
+that enables you to create and manage cryptographic keys used to encrypt your
+data. Native AWS KMS integration with storage services like Amazon S3,
+Amazon EBS, Amazon RDS, Amazon DynamoDB, and many others ensures
+that your data is encrypted at rest, providing a strong layer of protection.
+As you learned in Chapter 2, Amazon S3, Amazon EFS, and Amazon FSx
+for Lustre are natively integrated with Amazon SageMaker AI. These
+storage services encrypt your data at rest by default, meaning all data
+stored on S3 or the file system is encrypted before being written, without
+any additional configuration required from the user.
+Additionally, AWS Secrets Manager leverages AWS KMS to encrypt and store
+sensitive information, such as database credentials and API keys, further
+enhancing data security.
+Data in use refers to data being actively processed or accessed by applications.
+To protect data in use, AWS provides services such as AWS Nitro Enclaves,
+which create isolated compute environments for processing highly sensitive
+data. AWS Nitro Enclaves use hardware-based security measures to ensure
+that data remains secure while in use. Moreover, you can leverage AWS IAM
+to control access to data and resources, ensuring that only authorized users and
+applications can interact with your ML workloads.
+Protecting data in transit, or data being transmitted over networks, is equally
+important. AWS offers AWS Certificate Manager (ACM) to help you
+provision, manage, and deploy SSL/TLS certificates, which are essential for
+encrypting data in transit. You can use ACM with services like Amazon
+CloudFront, Elastic Load Balancing (ELB), and Amazon API Gateway to
+ensure that data is encrypted as it travels between different points, preventing
+unauthorized access and eavesdropping.
+By implementing these services, you can create a comprehensive security
+strategy that protects your data at every stage, ensuring confidentiality,
+integrity, and availability for your ML workloads.
+Automate Security Processes
+Automating security processes through Policy-as-Code is a robust and modern
+approach to maintaining and enforcing security controls in a consistent and
+scalable manner. As the name suggests, Policy-as-Code involves defining
+security policies and configurations as code, which can be version-controlled,
+tested, and deployed just like application code. This approach ensures that
+security policies are automatically applied and enforced across your
+environment, reducing the risk of human error and enabling rapid response to
+security threats. Services like AWS Config and AWS IAM let you automate
+the management and enforcement of security policies, ensuring that your
+infrastructure and your identities remain compliant with organizational and
+regulatory requirements.
+Integrating Policy-as-Code into MLOps pipelines further enhances the
+security posture of your ML workloads throughout the entire ML lifecycle. As
+you learned in Chapter 6, MLOps pipelines automate the process of building,
+training, tuning, and deploying ML models, and by incorporating Policy-as-
+Code, you can ensure that security controls are applied at every stage. For
+example, you can use AWS CodePipeline and AWS CodeBuild to automate
+the deployment of ML models, while simultaneously applying security
+policies defined in code. This ensures that ML models are deployed in a
+secure manner, with appropriate access controls, encryption, and monitoring in
+place.
+Automated security processes also enable continuous monitoring and
+compliance (i.e., traceability) for your ML workloads. By integrating services
+like Amazon GuardDuty and AWS Security Hub into your MLOps pipelines,
+you can continuously monitor your ML environment for security threats and
+compliance violations. These services provide real-time alerts and insights,
+allowing you to quickly detect and respond to potential security issues. When
+you combine these services with AWS Lambda, Amazon CloudWatch, and
+Amazon EventBridge, you can automate remediation actions based on
+predefined security policies, strengthening the security and resilience of your
+ML workloads. This holistic approach ensures that security is an integral part
+of your ML workflows in accordance with the security-by-design paradigm,
+providing robust protection against evolving threats.
+Prepare for Security Events
+When security incidents happen, having a solid response plan for your ML
+workloads is essential. Amazon Detective is a powerful tool that simplifies
+security investigations by automatically collecting log data from your AWS
+resources, including AWS CloudTrail and Amazon GuardDuty. It uses ML,
+statistical analysis, and graph theory to build a connected dataset, helping you
+quickly and efficiently investigate potential security threats. Amazon
+Detective can be integrated with your incident management policies and
+response simulations to ensure that your ML workloads are well-protected and
+resilient against security incidents.
+Securing AWS Services
+Securing AWS services is paramount for safeguarding your organization’s
+data, applications, and infrastructure in the cloud. A systematic and
+methodical approach to security ensures comprehensive protection across all
+aspects of the AWS environment. The foundation of this approach begins with
+securing identities. Identity and access management are critical because they
+determine who has access to your resources and what actions they can
+perform. AWS IAM plays a pivotal role in this process. By creating and
+managing users, groups, and roles, organizations can assign granular
+permissions that control access to AWS resources. As a result, securing
+identities with multifactor authentication (MFA) and adhering to the least
+privilege principle strengthen your organization’s security posture, reducing
+the risk of unauthorized access and potential breaches.
+Following the establishment of robust identity management, the next step is to
+secure the infrastructure where your ML workloads operate. AWS offers
+several services to help achieve this, such as Amazon Virtual Private Cloud
+(VPC) for network isolation, network access control lists (NACLs), and
+security groups for controlling inbound and outbound traffic. These services
+ensure that only authorized traffic can access your AWS resources.
+Additionally, encrypting data at rest is a crucial aspect of securing
+infrastructure. These measures collectively fortify the infrastructure against
+unauthorized access and data breaches.
+Securing data is another critical component of your security strategy.
+Protecting data at rest, in transit, and in use is essential to maintaining its
+confidentiality, integrity, and availability. AWS provides comprehensive
+solutions for data security, including encryption with AWS KMS, access
+controls, and continuous monitoring. For ML workloads, additional
+considerations are necessary to safeguard the data used for training and
+inference. Amazon SageMaker AI offers built-in security features that ensure
+data protection throughout the ML lifecycle. These features include
+encryption, fine-grained access controls, and real-time monitoring to detect
+and mitigate potential threats.
+Securing your ML workflows involves more than just data protection. It
+encompasses the entire ML pipeline, from data ingestion and preprocessing to
+model training and deployment. By integrating security controls into each
+stage of the ML pipeline, organizations can ensure that their ML workloads
+are resilient against various security threats.
+Finally, ensuring compliance with organizational and regulatory requirements
+is a critical aspect of a comprehensive security strategy. AWS offers several
+services to help organizations maintain compliance, including AWS Config,
+AWS Security Hub, and AWS Artifact. AWS Config continuously monitors
+and records resource configurations, enabling organizations to assess and audit
+their compliance status. AWS Security Hub provides a centralized view of the
+security posture, aggregating and prioritizing security findings from multiple
+AWS services and third-party products. AWS Artifact provides on-demand
+downloads of auditor-issued reports, certifications, accreditations, and other
+third-party attestations for AWS managed services. These include reports on
+compliance with International Organization for Standardization (ISO)
+standards, Payment Card Industry (PCI) security standards, and System and
+Organization Controls (SOC). By leveraging these services, organizations can
+ensure that their AWS environment complies with security standards and best
+practices, ultimately providing a robust and secure foundation for their cloud-
+based operations.
+Securing Identities with IAM
+AWS IAM is a web service that helps you securely control access to AWS
+resources. With IAM, you can manage permissions that control which AWS
+resources users can access. You use IAM to control who is authenticated
+(signed in) and authorized (has permissions) to use resources. IAM provides
+the infrastructure necessary to control authentication and authorization for
+your AWS accounts.
+With AWS, the term principal denotes a person or an application authenticated
+using an IAM user or an IAM role. Access management is often referred to as
+authorization. You manage access in AWS by creating policies and attaching
+them to IAM identities (IAM users, IAM groups, or IAM roles) or AWS
+resources.
+Although the exam is focused on machine learning, you—as an ML engineer
+—are required to know how to secure all the components of your ML
+workflows. In the next sections, we will explore each aspect in more detail,
+beginning with identities, which are the entry point to your ML workloads.
+Identities
+An IAM identity is a representation of a human user or a programmatic
+workload that can be authenticated and authorized to perform actions within
+AWS accounts. Each identity can be linked to one or more policies that define
+the actions it can take, the AWS resources it can use, and the conditions under
+which these actions are allowed.
+With AWS, IAM identities can be IAM users, IAM groups, or IAM roles. You
+can utilize AWS IAM Identity Center to create and manage identities and their
+access to AWS resources. With AWS IAM Identity Center, you can also
+manage permission sets, which automatically generate the necessary IAM
+roles to grant access to resources.
+Identities don’t have to be created in AWS. You have the option to federate
+existing identities from external identity providers, such as Microsoft Entra
+ID, Okta, and Cisco Duo, allowing them to assume IAM roles for accessing
+AWS resources. This method enables seamless integration with external
+identity providers.
+Do not confuse AWS accounts and AWS identities. An AWS account acts
+as a container for all your cloud resources, whereas an AWS identity refers
+to an entity within that account, like an IAM user, IAM group, or IAM
+role, which is assigned specific permissions to access those resources.
+AWS Identity and Access Management (IAM) is the service that manages
+identities and access.
+Let’s now review the different types of identities in AWS.
+IAM Users
+An IAM user is an entity that you create in your AWS account. The IAM user
+represents the human user or workload who uses this entity to interact with
+AWS resources. An IAM user consists of a name and credentials.
+It is best practice to require human users to access AWS through
+federation with an identity provider, using temporary credentials. This
+approach is preferred over using IAM users with long-term credentials.
+When you create an IAM user, AWS IAM Identity Center creates the
+following objects:
+Friendly name This is the name you used when you created the IAM
+user and is displayed in the top-right corner when you access your AWS
+account with this IAM user using the AWS Management Console.
+Amazon Resource Name (ARN) This is the ARN for your IAM user
+and is used to uniquely identify your IAM user across all of AWS. For
+example, you could use an ARN to specify the IAM user as a
+Principal in an IAM policy that allows the user to write to an Amazon
+S3 bucket. An ARN for an IAM user might look like this:
+arn:aws:iam::123456789012:user/Dario
+Unique identifier This ID is returned only when you use the API,
+Tools for Windows PowerShell, or AWS CLI to create the IAM user; you
+do not see this ID in the console.
+Each IAM user is associated with one and only one AWS account.
+Because IAM users are defined within your AWS account, they don’t need
+to have a payment method on file with AWS. Any AWS activity
+performed by IAM users in your account is billed to your account.
+IAM Roles
+An IAM role is another type of IAM identity that you can create in your AWS
+account. Just like an IAM user, an IAM role comes with specific permission
+policies that define what actions it is allowed to perform and what resources it
+is allowed to access in AWS. However, unlike an IAM user, a role is designed
+to be assumed by anyone who needs it, rather than being tied to a single
+identity.
+Think of an IAM role as a persona, which an IAM user can impersonate
+on an as-needed basis.
+Additionally, a role does not have long-term credentials, such as passwords or
+access keys. Instead, when you assume a role, it provides you with temporary
+security credentials for the duration of your role session. This is actually a
+good thing because short-term credentials limit the attack surface of your ML
+workload by timeboxing the permissions granted by the assumed IAM role.
+An ARN for an IAM role might look like this:
+arn:aws:sts::123456789012:assumed-role/Accounting-
+Role/Mario
+Notice how an IAM role’s ARN uses the sts string instead of the iam
+string to indicate that IAM roles consume the AWS Security Token
+Service to request temporary, limited-privilege credentials for users.
+IAM roles can be assumed by the following:
+An IAM user in the same AWS account or another AWS account
+IAM roles in the same AWS account
+Service principals (IAM principals that represents an AWS service)
+An external user authenticated by an identity provider (IdP)
+Amazon SageMaker Role Manager
+Amazon SageMaker Role Manager provides suggested permissions for a
+number of ML personas, including the Data Scientist persona, MLOps
+persona, and SageMaker AI Compute persona.
+Each persona has suggested permissions in the form of selected ML activities
+and their associate permissions, as shown in Table 8.1.
+TABLE 8.1
+ML Predefined Permissions.
+ML Activity
+Description
+Access
+Required AWS
+Services
+Permissions to access Amazon S3, Amazon ECR, Amazon
+CloudWatch, and Amazon EC2. Required for execution roles
+for jobs and endpoints.
+Run Studio
+Classic
+Applications
+Permissions to operate within a Studio Classic environment.
+Required for domain and user profile execution roles.
+Manage ML
+Jobs
+Permissions to audit, query lineage, and visualize
+experiments.
+Manage
+Models
+Permissions to manage SageMaker AI jobs across their
+lifecycles.
+Manage
+Pipelines
+Permissions to manage SageMaker pipelines and pipeline
+executions.
+Search and
+visualize
+experiments
+Permissions to audit, query lineage, and visualize
+SageMaker AI experiments.
+Manage Model
+Monitoring
+Permissions to manage monitoring schedules for SageMaker
+AI Model Monitor.
+Amazon S3
+Full Access
+Permissions to perform all Amazon S3 operations.
+Amazon S3
+Bucket Access
+Permissions to perform operations on specified Amazon S3
+buckets.
+Query Athena
+Workgroups
+Permissions to run and manage Amazon Athena queries.
+Manage AWS
+Glue Tables
+Permissions to create and manage AWS Glue tables for
+SageMaker AI Feature Store and Data Wrangler.
+SageMaker
+Canvas Core
+Access
+Permissions to perform experimentation in SageMaker
+Canvas (i.e., basic data prep, model build, validation).
+ML Activity
+Description
+SageMaker
+Canvas Data
+Preparation
+(powered by
+Data Wrangler)
+Permissions to perform end-to-end data preparation in
+SageMaker Canvas (i.e., aggregate, transform, and analyze
+data; create and schedule data preparation jobs on large
+datasets).
+SageMaker
+Canvas AI
+Services
+Permissions to access ready-to-use models from Amazon
+Bedrock, Amazon Textract, Amazon Rekognition, and
+Amazon Comprehend. Additionally, user can fine-tune
+foundation models from Amazon Bedrock and Amazon
+SageMaker JumpStart.
+SageMaker
+Canvas MLOps
+Permission for SageMaker Canvas users to directly deploy
+model to endpoint.
+SageMaker
+Canvas Kendra
+Access
+Permission for SageMaker Canvas to access Amazon Kendra
+for enterprise document search. The permission is only given
+to your selected index names in Amazon Kendra.
+Use MLflow
+Permissions to manage experiments, runs, and models in
+MLflow.
+Manage
+MLflow
+Tracking
+Servers
+Permissions to manage, start, and stop MLflow Tracking
+Servers.
+Access
+required to
+AWS Services
+for MLflow
+Permissions for MLflow Tracking Servers to access S3,
+Secrets Manager, and Model Registry.
+Run Studio
+EMR
+Serverless
+Applications
+Permissions to Create and Manage EMR Serverless
+Applications on Amazon SageMaker Studio.
+Data Scientist persona Use this persona to configure permissions to
+perform general ML development and experimentation in a SageMaker
+AI environment. This persona includes the following preselected ML
+activities:
+Run Studio Classic Applications
+Manage ML Jobs
+Manage Models
+Manage AWS Glue Tables
+SageMaker Canvas AI Services
+SageMaker Canvas MLOps
+SageMaker Canvas Kendra Access
+Use MLflow
+Access required to AWS Services for MLflow
+Run Studio EMR Serverless Applications
+MLOps persona Choose this persona to configure permissions for
+operational activities. This persona includes the following preselected
+ML activities:
+Run Studio Classic Applications
+Manage Models
+Manage Pipelines
+Search and visualize experiments
+Amazon S3 Full Access
+SageMaker AI Compute persona This persona includes the following
+preselected ML activity:
+Access Required AWS Services
+IAM Groups
+You can manage the permissions of multiple IAM users by using IAM groups.
+With IAM groups, you can assign specific permissions to all members within
+the group. For example, you can create an ML-Trainers group with
+permissions specifically tailored for ML tasks, such as creating training jobs in
+Amazon SageMaker AI. Any user added to this group will automatically
+inherit those permissions. If a new ML engineer joins your organization and
+needs the ability to create training jobs, you can simply add them to the ML-
+Trainers group. Similarly, if an employee’s job changes, you can update their
+permissions by moving them between groups without individually editing
+their permissions.
+Just like IAM users and IAM roles, you can also attach policies to IAM
+groups, ensuring that all members receive the permissions defined in the
+policy. For instance, the ML-Trainers group could have a policy that grants the
+sagemaker:CreateTrainingJob permission. However, it’s important to
+note that IAM groups cannot be identified as principals in a policy because
+IAM groups are related to permissions, not authentication. Principals are
+authenticated IAM entities and are represented by individual IAM users or
+IAM roles.
+Now that you understand the concept of identity, you may wonder how AWS
+knows that a given IAM user/role/group is allowed to perform an action (e.g.,
+write) on a specific AWS resource (e.g., an Amazon S3 bucket). This is where
+the concept of access policy comes into play, which will be covered in the next
+section.
+Access Policies
+Access policies (or simply policies) constitute the key component of
+authorization in AWS. A policy in AWS is an object that specifies the
+permissions for an identity or resource it is associated with. When a principal
+(such as an IAM user or IAM role) makes a request upon successful
+authentication, AWS evaluates the policies associated with its identity to
+determine whether the request should be allowed or denied. The outcome of
+this evaluation is referred to as the effect of the policy, and its values are allow
+or deny. The permissions outlined in the policy are referred to as the action
+and govern what the principal is allowed to perform on the AWS resource
+specified in the policy. A policy may also have a condition, which specifies
+the condition under which the policy is in effect.
+Most of these policies are stored as JSON documents in AWS.
+The policies you need to know for the exam are outlined in the upcoming
+sections. For more information about access policies, visit
+https://docs.aws.amazon.com/IAM/latest/UserGuide/access_po
+licies.html#access_policy-types.
+Identity-Based Policies
+Identity-based policies are JSON documents that control what actions an
+identity (IAM users, IAM groups, and IAM roles) can perform, on which
+AWS resources, and under what conditions. The following example shows a
+JSON policy that allows the IAM user to perform all Amazon DynamoDB
+actions (dynamodb:*) on the Vehicles table (table/Vehicles) in the
+123456789012 account within the us-east-1 Region:
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "dynamodb:*",
+    "Resource": "arn:aws:dynamodb:us-east-
+1:123456789012:table/Vehicles"
+  }
+}
+Upon attaching this policy to your IAM user, the user will have permission to
+perform all actions on the Vehicles table in your DynamoDB instance.
+Typically, IAM users have multiple policies that collectively define their
+overall permissions.
+Actions or resources not explicitly permitted by a policy are denied by default.
+For instance, if the previous policy is the only one attached to an IAM user,
+they can perform DynamoDB actions on the Vehicles table but cannot interact
+with other tables. Similarly, the user is restricted from performing actions in
+Amazon EC2, Amazon S3, or any other AWS service, as the policy does not
+grant permissions for these services.
+Resource-based Policies
+Resource-based policies are JSON documents that you attach to an AWS
+resource instead of an AWS identity. These policies grant the specified
+principal permission to perform specific actions on that resource and defines
+under what conditions these apply.
+The following JSON document is an example of an AWS resource-based
+policy for an S3 bucket that grants the principal
+arn:aws:iam::123456789012:user/Dario permissions to write to a
+bucket your-unique-bucket-name:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": 
+"arn:aws:iam::123456789012:user/Dario"
+            },
+            "Action": "s3:PutObject",
+            "Resource": "arn:aws:s3:::your-unique-bucket-
+name/*"
+        }
+    ]
+}
+In this policy:
+The Effect is set to Allow, which means the action is permitted.
+The Principal specifies the IAM user Dario with the ARN
+arn:aws:iam::123456789012:user/Dario.
+The Action is s3:PutObject, which allows the user to write objects to
+the bucket.
+The Resource specifies the ARN of the bucket and includes the
+wildcard (*) to allow writing to any object within the bucket.
+Replace your-unique-bucket-name with the actual name of your S3
+bucket.
+Not all AWS resources support resource-based policies. To learn more,
+visit
+https://docs.aws.amazon.com/IAM/latest/UserGuide/refere
+nce_aws-services-that-work-with-iam.html#all_svcs.
+Permission Boundaries
+A permissions boundary is an advanced IAM feature that defines the
+maximum permissions an identity-based policy can grant to an IAM identity.
+When a permissions boundary is set for an IAM identity, the entity can only
+perform actions that are permitted by both its identity-based policies and the
+permissions boundary.
+The following JSON document is an example of a permission boundary policy
+that limits the IAM user Dario to only use DynamoDB, S3, and CloudWatch
+services:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:*",
+                "s3:*",
+                "cloudwatch:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+When you attach this permission boundary policy to the IAM user Dario, it
+limits the user’s permissions but does not provide permissions on its own. In
+this example, the policy sets the maximum permissions of Dario as all
+operations in Amazon DynamoDB, Amazon S3, and Amazon CloudWatch.
+Dario can never perform operations in any other service, including IAM, even
+if he has a permissions policy that allows it.
+Service Control Policies
+If your AWS account is part of a large organization with multiple accounts
+designed to fulfill different business functions, you have the ability to
+implement Service Control Policies (SCPs) as a consistent way to manage
+permissions across your entire organization.
+AWS Organizations is a service that allows you to centrally manage and
+govern multiple AWS accounts within your organization. It enables you to
+consolidate billing, apply SCPs for fine-grained control over account
+permissions, and automate account provisioning and management. You
+should use AWS Organizations when you need to manage multiple
+accounts for your business, ensuring consistent security and compliance
+across all accounts. AWS Control Tower extends the capabilities of AWS
+Organizations by providing a preconfigured, secure, and compliant multi-
+account environment. It offers automated account setup (Account
+Factory), centralized security, and governance best practices, making it
+easier to manage and govern multi-account AWS environments. To learn
+more, visit
+https://docs.aws.amazon.com/controltower/latest/usergui
+de/what-is-control-tower.html.
+SCPs are powerful tools that allow you to define the maximum permissions
+for IAM users and roles within the accounts of your organization or
+organizational units (OUs). These JSON policies act as guardrails that set the
+boundaries for what actions can and cannot be performed, providing an
+additional layer of control, security, and compliance. For example, to enforce
+an organization policy that only allows EC2 instances to be created in a
+specific region for accounts within a designated OU, you would create an SCP
+that explicitly denies the ec2:RunInstances action for any region other than
+the designated one, applying this SCP to the relevant OU within your AWS
+organization. By using SCPs, you can ensure that only approved actions are
+allowed, thereby reducing the risk of accidental or malicious activities.
+Furthermore, SCPs can be applied to all principals within the member
+accounts, including the AWS account root user. This means that even if a user
+has permissions granted through other policies, an explicit deny in an SCP will
+override any allows, effectively restricting their actions. SCPs are particularly
+useful for enforcing compliance and governance across large and complex
+organizations. By centrally managing permissions, you can streamline security
+operations and maintain consistent policies across all accounts, ensuring that
+your AWS environment remains secure and well-regulated.
+To learn more about SCPs, visit
+https://docs.aws.amazon.com/organizations/latest/userguide
+/orgs_manage_policies_scps.html.
+Securing Infrastructure and Data
+Securing infrastructure in AWS is essential for protecting sensitive data and
+ensuring the integrity of ML workflows. One of the fundamental components
+of AWS security is the Virtual Private Cloud (VPC), which provides network
+isolation by creating a logically isolated section of the AWS cloud where you
+can launch AWS resources in a virtual network that you define. VPCs enable
+you to control the network settings, such as IP address ranges, subnets, route
+tables, and gateways, providing a secure environment for your ML
+infrastructure.
+Network Isolation with VPCs
+A VPC is the cornerstone of network isolation in AWS. Upon creating a VPC,
+you can launch AWS resources such as Amazon SageMaker notebooks,
+training jobs, and inference endpoints within a logically isolated network. This
+isolation allows you to define your IP address ranges, create subnets, and
+configure route tables, ensuring that your ML resources are securely
+segmented from other parts of the AWS network and external networks.
+Within a VPC, NACLs serve as stateless firewalls that control inbound and
+outbound traffic at the subnet level. Stateless means that information about
+previously sent or received traffic is not saved. NACLs allow you to define
+rules that explicitly permit or deny traffic based on IP addresses, protocols,
+and ports. This additional layer of security is aligned with the defense-in-depth
+principle and helps protect your ML infrastructure from unauthorized access
+and potential threats.
+You can associate a NACL with multiple subnets. However, a subnet can
+be associated with only one NACL at a time.
+Security groups act as stateful firewalls for your ML instances, controlling
+inbound and outbound traffic at the instance level. Stateful means that
+information about previously sent or received traffic is saved. As a result, if a
+security group allows incoming traffic on port 443 to an EC2 instance,
+responses are automatically returned regardless of outbound security group
+rules. Security groups can be attached to various AWS resources, such as
+Amazon EC2 instances, Amazon RDS instances, Amazon Elastic Load
+Balancers (ELBs), and Amazon SageMaker notebooks. By defining security
+group rules, you can specify which traffic is allowed to reach your ML
+resources. These rules can also be based on IP addresses, protocols, and ports,
+ensuring that only authorized traffic can access your ML infrastructure. A key
+feature of security groups is the ability to reference other security groups or
+defined prefix lists as a source in rules. This allows you to manage access to
+groups of resources without needing to know their specific IP addresses, as in
+the case of an ELB with dynamically assigned IPs.
+You can associate multiple security groups with a single EC2 instance,
+effectively allowing you to manage inbound and outbound traffic with
+granular control by combining the rules from each security group.
+Private Connectivity
+Private connectivity options, such as VPC interface endpoints and gateway
+endpoints, further enhance the security of your ML infrastructure by enabling
+private connections to AWS services without traversing the public internet.
+VPC interface endpoints use AWS PrivateLink to create private connections to
+AWS services, such as Amazon S3 and Amazon SageMaker AI, within your
+VPC. However, AWS PrivateLink is not limited to private connectivity to
+AWS services. With this service, you can also create private connections to
+user-defined services across different VPCs and AWS accounts, enabling
+secure sharing of services without exposing traffic to the public internet. This
+approach reduces the risk of data exposure and improves data security by
+ensuring that traffic remains within the AWS network. Similarly, VPC
+gateway endpoints provide private connectivity to AWS services that are
+accessible via the AWS Management Console, API, and CLI, such as Amazon
+S3 and Amazon DynamoDB. By using gateway endpoints, you can ensure that
+data traffic between your VPC and these services is secure and private.
+Data Protection
+In addition to network and security isolation, it is crucial to implement
+encryption for data at rest, in use, and in transit to protect sensitive ML data.
+AWS KMS allows you to create and manage cryptographic keys that can be
+used to encrypt data stored in various AWS services, such as Amazon S3,
+Amazon RDS, and Amazon EBS. Additionally, AWS provides SSL/TLS
+encryption for data in transit, ensuring that data remains secure while being
+transferred between your ML infrastructure and other AWS services or
+external systems.
+ACM further simplifies the process of provisioning, managing, and deploying
+SSL/TLS certificates for your websites and applications. You can use ACM to
+easily obtain and renew certificates and ensure secure communication between
+your ML infrastructure and users or other systems. Implementing encryption
+helps maintain the confidentiality and integrity of your ML data, preventing
+unauthorized access and tampering.
+Monitoring and Auditing
+Monitoring and auditing are also vital components of securing ML
+infrastructure in AWS. As you learned in Chapter 7, AWS provides several
+services, such as AWS CloudTrail and Amazon CloudWatch, to help you
+monitor and log activities within your VPC and ML infrastructure. AWS
+CloudTrail enables you to track API calls and user activities, providing a
+detailed audit trail that can be used for compliance and security analysis.
+Amazon CloudWatch allows you to collect and monitor metrics, set alarms,
+and gain insights into the performance and health of your ML infrastructure.
+With these monitoring and auditing tools, you can proactively detect and
+respond to security incidents, ensuring the ongoing protection and integrity of
+your ML workflows.
+Ensuring Compliance
+Amazon SageMaker AI is designed to meet a variety of industry standards and
+regulatory requirements, making it a suitable choice for organizations with
+stringent compliance needs. In the United States, Amazon SageMaker AI
+supports compliance with the Health Insurance Portability and Accountability
+Act (HIPAA), which is essential for handling sensitive healthcare data. This
+ensures that organizations in the healthcare sector can securely manage and
+analyze patient information while adhering to HIPAA’s stringent privacy and
+security rules.
+Another key compliance framework supported by Amazon SageMaker AI is
+the Payment Card Industry Data Security Standard (PCI DSS). This standard
+is critical for organizations that handle payment card information, as it sets
+requirements for securing cardholder data. By adhering to PCI DSS,
+organizations can ensure that their ML workflows involving payment data are
+secure and compliant with industry standards.
+Moreover, Amazon SageMaker AI complies with ISO 27001, an international
+standard for information security management systems. This certification
+demonstrates that Amazon SageMaker AI follows best practices for managing
+information security, including risk assessment, management, and continuous
+improvement. Compliance with ISO 27001 ensures that organizations can
+trust Amazon SageMaker AI to protect their data and maintain robust security
+measures.
+In addition to these frameworks, Amazon SageMaker AI supports compliance
+with several other regulatory standards, including SOC 1, SOC 2, SOC 3,
+FedRAMP, GDPR, and others. This wide range of compliance certifications
+makes Amazon SageMaker AI a versatile and secure platform for various
+industries, ensuring that organizations can meet their regulatory obligations
+while leveraging advanced ML capabilities.
+You can leverage AWS Artifact to obtain third-party attestations and reports
+that validate your compliance status with respect to the aforementioned
+frameworks.
+For more details on the compliance frameworks supported by Amazon
+SageMaker AI, you can visit the Compliance validation for Amazon
+SageMaker AI page at
+https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-
+compliance.html.
+For security compliance best practices, visit the Security Best Practices for
+Amazon SageMaker AI page at
+https://docs.aws.amazon.com/config/latest/developerguide/s
+ecurity-best-practices-for-SageMaker.html.
+Summary
+In this chapter, you learned about the importance of securing ML models with
+Amazon SageMaker AI and the various aspects involved in achieving this.
+Securing ML models requires a holistic approach that leverages a security-by-
+design strategy, which is founded on security design principles such as least
+privilege, separation of duties, and defense in depth. These principles ensure
+that users and applications have only the necessary permissions, multiple
+layers of security are implemented, and security controls are integrated into
+the architecture from the outset.
+Managing identities and access control is crucial for securing ML resources in
+Amazon SageMaker AI. AWS IAM allows you to create and manage policies
+that define permissions for users, groups, and roles, ensuring that only
+authorized users can access specific Amazon SageMaker AI resources.
+Implementing MFA adds an extra layer of security, and creating permission
+boundaries and SCPs helps enforce organizational security policies and restrict
+access to critical resources. This ensures that your ML identities are managed
+securely and effectively.
+Securing the infrastructure supporting ML workflows involves implementing
+network isolation and using appropriate security controls. VPCs provide
+network isolation, whereas NACLs and security groups act as firewalls
+controlling traffic at the subnet and instance levels. Private connectivity
+options, such as VPC interface endpoints and gateway endpoints, enable
+secure connections to AWS services without exposing data to the public
+internet. Monitoring and logging services like AWS CloudTrail and Amazon
+CloudWatch help you track and audit network activities, ensuring that
+potential security incidents are promptly detected and addressed.
+Lastly, protecting data and ensuring compliance are critical aspects of securing
+ML models and workflows. AWS KMS allows you to create and manage
+cryptographic keys for encrypting data at rest, whereas SSL/TLS encryption
+ensures data in transit remains secure. ACM simplifies the process of
+provisioning, managing, and deploying SSL/TLS certificates. Amazon
+SageMaker AI supports various compliance frameworks, including HIPAA,
+PCI DSS, ISO 27001, SOC 1, SOC 2, SOC 3, FedRAMP, and GDPR,
+ensuring that your ML environment adheres to relevant industry standards and
+data residency regulations. By addressing each of these areas, you can build a
+secure and compliant ML infrastructure with Amazon SageMaker AI,
+protecting your models, infrastructure, and data from potential threats and
+vulnerabilities.
+Exam Essentials
+Know the difference between IAM users, IAM roles, and IAM groups. 
+An IAM user is an AWS identity that represents an individual person or
+service that interacts with AWS resources. IAM users have long-term
+credentials like passwords or access keys. IAM roles are identities that can be
+assumed by IAM users or other roles and use temporary security tokens for
+access. This makes them ideal for granting temporary permissions to identities
+such as applications or users that need to assume different sets of permissions.
+Lastly, IAM groups are identities representing collections of IAM users that
+share common permissions.
+Know the elements of an AWS access policy. An AWS access policy is a
+JSON document that defines permissions for an IAM identity (IAM user, IAM
+group, or IAM role) or an AWS resource. The main elements of an access
+policy include Version, which specifies the policy language
+version; Statement, which contains one or more individual
+permissions; Effect, which can be either Allow or Deny to grant or restrict
+access; Action, which specifies the API operations allowed or denied;
+Resource, which specifies the AWS resources to which the actions apply;
+and Condition, which optionally specifies the conditions under which the
+policy is in effect. Together, these elements outline what actions are permitted
+or denied for specified resources under defined conditions.
+Know the different access policy types. Identity-based policies are
+attached directly to IAM users, IAM groups, or IAM roles and define what
+actions they can perform on which resources. Resource-based policies are
+attached to AWS resources like Amazon S3 buckets and specify who can
+access those resources and what actions they can take. Permissions boundaries
+are advanced policies that set the maximum permissions an identity-based
+policy can grant to an IAM user or IAM role. Service Control Policies (SCPs)
+are used within AWS Organizations to manage permissions across all accounts
+and organizational units, defining what actions can be performed by the
+accounts’ users and roles.
+Know what Amazon SageMaker Role Manager is. Amazon SageMaker
+Role Manager is a tool that simplifies the creation and management of IAM
+roles tailored for ML workflows. It allows ML administrators to define
+persona-based roles with predefined permissions for common ML activities.
+Personas include Data Scientist, MLOps, and SageMaker AI Compute. With
+Amazon SageMaker Role Manager, you can ensure least privilege access,
+granting only the necessary permissions for specific tasks. This helps
+streamline security management and ensures that different users have
+appropriate access levels for their roles within Amazon SageMaker AI.
+Know the difference between NACLs and security groups. Network
+access control lists are stateless firewalls that control traffic at the subnet level,
+allowing or denying traffic based on IP address, protocol, and port. With
+NACLs, both inbound and outbound rules must be defined. Security groups,
+on the other hand, are stateful firewalls that control traffic at the instance level,
+allowing traffic based on IP address, protocol, and port. Due to their stateful
+nature, security groups always return traffic automatically.
+Know the ways to implement private connectivity in a VPC. Private
+connectivity in an AWS VPC can be implemented using VPC endpoints,
+which enable secure, private connections between your VPC and supported
+AWS services without traversing the public Internet. There are two types of
+VPC endpoints: interface endpoints and gateway endpoints. Interface
+endpoints use AWS PrivateLink to provide private access to services such as
+Amazon S3, Amazon SageMaker AI, and Amazon EC2 through an elastic
+network interface within your VPC. Gateway endpoints provide private
+connectivity to services like Amazon S3 and Amazon DynamoDB by adding
+route entries to your VPC route tables. By using these endpoints, you can
+ensure that your data traffic remains secure and private within the AWS
+network.
+Review Questions
+1. What is the main difference between IAM roles and IAM users when it
+comes to access credentials?
+A. IAM users have temporary security credentials, and IAM roles have
+long-term credentials.
+B. IAM roles provide temporary security credentials, and IAM users
+have long-term credentials.
+C. Both IAM roles and users have long-term security credentials.
+D. Both IAM roles and users have temporary security credentials.
+2. Which AWS service allows you to monitor compliance with internal
+policies and regulatory standards in Amazon SageMaker AI?
+A. Amazon GuardDuty
+B. AWS Config
+C. AWS CloudTrail
+D. Amazon Inspector
+3. What key distinction separates security groups from network access
+control lists (NACLs)?
+A. Security groups operate at the instance level and are stateless,
+whereas NACLs operate at the subnet level and are stateful.
+B. Security groups operate at the subnet level and are stateless, whereas
+NACLs operate at the instance level and are stateful.
+C. Security groups operate at the instance level and are stateful,
+whereas NACLs operate at the subnet level and are stateless.
+D. Security groups operate at the subnet level and are stateful, whereas
+NACLs operate at the instance level and are stateless.
+4. Which personas are predefined using Amazon SageMaker Role
+Manager?
+A. Data Scientist and MLOps
+B. System Administrator and Network Engineer
+C. Financial Analyst and HR Manager
+D. Marketing Specialist and Sales Representative
+5. What is a key benefit of using AWS PrivateLink for secure
+communication between VPCs and AWS services?
+A. It enables Internet access to AWS services.
+B. It creates public endpoints for AWS services.
+C. It provides private connectivity without exposing data to the public
+Internet.
+D. It manages network traffic within a VPC.
+6. How do Service Control Policies (SCPs) enhance security within an AWS
+Organization?
+A. By providing detailed logs of API calls
+B. By enforcing maximum permissions for member accounts
+C. By encrypting data at rest
+D. By monitoring traffic within the VPC
+7. Which AWS service helps enforce compliance for training data residency
+requirements in a machine learning application within a multi-account
+environment?
+A. AWS CloudTrail with identity-based policies
+B. AWS Config with resource-based policies
+C. AWS Control Tower with Service Control Policies
+D. Amazon CloudWatch with Access Control Lists
+8. What is the role of AWS KMS in securing machine learning data in
+Amazon SageMaker AI?
+A. To generate detailed audit logs of API calls
+B. To monitor the performance of ML models
+C. To create and manage cryptographic keys for data encryption
+D. To control traffic between subnets and instances
+9. Which AWS service is primarily used for tracking and logging API calls
+and activities for security and compliance auditing?
+A. AWS Shield
+B. AWS CloudTrail
+C. AWS CloudFormation
+D. Amazon CloudWatch
+10. Which security strategy emphasizes incorporating security considerations
+from the initial stages of design and development?
+A. Defense in depth
+B. Least privilege
+C. Security by design
+D. Multifactor authentication (MFA)

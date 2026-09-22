@@ -1,0 +1,1353 @@
+Chapter 7
+Model Monitoring and Cost Optimization
+THE AWS CERTIFIED MACHINE LEARNING (ML)
+ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED
+IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT
+LIMITED TO, THE FOLLOWING:
+✔ Domain 4: ML Solution Monitoring, Maintenance, and
+Security
+4.1 Monitor model inference
+4.2 Monitor and optimize infrastructure and costs
+Monitoring Model Inference
+Machine learning (ML) models are usually trained and evaluated using
+historical data. However, real-world data may (and should) be different from
+training data so that models can generalize well to new, unseen data. This is
+particularly true as models age over time and the distributions of data change
+as a result of entropy, leading to potential shifts in the underlying patterns and
+relationships within the data. As these changes accumulate, the model’s
+assumptions about the data may become less accurate, resulting in a gradual
+decrease in the model’s performance and prediction quality. This gradual
+decrease in the model’s performance is referred to as model drift. A drift can
+significantly impact your model’s prediction quality.
+An effective way to address this problem is to continuously monitor your
+model and retrain it as needed. Continuous monitoring ensures that your
+model adapts to evolving data distributions and maintains its effectiveness.
+This step is illustrated in the ninth and last phase of the ML lifecycle, i.e.,
+Monitor Model, as shown in Figure 7.1.
+FIGURE 7.1 The model monitoring phase in the machine learning
+lifecycle.
+Model monitoring is a key phase in the ML lifecycle whose main focus is to
+maintain the reliability, availability, and performance of your newly deployed
+ML model.
+In this chapter, you will learn the techniques and services provided by AWS to
+monitor the inferences produced by your model, and the infrastructure that
+your model utilizes to generate them.
+The exam also requires that you are well-versed in the guiding principles that
+are relevant to monitoring. Understanding how to instrument your ML
+solution with a robust monitoring framework is essential for ensuring the
+ongoing performance, reliability, and security of your models. This involves
+setting up appropriate metrics, alerts, and dashboards to keep track of various
+aspects of your ML solution, such as model accuracy, latency, resource
+utilization, and data drift.
+It’s even more important to understand the rationale behind these monitoring
+practices. This means knowing why each metric matters and how it can impact
+the overall performance and health of your ML application. For instance,
+monitoring model accuracy helps you detect when the model’s performance is
+degrading, whereas tracking resource utilization allows you to optimize costs
+and prevent system overloads.
+The rationale behind these monitoring practices is formalized in a collection of
+best practices referred to as the Machine Learning Well-Architected Lens.
+This framework provides detailed guidance on how to “well-architect” your
+ML solution in alignment with the six pillars of the AWS Well-Architected
+Framework: operational excellence, security, reliability, performance
+efficiency, cost optimization, and sustainability.
+By following these best practices, you can ensure that your ML solutions are
+not only robust and efficient but also adaptable to changing conditions and
+aligned with business objectives.
+Drifts in Models
+As mentioned earlier, drift in ML models is a phenomenon where the model’s
+performance degrades over time due to changes in the underlying data. These
+changes can occur for various reasons, such as evolving user behavior,
+seasonal trends, or external factors. In the context of Amazon SageMaker AI,
+understanding and managing model drift is critical to maintaining the accuracy
+and reliability of your deployed models. As models age and the real-world
+data they encounter begins to differ from the training data, it becomes
+essential to detect and address these drifts promptly.
+Amazon SageMaker AI provides powerful tools to help monitor and detect
+model drift. One of the key services in this regard is Amazon SageMaker
+Model Monitor, which allows you to continuously track the quality of your
+ML models in production. By setting up monitoring schedules, you can
+automatically capture data from your endpoints, analyze it for signs of drift,
+and generate alerts when significant changes are detected. This proactive
+approach helps ensure that your models remain aligned with the current data
+distributions and continue to deliver accurate predictions.
+There are different types of drift that you might encounter, including data drift,
+model drift, bias drift, and feature attribution drift. Data drift occurs when the
+statistical properties of the input data change over time, whereas model drift
+happens when the model’s performance metrics deteriorate. Bias drift is
+related to changes in the fairness of the model’s predictions, and feature
+attribution drift occurs when the importance of input features shifts. By
+monitoring these various forms of drift, you can gain a comprehensive
+understanding of how your models are behaving in real-world scenarios and
+take necessary actions to mitigate any negative impacts.
+To effectively manage model drift and maintain high performance, it’s
+important to implement robust techniques for monitoring data quality and
+model performance. In the next sections, we will explore these techniques in
+detail, covering best practices for setting up monitoring frameworks, selecting
+appropriate metrics, and leveraging Amazon SageMaker AI’s capabilities to
+ensure that your models continue to perform optimally over time.
+Techniques to Monitor Data Quality and Model
+Performance
+Amazon SageMaker Model Monitor is designed to oversee the quality of ML
+models deployed in production within Amazon SageMaker AI. With Model
+Monitor, you have several options for setting up monitoring:
+Continuous monitoring with a real-time endpoint
+Continuous monitoring with a batch transform job that runs at regular
+intervals
+Scheduled monitoring for asynchronous batch transform jobs
+Amazon SageMaker Model Monitor allows you to set up Amazon
+CloudWatch alarms that notify you of any drifts in data or model quality. Early
+and proactive detection of these drifts enables you to take corrective actions,
+such as retraining models, auditing upstream systems, or fixing quality issues,
+without the need for manual monitoring or implementing additional tools. You
+can utilize prebuilt monitoring capabilities, which require no coding, or you
+have the flexibility to code custom analysis for more tailored monitoring.
+Amazon SageMaker Model Monitor provides the following monitoring types:
+Data quality: Monitors drift in data quality
+Model quality: Monitors drift in model quality metrics, such as accuracy
+Bias drift for models in production: Monitors bias in your model’s
+predictions
+Feature attribution drift for models in production: Monitors drift in
+feature attribution
+The last two types of monitoring—bias drift and feature attribution drift—can
+be considered part of overall model quality monitoring. The former (bias drift)
+monitors changes in the fairness of your model’s predictions over time.
+Because maintaining fairness is a crucial aspect of a model’s quality and
+ethical deployment, monitoring for bias drift is essential for ensuring that the
+model continues to perform equitably across different groups. The latter
+(feature attribution) monitors shifts in the importance of input features. If the
+relevance of certain features changes over time, it can affect your model’s
+decision-making process, ultimately impacting its performance and quality.
+Keeping an eye on feature attribution drift helps ensure that your model
+remains accurate and reliable.
+Figure 7.2 illustrates how data quality and model quality fit in the overall
+monitoring process with Amazon SageMaker AI.
+FIGURE 7.2 Monitoring process.
+Data quality monitoring involves creating a baseline of the input data during
+model training and continuously comparing incoming data to this baseline. If
+there are changes in the incoming data, a drift is detected.
+You can also spot drift through model quality monitoring, which means
+checking actual outcomes (labels) against predictions. For instance, if you
+forecast daily sales, you can compare the predicted sales figures to the actual
+sales the next day. Some use cases might need extra effort to gather real
+outcomes. For example, when recommending products, you might need to
+survey a group of customers to see how well the recommendations match their
+preferences.
+As you learned in Chapter 3, Amazon SageMaker Clarify provides insights
+into the model’s predictions by showing the importance of different input
+features, which is often referred to as feature attribution. This helps you
+understand the reasoning behind the model’s decisions and can reveal any
+biases or unexpected patterns in the data. For example, if a model is used for
+predicting loan approvals, Amazon SageMaker Clarify can show which input
+features (such as credit score, income level, or employment history) most
+influenced the model’s decision for a specific prediction.
+If feature attribution changes between retrained models, a drift has occurred.
+Evaluating drift involves monitoring data, detecting changes, and triggering
+actions when needed. You can set up rules and thresholds in Amazon
+CloudWatch to receive notifications about drifts and automatically take
+corrective actions to address them.
+Figure 7.3 shows a logical architecture for real-time model monitoring with
+data sources for training and production on the left, monitoring components
+(data quality and model quality) in the middle, and observed findings on the
+right. A similar architecture can be created for batch inference. You can use
+Amazon SageMaker Data Wrangler to clean and prepare your input data for
+ML tasks. The features you create for your models can be stored in the
+Amazon SageMaker Feature Store, which is a fully managed repository
+designed to store, update, retrieve, and share ML features. These services were
+detailed in Chapter 3 as well. Think of the architecture illustrated in Figure 7.3
+as a lower-level view of the model monitoring process described in Figure 7.2.
+The next section will describe this process in detail.
+FIGURE 7.3 Monitoring architecture for real-time inference.
+Monitoring Workflow
+The rectangular boxes in Figure 7.3 show the tasks for detecting data and
+model drift. You can include these tasks in your ML workflow using Amazon
+SageMaker Pipelines. The drift observation data—denoted as findings—can
+be captured in tabular format, such as comma-separated values or Parquet, on
+Amazon S3 and analyzed with Amazon Athena and Amazon QuickSight.
+Let’s see how the overall monitoring process works. First, you need to enable
+Amazon SageMaker model monitoring. For a real-time endpoint, you have to
+enable the endpoint to capture data from incoming requests to a deployed ML
+model, and the resulting model predictions. For a batch transform job, you
+have to enable data capture of the batch transform inputs and outputs.
+The workflow starts with the baselining task (step 1 in Figure 7.3), which uses
+Amazon SageMaker Model Monitor to define a data profile from your training
+data and stores it in Amazon S3 as a collection of constraints.
+The baseline job computes metrics and creates constraints for the metrics. For
+example, the recall score for the model shouldn’t decrease to less than 0.8, or
+the precision score shouldn’t fall below 0.9. Real-time (or batch) predictions
+from your model are later compared to the constraints and are reported as
+violations if they are outside the constrained values. The baseline job runs
+before training or retraining the model.
+The data drift monitoring task (step 2) continually analyzes the input data and
+compares it to a baseline created in step 1. The results are then logged in
+Amazon CloudWatch (step 4). For example, you can monitor metrics such as
+the mean, median, and standard deviation of feature values or the rate of
+missing values in your input data. When Amazon CloudWatch detects that
+these metrics deviate significantly from the established baseline, it can trigger
+alerts, enabling you to take timely corrective actions. The data drift monitoring
+task operates on its own computational resources using Deequ (an open-source
+tool implemented on top of Apache Spark), ensuring that it doesn’t slow down
+your ML inference process and can scale with the data size. You can adjust
+how often this task runs to control costs, based on how quickly you expect the
+data to change.
+The model drift monitoring task (step 3) compares the predictions your model
+produces with ground truth labels to measure the quality of the model. For this
+to work, you periodically label data captured by your endpoint (or batch
+transform) job and upload it to Amazon S3. You then specify the location of
+your labels as a parameter when you create the monitoring job. Just like the
+data drift monitoring task, the model drift monitoring task logs the results of
+the comparison in Amazon CloudWatch (step 4) and reports any violations in
+a designated bucket in Amazon S3.
+Amazon CloudWatch is a monitoring and observability service that manages
+logs, events, and alarms. With Amazon CloudWatch, you can define rules to
+respond to deviations in data drift or model performance. By leveraging its
+integration with Amazon Simple Notification Service (SNS), you can set up
+alarms to notify users via email or SMS. As a result of these events, Amazon
+CloudWatch can also automatically trigger the ML model retraining process
+(step 5).
+For the exam, make sure you know the difference between logs, events, and
+alarms.
+Logs are detailed records of events that occur within your applications,
+systems, or services, which can be used for troubleshooting and analysis.
+Events are specific occurrences or changes in the state of your resources that
+you want to monitor and act on, such as a system failure or a change in
+configuration.
+Alarms are notifications triggered by specified thresholds or conditions, such
+as those defined by baseline constraints in the data drift monitoring task.
+When these thresholds are crossed, alarms alert you of potential issues and can
+initiate automated actions in response, such as updating training data, updating
+your model hyperparameters, baselining, and retraining your model (step 5).
+You just learned the main techniques to monitor data quality and model
+performance. In the next section, a detailed coverage of the design principles
+relevant to monitoring will be provided. This knowledge is not only a
+requirement for the exam but also instrumental in ensuring that your ML
+models remain accurate, reliable, and effective in real-world applications.
+Design Principles for Monitoring
+Given the criticality of the monitoring phase for being focused on live
+observations of your model performance (and its underlying infrastructure) in
+a production environment, the exam requires that you—as an AWS ML
+engineer—know well the guiding principles that help you design and build a
+robust, efficient, and sustainable monitoring framework for your newly
+deployed ML models.
+Figure 7.4 summarizes the guiding principles that are relevant to monitoring
+from the Machine Learning Well-Architected Lens.
+ML Phase Pillar
+Principle
+Monitoring Operational
+excellence
+MLOE-15: Enable model observability and
+tracking
+MLOE-16: Synchronize architecture and
+configuration, and check for skew across
+environments
+Security
+MLSEC-12: Restrict access to intended legitimate
+consumers
+MLSEC-13: Monitor human interactions with data
+for anomalous activity
+Reliability
+MLREL-12: Allow automatic scaling of the model
+endpoint
+MLREL-13: Ensure a recoverable endpoint with a
+managed version control strategy
+Performance
+efficiency
+MLPER-13: Evaluate model explainability
+MLPER-14: Evaluate data drift
+MLPER-15: Monitor, detect, and handle model
+performance degradation
+MLPER-16: Establish an automated re-training
+framework
+MLPER-17: Review for updated data/features for
+retraining
+MLPER-18: Include human-in-the-loop
+monitoring
+Cost
+optimization
+MLCOST-27: Monitor usage and cost by ML
+activity
+MLCOST-28: Monitor Return on Investment for
+ML models
+MLCOST-29: Monitor endpoint usage and right-
+size the instance fleet
+Sustainability MLSUS-15: Measure material efficiency
+MLSUS-16: Retrain only when necessary
+FIGURE 7.4 Monitoring guiding principles.
+To learn more about the Machine Learning Well-Architected Lens, visit
+https://docs.aws.amazon.com/wellarchitected/latest/mach
+ine-learning-lens/best-practices-by-ml-lifecycle-
+phase.html.
+Let’s break these principles down by pillar and examine the main theme for
+each and what you need to do to implement them.
+Operational Excellence Pillar
+Operational excellence (OE) means making sure we build software the right
+way while always providing a great experience for our customers. The OE
+pillar includes best practices for organizing our teams, designing our work,
+running it effectively on a large scale, making it adaptive to changes, and
+continuously improving it over time.
+The OE pillar is formalized by the two following principles.
+MLOE-15: Enable Model Observability and Tracking
+When it comes to ML, a well-architected application must include a
+framework that enables your team to proactively observe vital performance
+metrics of your model. These may include, for example, metrics that measure
+the operational health of the compute instances hosting the endpoint and the
+health of endpoint responses for real-time inference.
+Implementation
+This principle can be implemented by incorporating in your solution the
+following services/capabilities:
+Amazon SageMaker Model Monitor to continually monitor the quality
+of Amazon SageMaker ML models in production and compare with the
+results from training
+Amazon CloudWatch to gather and analyze usage statistics for your ML
+models
+Amazon SageMaker Model Dashboard to view, search, and explore
+your models in a centralized portal
+Amazon SageMaker Clarify to discover bias that can emerge during
+model training or when the model is in production
+Amazon SageMaker ML Lineage Tracking to keep a history of model
+discovery experiments
+Amazon SageMaker Model Cards to simplify model information
+gathering such as business requirements, key decisions, and observations
+during model development and evaluation
+Amazon SageMaker Automated Validation to compare the
+performance of new models against production models, using the same
+real-world inference request data in real time
+MLOE-16: Synchronize Architecture and Configuration, and Check
+for Skew Across Environments
+This principle is focused on ensuring that all systems and configurations are
+identical across the development and deployment phases.
+Implementation
+This principle can be implemented by incorporating in your solution the
+following services/capabilities:
+Amazon CloudFormation to provision the necessary resources quickly
+and consistently with infrastructure as code (IaC)
+Amazon SageMaker Model Monitor to continuously monitor the
+quality of your models in production and compare them with the results
+from training
+Security Pillar
+The security pillar—as the name suggests—aims at building the necessary
+security guardrails to protect all components of your ML applications,
+including identities (users and roles), infrastructure (compute and network
+resources), the ML application built to serve your model, and, most
+importantly, your data. Remember, the data is not just limited to training,
+validation, and test data, but also includes the model artifacts
+(model.tar.gz) where parameters and configurations are stored. Chapter 8
+will cover the security pillar extensively.
+The security pillar is formalized by the two following principles.
+MLSEC-12: Restrict Access to Intended Legitimate Consumers
+This principle is about enforcing the least privilege principle for all consumers
+of your model endpoint.
+Implementation
+This principle can be implemented by treating inference endpoints as you
+would any other HTTPS API. This means implementing network controls,
+such as restricting access to specific IP ranges, and bot control. Also, the
+HTTPS requests for these API calls should be signed so that the requestor
+identity can be verified and the requested data is protected in transit.
+MLSEC-13: Monitor Human Interactions with Data for Anomalous
+Activity
+This principle aims at reducing the attack surface of your model endpoint.
+Implementation
+This principle can be implemented by instrumenting your ML application with
+the following services/configurations:
+Enabling data access logging to better track events in response to your
+model endpoint inference requests
+Amazon Macie to classify and protect your Amazon S3 sensitive data in
+accordance with its sensitivity level
+Amazon GuardDuty to monitor for malicious and unauthorized
+activities, including unauthorized access to AWS accounts, workloads,
+and data stored in Amazon S3
+Reliability Pillar
+The reliability pillar focuses on the ability of your ML application to perform
+its intended function correctly and consistently when it’s expected to. By
+correctly, we mean your ML application should fulfill all the business
+requirements it was designed to do. By consistently, we mean your ML
+application should always perform in a satisfactory way from a user
+standpoint. As a result, performance metrics need to be defined with specific
+thresholds (lower and upper bounds) to indicate acceptable performance, e.g.,
+uptime, latency, and so on.
+To learn more about site reliability engineering (SRE), visit
+https://aws.amazon.com/what-is/sre.
+The reliability pillar is formalized by the following two principles.
+MLREL-12: Allow Automatic Scaling of the Model Endpoint
+This principle ensures the automatic scaling of model endpoints, resulting in
+reliable and elastic processing of predictions to meet changing workload
+inference demands.
+Implementation
+As you learned in Chapter 6, this principle can be implemented by Amazon
+SageMaker Auto Scaling Endpoints with techniques like target tracking, step
+scaling or scheduled scaling, and Amazon EC2 Auto Scaling.
+MLREL-13: Ensure a Recoverable Endpoint with a Managed
+Version Control Strategy
+This principle is about designing your model inference endpoint to be fault-
+tolerant. For this to happen, you need to make sure all the endpoint
+components “behind the scenes” are fault-tolerant. After all, “A chain is as
+strong as its weakest link.”
+Implementation
+As illustrated in Figures 6.3 and 6.6 in the previous chapter, the components
+that make up a real-time inference endpoint include the endpoint instances, the
+endpoint configurations, the inference container images, your model artifacts,
+and so on. As a result, this principle is implemented by leveraging the
+following capabilities/services:
+Amazon SageMaker Pipelines and Projects to automate the full ML
+workflow, including recovery from failures
+AWS CloudFormation (or other IaC tools) to programmatically
+(re)build the infrastructure your ML application operates on
+Amazon ECR to securely store the inference container images your
+model uses during training and evaluation
+Performance Efficiency Pillar
+The performance efficiency pillar focuses on the optimization of cloud
+computing resources to achieve the necessary performance levels for your ML
+applications, while also ensuring that this efficiency is adaptive to fluctuating
+demand and evolving technologies. Put differently, this pillar is about using
+the right cloud resources at the right time to meet your ML application needs
+without overspending or underperforming.
+The last statement highlights the different constraints this pillar is aiming to
+meet. As a result, there are several trade-offs you, as an ML engineer, you will
+need to consider. The following principles will help you choose which ones
+and how.
+MLPER-13: Evaluate Model Explainability
+This principle emphasizes the importance of assessing how well your model’s
+predictions can be understood and explained in human terms, considering both
+business needs and compliance requirements when evaluating model
+performance. Essentially, it means evaluating whether your model’s decisions
+are transparent and justifiable as a result of the trade-off between
+explainability and model complexity.
+Implementation
+This principle is implemented by leveraging Amazon SageMaker Clarify to
+explain model results. As you learned in Chapter 3, Amazon SageMaker
+Clarify helps improve your models by detecting potential bias and helping
+explain the predictions that models make. The fairness and explainability
+functions provided by Amazon SageMaker Clarify help you build less biased
+and more understandable and balanced ML models.
+MLPER-14: Evaluate Data Drift
+This principle refers to a specific benchmark test within the MLPerf suite
+designed to assess how well your model can detect and handle data drift: i.e.,
+significant changes in the distribution of input data over time that can
+negatively impact your model’s accuracy when applied to new, unseen data.
+MLPerf is a benchmark suite developed by MLCommons—a consortium
+of AI leaders from academia, research labs, and industry—that provides
+standardized tests to evaluate the performance of ML hardware, software,
+and services. To learn more, visit https://mlcommons.org.
+Implementation
+This principle is implemented by using the following services:
+Amazon SageMaker Model Monitor to maintain high-quality ML
+models by detecting model and concept drift in real time
+Amazon SageMaker Clarify to help identify potential bias in your ML
+models
+MLPER-15: Monitor, Detect, and Handle Model Performance
+Degradation
+This principle focuses on continuously monitoring your deployed models to
+identify and address any decline in their performance over time. This includes
+detecting issues like data drift, concept drift, and model bias and taking
+necessary actions like retraining or updating the model when performance
+degradation is detected. Essentially, it’s a process to ensure that your model
+remains accurate and reliable in real-world applications.
+Implementation
+This principle is implemented by using the following services:
+Amazon SageMaker Model Monitor to continually monitor the quality
+of your models in production
+Amazon SageMaker Auto Scaling to dynamically adjust underlying
+compute resources supporting an endpoint based on demand
+MLPER-16: Establish an Automated Retraining Framework
+This principle advocates for setting up an automated system to regularly
+retrain your ML models. This system is intended to keep your models updated
+with changing data patterns and to maintain optimal performance over time by
+automatically triggering retraining when necessary based on monitored
+metrics like data drift or performance degradation.
+Implementation
+This principle is implemented by using the following services:
+Amazon SageMaker Model Monitor to continually monitor the quality
+of your models in production and trigger retraining when a specific event
+occurs, e.g., data drifts beyond a defined threshold
+Amazon SageMaker Pipelines or AWS Step Functions to enable
+orchestration using step creation and management.
+MLPER-17: Review for Updated Data/Features for Retraining
+This principle focuses on establishing a framework to periodically review and
+update the data and features used for retraining ML models. The goal is to
+ensure that the model remains accurate and relevant over time by
+incorporating new data and features that may have emerged since the initial
+training. This involves running data exploration and feature engineering at
+predetermined intervals based on data volatility and availability.
+Implementation
+This principle is implemented by leveraging Amazon SageMaker Data
+Wrangler, which is the fastest and easiest way to prepare data for your models,
+as you learned in Chapter 3.
+MLPER-18: Include Human-in-the-loop Monitoring
+This principle emphasizes the importance of incorporating human oversight
+into the monitoring of ML models. This involves having human reviewers
+evaluate the model’s inferences, especially for low-confidence predictions or
+random samples. By comparing human-labeled results with the model’s
+predictions, you can identify and address any performance degradation.
+Implementation
+This principle is implemented by leveraging Amazon Augmented AI (A2I) to
+get human review of low-confidence predictions or random prediction
+samples.
+Cost Optimization Pillar
+The cost optimization pillar focuses on designing, building, and operating ML
+applications that achieve the necessary business functionality while
+minimizing costs, essentially producing the most accurate inferences for the
+least amount of money spent.
+The cost optimization pillar is formalized by the following three principles.
+MLCOST-27: Monitor Usage and Cost by ML Activity
+This principle relies on the concept of tagging your ML resources. Tagging
+allows you to effectively manage, identify, and organize your cloud
+infrastructure by attaching metadata (key-value pairs) to individual resources.
+By tagging your ML resources, you can easily group them based on purpose,
+owner, environment, or any other relevant criteria, which in turn facilitates
+easy searching, filtering, and cost analysis. This is particularly helpful when
+associating costs with specific activities like retraining and hosting through
+dedicated tags.
+Resource tagging is a key capability of FinOps, which is a set of practices
+for optimizing cloud costs. To learn more, visit
+https://docs.aws.amazon.com/whitepapers/latest/tagging-
+best-practices/tags-for-cost-allocation-and-financial-
+management.html.
+Implementation
+This principle is implemented by using the following services/capabilities:
+AWS tagging to selectively group your ML resources by purpose (e.g.,
+ML phase), owner, environment, and other relevant metadata
+AWS Budgets to keep track of cost
+MLCOST-28: Monitor Return on Investment for ML Models
+This principle emphasizes the importance of establishing a reporting capability
+to track the value delivered by a ML model once it’s deployed into production.
+The goal is to compare the value delivered by the model against its ongoing
+runtime costs. This involves measuring key performance indicators (KPIs)
+relevant to the business outcomes the model aims to achieve. These KPIs
+should be clearly defined in the first phase of the ML lifecycle: i.e., “Define
+ML Problem,” as shown in Figure 7.5.
+FIGURE 7.5 The machine learning lifecycle.
+Defining KPIs early ensures that the objectives and success criteria for the ML
+project are clear from the beginning, guiding the subsequent phases
+effectively. For example, if the model is used to support customer acquisition,
+you would track how many new customers are acquired in a given period of
+time, as well as their spending when the model’s prediction is used compared
+to a baseline.
+Effective reporting helps you take appropriate actions based on the return on
+investment (ROI). If the ROI is positive, you might consider scaling the model
+to similar challenges. If the ROI is negative, you might look into remedial
+actions such as optimizing model latency with serverless inference, or
+reducing runtime costs.
+Implementation
+This principle is implemented by using a reporting tool such as Amazon
+QuickSight to develop business focused reports showing the value delivered
+by using the model in terms of business KPIs.
+MLCOST-29: Monitor Endpoint Usage and Right-size the Instance
+Fleet
+This principle focuses on efficient use of compute resources to run your
+models in production. For example, instrument your ML solution to monitor
+your endpoint usage and to elastically (scale-in, scale-out) scale your instances
+based on the workload demand.
+Implementation
+This principle is implemented by using the following services/strategies:
+Amazon CloudWatch to monitor your model Amazon SageMaker
+endpoints
+Amazon SageMaker Auto Scaling to dynamically adjust underlying
+compute resources supporting an endpoint based on demand
+Designing and developing a Frugal Architecture for your overall ML
+solution
+Frugal Architecture is a design philosophy that treats cost and
+sustainability as critical nonfunctional requirements alongside other
+factors like security, compliance, and performance. This concept was
+introduced by Dr. Werner Vogels (CTO of Amazon) at re:Invent 2023. For
+example, in use cases where you need fast access to large datasets of
+training data, you may consider using Amazon FSx for Lustre, as you
+learned in Chapter 2. This principle guides you to deploy Amazon FSx for
+Lustre and Amazon SageMaker AI in the same Availability Zone to
+minimize egress costs. To learn more, visit
+https://aws.amazon.com/blogs/architecture/achieving-
+frugal-architecture-using-the-aws-well-architected-
+framework-guidance.
+Sustainability Pillar
+The sustainability pillar aims at reducing environmental impacts, especially
+energy consumption, to improve efficiency and to allow for responsible use of
+resources. This pillar emphasizes the importance of sustainable practices to
+lessen the carbon footprint, conserve resources, and ensure long-term
+environmental health.
+Given the massive computational power needed to train and fine-tune
+foundation models like GPT-3, which has 175 billion parameters, this pillar
+becomes critical in shaping the architecture of your ML solution.
+The sustainability pillar is formalized by the following two principles.
+MLSUS-15: Measure Material Efficiency
+This principle focuses on assessing how efficiently a ML workload utilizes its
+provisioned resources per unit of work done, essentially measuring the
+“material efficiency” of a system. The provided guidance allows users to
+benchmark and identify areas for improvement to minimize resource
+consumption while maintaining performance.
+Implementation
+This principle is implemented by the following strategies:
+Define provisioned resources per unit of work as one of your KPIs to
+normalize your sustainability KPIs and compare the performance over
+time.
+Define a baseline for your workload material efficiency to establish a
+reference point and track improvements over time as they implement
+optimization strategies.
+Estimate improvements to quantify the ROI from your optimization
+strategies.
+MLSUS-16: Retrain Only When Necessary
+As mentioned in Chapter 6 when we compared the computational needs
+between training and inferencing, training is an expensive process. This
+principle advises that you should only retrain your ML models when
+absolutely needed, instead of retraining them on a fixed schedule or too
+frequently. This can be achieved by actively monitoring their performance in
+production and only triggering retraining when a significant model drift is
+detected.
+Implementation
+This principle is implemented by the following services/strategies:
+Defining KPIs for your ML problem with your business
+stakeholders: for example, a minimum acceptable accuracy and a
+maximum acceptable error
+Amazon SageMaker Model Monitor to continually monitor the quality
+of your models in production and trigger retraining only when data drifts
+beyond a defined threshold are detected
+Amazon SageMaker Pipelines or AWS Step Functions to automate
+your retraining pipelines
+Monitoring Infrastructure and Cost
+In the first part of this chapter, you learned how to monitor all aspects of your
+machine learning model’s ability to derive inference, ensuring that it remains
+accurate and reliable over time. However, model performance is just one piece
+of the puzzle. Equally important is the infrastructure that supports your model
+and the associated costs. Effective monitoring of your ML infrastructure and
+costs is critical for maintaining optimal performance and achieving cost
+efficiency.
+AWS provides a suite of tools to help you monitor your ML infrastructure.
+These tools allow you to track key metrics such as CPU and memory
+utilization, disk I/O, network throughput, and instance health. By keeping an
+eye on these metrics, you can ensure that your infrastructure is performing
+efficiently, and you can quickly identify and address any issues that arise. In
+addition to Amazon CloudWatch for setting up alarms and notifications, you
+can leverage AWS X-Ray for tracing and debugging your ML distributed
+applications, Amazon GuardDuty for continuous security monitoring, Amazon
+Inspector for automated security assessments, and several others.
+Cost management is another critical aspect of monitoring ML infrastructure.
+AWS cost optimization services, like AWS Cost Explorer, AWS Trusted
+Advisor, and AWS Budgets, can help you gain insights into your spending
+patterns and forecast future costs. Additionally, Amazon SageMaker Savings
+Plan offers a flexible pricing model that can help you save significantly on
+your ML workloads. By committing to a consistent amount of usage over one
+or three years, you can benefit from lower costs compared to on-demand
+pricing. Setting up cost and usage alerts allows you to avoid unexpected
+expenses and make informed decisions about resource allocation. By
+leveraging these AWS services, you can achieve a balanced approach to
+monitoring both the performance and cost of your ML infrastructure, ensuring
+sustainable and cost-effective operations. Let’s start by reviewing the
+monitoring and observability services you need to know for the exam.
+Monitoring and Observability Services
+Monitoring and observability services are essential for ensuring the
+performance, reliability, and security of ML workloads in AWS. These
+services play a crucial role in enabling Site Reliability Engineering (SRE)
+practices, which focus on maintaining the scalability and stability of
+applications through automated operations and proactive monitoring. We
+briefly introduced the concept of SRE while discussing the reliability pillar in
+the Machine Learning Well-Architected Lens. In the context of ML, SRE
+ensures that ML models and their supporting infrastructure consistently
+produce accurate inferences. Moreover, these services also contribute to OE
+by streamlining monitoring and troubleshooting processes, thus enabling
+efficient management of ML infrastructure. They aid in cost optimization by
+providing insights that help you allocate resources more effectively and avoid
+unnecessary expenses. Additionally, by promoting efficient resource usage,
+these services support sustainability efforts. As a result, when you are
+instrumenting your ML workloads with a robust monitoring and observability
+framework, you are effectively well-architecting your ML solution.
+To achieve the aforementioned SRE goals, AWS offers a suite of monitoring
+and observability services that can be tailored for various use cases, including
+ML workloads. These services include Amazon CloudWatch Logs Insights for
+log analytics, AWS X-Ray for tracing and debugging your ML distributed
+applications, Amazon GuardDuty for continuous threat detection, Amazon
+Inspector for automated security assessments, and AWS Security Hub for
+unified security management. By leveraging these AWS services, SRE teams
+can gain comprehensive insights into system behavior, detect and respond to
+anomalies, maintain compliance with security standards, and ensure seamless
+and efficient operations in Amazon SageMaker AI.
+For the exam, you need to know what these services do and when you should
+use them based on the specifics of your ML use case.
+Amazon CloudWatch Logs Insights
+With Amazon CloudWatch Logs Insights, you can dynamically search and
+analyze large volumes of log data within Amazon CloudWatch Logs. With its
+extensive query language support, you can efficiently perform root-cause
+analysis and streamline incident and problem management tasks.
+Amazon CloudWatch Logs Insights supports three query languages:
+A purpose-built Logs Insights query language (Logs Insights QL) with
+a few simple but powerful commands
+OpenSearch Service Piped Processing Language (PPL), which enables
+you to analyze your logs using a set of commands delimited by pipes (|)
+OpenSearch Service Structured Query Language (SQL), which
+enables you to analyze your logs using a SQL-like declarative syntax
+Moreover, this service offers the following features to further simplify and
+accelerate the discovery of insights from your ML applications’ logs and
+events:
+Automatic discovery of log fields from services like Amazon Route 53,
+AWS Lambda, AWS CloudTrail, and Amazon VPC
+Creating field indexes to reduce costs and speed results, especially for
+queries of large number of log groups or log events
+Encrypting query results with AWS Key Management Service to secure
+your log sensitive data
+Detection and analysis of patterns
+Saving queries and adding queries to dashboards to simplify your log
+analysis experience
+Use Cases
+In the context of ML, Amazon CloudWatch Logs Insights is best suited for the
+following use cases:
+Training job monitoring: By analyzing logs from Amazon SageMaker
+training jobs, you can identify any issues or inefficiencies in the training
+process, such as resource bottlenecks or data inconsistencies.
+Endpoint monitoring: For real-time endpoints, Amazon CloudWatch
+Logs Insights helps you track request logs and diagnose issues with
+model inferences.
+Batch transform monitoring: By querying logs from batch transform
+jobs, you can troubleshoot errors and ensure that the batch processing is
+running smoothly.
+Amazon EventBridge
+Amazon EventBridge is a serverless event bus service that makes it easy to
+connect applications using data from various sources. It allows you to create
+event-driven architectures by routing events from supported sources to various
+AWS services and custom targets.
+Event-driven architecture is a design approach for creating loosely
+coupled software systems that interact by generating and reacting to
+events. This architecture style enhances agility and enables the
+development of reliable, scalable applications. To learn more, visit
+https://aws.amazon.com/event-driven-architecture.
+For ML workloads, Amazon EventBridge can play a pivotal role in
+orchestrating workflows (to supplement other orchestration services such as
+Amazon SageMaker Pipelines, AWS Step Functions, and others), triggering
+actions based on events, and ensuring seamless communication between
+different components of the ML pipeline. By integrating with various AWS
+services, Amazon EventBridge provides best-in-class monitoring and
+observability capabilities, ensuring that your ML workloads are efficient,
+reliable, and secure.
+One of the key strengths of Amazon EventBridge is its ability to integrate with
+a wide range of AWS services, providing a unified platform for event-driven
+processing. For ML workloads, Amazon EventBridge can be integrated with
+services like AWS Lambda, AWS Step Functions, and Amazon SageMaker AI
+to automate and streamline various aspects of the ML lifecycle. For example,
+Amazon EventBridge can trigger Lambda functions in response to specific
+events, such as the completion of a training job or the detection of an anomaly
+in model performance. This enables you to automate actions like data
+preprocessing, model deployment, and retraining, ensuring that your ML
+workflows are responsive and adaptive to changing conditions.
+Amazon EventBridge also supports integration with other monitoring and
+observability services like Amazon CloudWatch, AWS X-Ray, and AWS
+Security Hub. By routing events to Amazon CloudWatch, you can create
+custom metrics, dashboards, and alarms to monitor the performance and health
+of your ML workloads. AWS X-Ray can be used to trace and analyze the flow
+of events through your ML pipeline, providing detailed insights into
+dependencies, latencies, and potential bottlenecks. AWS Security Hub can
+consolidate security findings and alerts from various sources, allowing you to
+respond to security incidents in a coordinated and efficient manner. These
+integrations ensure that you have comprehensive visibility into your ML
+environment and can proactively address any issues that arise.
+Use Cases
+In terms of use cases, Amazon EventBridge offers numerous possibilities for
+enhancing the monitoring and observability instrumentation of your ML
+workloads. For instance, you can use Amazon EventBridge to automate the
+retraining of models based on predefined triggers, such as the accumulation of
+new training data or the detection of model drift. Amazon EventBridge can
+also be used to orchestrate complex ML pipelines by coordinating the
+execution of different steps, such as data preprocessing, feature engineering,
+model training, and deployment. Additionally, you can set up event-driven
+notifications to alert stakeholders about the status of ML jobs, performance
+metrics, and potential issues, ensuring timely intervention and collaboration.
+With Amazon EventBridge, you can build robust, scalable, and responsive ML
+workflows that deliver accurate and reliable inferences.
+AWS CloudTrail
+AWS CloudTrail is a service that enables auditing, compliance, and
+operational and risk management of your AWS accounts. As the name
+suggests, AWS CloudTrail provides a detailed audit trail of actions taken by
+users, roles, and services. For ML workloads, AWS CloudTrail is instrumental
+in maintaining the integrity and security of your ML environment. It allows
+you to track changes and actions across your Amazon SageMaker AI
+instances, ensuring that you have a clear record of who did what and when,
+which is essential for debugging, auditing, and compliance purposes.
+AWS CloudTrail logs provide detailed information on actions taken, such as
+creating, updating, and deleting Amazon SageMaker AI resources such as
+training jobs, endpoints, instances, and others. By analyzing these logs, you
+can identify unusual or unauthorized activities, ensuring that your ML
+environment remains secure and compliant with organizational policies and
+regulatory requirements. The traceability provided by CloudTrail is crucial for
+understanding the sequence of events and actions taken within your ML
+infrastructure.
+Use Cases
+AWS CloudTrail offers several benefits for ML workloads. For example, AWS
+CloudTrail logs can be used to monitor the access and usage patterns of your
+Amazon SageMaker AI resources, helping you detect and respond to potential
+security threats. Additionally, the audit trail provided by AWS CloudTrail is
+invaluable for compliance purposes, as it allows you to demonstrate adherence
+to data governance and security standards. Furthermore, AWS CloudTrail can
+be integrated with Amazon CloudWatch to create alarms that notify you of
+specific activities or anomalies, enabling proactive monitoring and response.
+With its auditing and traceability capabilities, AWS CloudTrail can assist in
+ensuring your ML workloads are secure, compliant, and efficiently managed.
+AWS X-Ray
+AWS X-Ray is a comprehensive tracing service that collects detailed data on
+requests made to your application, including those within your ML workflows.
+It provides a suite of tools that enable you to view, filter, and analyze this data,
+allowing you to identify issues and discover optimization opportunities. With
+AWS X-Ray, you gain visibility into the entire lifecycle of a request, from the
+initial request through the various stages of processing and response.
+For ML workloads in Amazon SageMaker AI, AWS X-Ray offers granular
+insights not only into the request and its response but also into the calls your
+application makes to downstream AWS resources, microservices, databases,
+and web APIs. This detailed tracing helps you understand the performance and
+behavior of your ML models, pinpoint bottlenecks, and troubleshoot errors
+effectively.
+Additionally, X-Ray’s visual representation of service maps allows you to see
+how different services within your ML architecture interact, making it easier
+to identify and address any interdependencies and performance issues. This
+holistic view is critical for maintaining the reliability and efficiency of your
+ML workflows.
+Use Cases
+AWS X-Ray is best suited for the following ML use cases:
+Model deployment tracing: AWS X-Ray allows you to trace the
+interactions between various components in your Amazon SageMaker AI
+deployment, such as data preprocessing, model inference, and post-
+processing. This helps you identify and optimize any stages causing
+latency.
+Inference request tracing: When an inference request is made to your
+Amazon SageMaker AI endpoint, AWS X-Ray captures the detailed flow,
+helping you diagnose issues related to model serving and response times.
+End-to-end pipeline tracing: For complex ML pipelines that involve
+multiple steps and services, AWS X-Ray visualizes the entire workflow,
+enabling you to see how different services interact and identify any
+interdependencies or performance issues.
+Amazon GuardDuty
+Amazon GuardDuty is a threat detection service that provides continuous
+monitoring, analysis, and processing of AWS data sources and logs within
+your environment.
+By leveraging threat intelligence feeds—including lists of malicious IP
+addresses, domains, file hashes, and ML models—Amazon GuardDuty
+identifies suspicious and potentially malicious activities in your AWS
+environment, including your AWS accounts, your data, and your AWS
+resources.
+Amazon GuardDuty produces a detailed findings report that you can use to
+automate responses. Although Amazon GuardDuty itself does not directly
+perform threat remediation, it integrates seamlessly with other AWS services
+to enable automated responses to security threats. Some services you can use
+to automate responses using Amazon GuardDuty findings are as follows:
+AWS Lambda
+Amazon CloudWatch Events
+AWS Security Hub
+Amazon EventBridge
+These integrations help protect your ML workloads by ensuring that potential
+security threats are detected and responded to quickly, minimizing the risk of
+data breaches, data exfiltration, or unauthorized access to your Amazon
+SageMaker AI environment.
+Use Cases
+Amazon GuardDuty is best suited for the following ML use cases:
+Data protection: Amazon GuardDuty can detect unusual data access
+patterns or attempts to exfiltrate data from your Amazon SageMaker
+notebooks or storage, helping to protect your valuable training data and
+model artifacts.
+Endpoint security: For real-time endpoints, Amazon GuardDuty can
+monitor API calls and detect any suspicious activity, such as
+unauthorized access attempts or abnormal request patterns.
+Compliance: Amazon GuardDuty helps ensure that your Amazon
+SageMaker AI workloads comply with security best practices and
+regulatory requirements by continuously monitoring for potential threats
+and vulnerabilities.
+Resource integrity: Amazon GuardDuty can detect compromised
+instances or abnormal behavior in the underlying infrastructure
+supporting your Amazon SageMaker AI workloads, ensuring the integrity
+and reliability of your ML environment.
+Amazon Inspector
+Amazon Inspector is an automated vulnerability management service that
+evaluates the security and compliance of your AWS applications, including
+those supporting ML workloads. Amazon Inspector scans your AWS
+resources, such as Amazon EC2 instances and container images, for
+vulnerabilities, network exposures, and deviations from best practices. For ML
+workloads, this means ensuring that the infrastructure supporting your
+Amazon SageMaker AI environments is secure and up to date. By identifying
+security risks in your compute resources and containerized environments,
+Amazon Inspector helps maintain the integrity and reliability of your ML
+models and workflows.
+One of the key differences between Amazon Inspector and Amazon
+GuardDuty lies in their focus areas and functionalities. Whereas Amazon
+GuardDuty specializes in continuous threat detection and monitoring,
+providing real-time alerts for suspicious activities and potential security
+threats, Amazon Inspector focuses on vulnerability management and
+compliance. Amazon Inspector conducts periodic assessments to detect known
+vulnerabilities, such as unpatched software, weak configurations, and outdated
+dependencies, in your ML infrastructure. This proactive approach ensures that
+your Amazon SageMaker AI workloads run on secure and compliant
+resources, minimizing the risk of exploitation due to vulnerabilities.
+Use Cases
+For ML use cases, Amazon Inspector provides several benefits that
+complement the capabilities of Amazon GuardDuty. Amazon Inspector’s
+assessments help identify and remediate security weaknesses in the underlying
+infrastructure, ensuring that the compute environments used for training and
+inference are secure. This is particularly important for maintaining the
+confidentiality and integrity of training data, model artifacts, and inference
+results. By integrating Amazon Inspector with other AWS services like AWS
+Lambda and AWS Systems Manager, you can automate the remediation of
+identified vulnerabilities, ensuring continuous security and compliance for
+your ML workloads. Together with Amazon GuardDuty, Amazon Inspector
+provides a comprehensive security strategy, covering both real-time threat
+detection and ongoing vulnerability management for your ML environment.
+AWS Security Hub
+AWS Security Hub is a centralized cloud security posture management
+(CSPM) service that provides comprehensive insights into your security state
+across your AWS environment. It aggregates, organizes, and prioritizes
+security findings from multiple AWS services, enabling you to monitor and
+manage security issues from a single location. For ML workloads, AWS
+Security Hub plays a key role in ensuring that your ML models and supporting
+infrastructure adhere to security best practices. By integrating with services
+like Amazon GuardDuty, Amazon Inspector, and others, AWS Security Hub
+provides a holistic view of your security landscape, helping you maintain a
+robust and secure ML environment.
+One of the primary ways AWS Security Hub strengthens the security posture
+of your ML workloads is by leveraging the continuous threat detection
+capabilities provided by Amazon GuardDuty. Amazon GuardDuty monitors
+for suspicious activities and potential security threats, such as unauthorized
+access attempts and unusual data access patterns. AWS Security Hub
+consolidates these findings, providing you with a centralized and prioritized
+view of potential threats. This integration allows you to quickly identify and
+respond to security incidents that could impact your Amazon SageMaker AI
+environments, ensuring the protection of your training data, model artifacts,
+and inference results.
+In addition to Amazon GuardDuty, AWS Security Hub also integrates with
+Amazon Inspector to enhance the security of your ML workloads. Amazon
+Inspector performs automated security assessments, identifying vulnerabilities
+and deviations from best practices in your compute resources and
+containerized environments. AWS Security Hub aggregates these findings and
+provides actionable insights to help you remediate identified security issues.
+By continuously monitoring for vulnerabilities and integrating with AWS
+Security Hub, Amazon Inspector ensures that your Amazon SageMaker AI
+infrastructure remains secure and compliant, reducing the risk of exploitation
+due to unpatched software or misconfigurations.
+AWS Security Hub further strengthens your ML security posture by
+integrating with other AWS security services, such as AWS Config and AWS
+IAM Access Analyzer. AWS Config continuously monitors and records your
+AWS resource configurations, enabling you to track configuration changes and
+ensure compliance with security policies. AWS IAM Access Analyzer helps
+you identify and mitigate excessive or unintended access permissions. AWS
+Security Hub consolidates findings from these services as well, offering a
+comprehensive view of your security posture and enabling you to take
+proactive measures to safeguard your ML workloads. By leveraging these
+integrations, AWS Security Hub provides a unified and efficient approach to
+managing the security of your ML environment, ensuring that your models
+and data remain protected from potential threats.
+Use Cases
+For ML use cases, AWS Security Hub offers several specific benefits. It helps
+safeguard the confidentiality and integrity of your training data by monitoring
+access patterns and alerting you to unauthorized access attempts. Additionally,
+AWS Security Hub ensures the security and compliance of your Amazon
+SageMaker AI environments by continuously assessing configurations and
+identifying deviations from best practices. Inference endpoints are also
+protected through the integration of Amazon GuardDuty and Amazon
+Inspector, which detect and respond to potential threats and vulnerabilities.
+With a centralized view of your security posture and automated responses,
+AWS Security Hub ensures that your ML workloads remain secure, resilient,
+and compliant, allowing you to focus on developing and optimizing your
+models without compromising on security and observability.
+Cost Tracking and Optimization Services
+AWS offers a range of cost tracking and optimization services that are
+particularly beneficial for ML workloads. AWS Cost Explorer provides
+detailed insights into your spending patterns, allowing you to identify trends
+and allocate costs effectively. With AWS Cost and Usage Reports, you can
+gain comprehensive visibility into your AWS usage and costs, helping you
+make informed decisions about resource allocation and budgeting.
+Additionally, AWS Budgets allows you to set custom budgets and receive
+alerts when your spending exceeds predefined thresholds, ensuring that you
+stay within your financial limits.
+For ML workloads, Amazon SageMaker AI includes built-in cost optimization
+features. Amazon SageMaker AI’s Model Monitoring and Autopilot
+capabilities can help reduce costs by optimizing model training and
+deployment processes. With Spot Instances and Savings Plans, you can further
+reduce expenses for non-critical tasks and predictable workloads. These
+services, combined with effective tagging strategies and automated policy
+enforcement, enable you to track, manage, and optimize costs throughout the
+ML lifecycle, ensuring efficient and cost-effective use of AWS resources.
+AWS Cost Explorer
+AWS Cost Explorer is a powerful tool that allows you to visualize, understand,
+and manage your AWS costs and usage over time. For ML workloads, AWS
+Cost Explorer provides detailed insights into your spending patterns related to
+Amazon SageMaker AI and other ML services. By breaking down costs by
+various dimensions such as service, usage type, and time period, you can
+identify trends and anomalies in your ML expenses. This level of visibility
+helps you allocate resources more effectively, ensuring that your ML projects
+stay within budget. AWS Cost Explorer’s forecasting capabilities enable you
+to predict future spending based on historical data, allowing you to plan and
+budget for upcoming ML initiatives with greater accuracy.
+Moreover, AWS Cost Explorer excels in tracking and optimizing costs
+associated with different stages of the ML lifecycle. For example, you can use
+AWS Cost Explorer to monitor the costs of data preprocessing, model training,
+and inference separately, helping you identify areas where cost optimization is
+needed. By analyzing usage patterns, you can determine if you are over-
+provisioning resources or if there are opportunities to leverage cost-saving
+options such as Spot Instances or Reserved Instances.
+Finally, Cost Explorer’s integration with AWS Budgets allows you to set
+custom budgets and receive alerts when your ML spending exceeds predefined
+thresholds, ensuring proactive cost management. With these capabilities, AWS
+Cost Explorer empowers you to make informed decisions and optimize the
+cost-efficiency of your ML workloads.
+AWS Cost and Usage Reports
+AWS Cost and Usage Reports (CUR) provides the most granular level of
+billing data, delivering comprehensive insights into your AWS costs and
+usage. Unlike AWS Cost Explorer, which offers a more user-friendly and
+visual interface for cost analysis, CUR gives you raw data that can be used for
+in-depth analysis and custom reporting. For ML workloads, this detailed data
+enables you to break down costs associated with various stages of the ML
+lifecycle, such as data preprocessing, model training, and inference. With
+CUR, you can gain a deeper understanding of your spending patterns and
+identify cost drivers specific to your ML projects. Reports are typically
+generated daily and can be customized to be delivered to an Amazon S3
+bucket, making it easy to access and analyze the data.
+A notable distinction between AWS Cost Explorer and AWS CUR lies in the
+level of detail and flexibility they offer. Cost Explorer provides an intuitive
+interface for visualizing and exploring your costs, making it easy to identify
+trends and anomalies. It is ideal for high-level cost management and
+budgeting. In contrast, CUR delivers raw billing data in the form of report
+files, which can be ingested into data analytics tools like Amazon QuickSight
+or third-party applications. The report files include numerous columns,
+providing detailed information on resource usage, cost allocation, and pricing.
+This allows for custom analysis and reporting, enabling you to create tailored
+dashboards and reports that meet your specific ML cost management needs.
+The granularity of CUR data makes it particularly valuable for detailed cost
+optimization and financial accountability.
+For ML use cases, AWS CUR offer several advantages. By analyzing CUR
+data, you can monitor the costs of different stages of your ML workflows,
+helping you identify inefficiencies and opportunities for optimization. For
+example, you can track the usage and costs of your Amazon SageMaker AI
+instances, identify underutilized resources, and make data-driven decisions to
+optimize your ML infrastructure. Additionally, CUR can help you allocate
+costs to different ML projects or teams, ensuring accurate cost attribution and
+better financial management. By leveraging the detailed insights provided by
+AWS CUR, including the specific columns and granularity of data, you can
+optimize the cost-efficiency of your ML workloads and maintain control over
+your AWS spending.
+AWS Trusted Advisor
+AWS Trusted Advisor is a service that provides real-time guidance to help you
+provision your resources following AWS best practices. For ML workloads,
+Trusted Advisor is invaluable in ensuring that your AWS environment is
+optimized for performance, security, and cost-effectiveness. The service offers
+insights across five categories: cost optimization, performance, security, fault
+tolerance, and service limits. For example, AWS Trusted Advisor can help you
+identify underutilized Amazon SageMaker AI instances, suggesting
+opportunities to downsize or terminate instances to save costs. Additionally, it
+can highlight security best practices, such as ensuring that your ML data
+stored in Amazon S3 is encrypted and that your IAM policies follow the
+principle of least privilege.
+Trusted Advisor’s recommendations are particularly beneficial for managing
+the complexities of ML workloads. By continuously monitoring your AWS
+resources, AWS Trusted Advisor helps ensure that your ML infrastructure
+remains compliant with best practices and is configured for optimal
+performance. This includes identifying opportunities to improve the efficiency
+of data preprocessing, model training, and inference tasks. For instance, AWS
+Trusted Advisor might recommend enabling auto-scaling for your Amazon
+SageMaker AI endpoints to handle varying loads efficiently, or it may suggest
+optimizing your storage configurations to enhance data access speeds. With
+the insights provided by AWS Trusted Advisor, you can maintain a secure,
+efficient, and cost-effective ML environment, allowing you to focus on
+developing and deploying high-quality ML models.
+AWS Budgets
+AWS Budgets is a powerful service that allows you to set custom cost and
+usage budgets for your AWS resources, helping you monitor and control your
+spending effectively. For ML workloads, AWS Budgets can be particularly
+beneficial in managing the costs associated with various stages of the ML
+lifecycle, such as data preprocessing, model training, and inference. By setting
+specific budgets for different ML projects or teams, you can ensure that your
+spending aligns with your financial goals and prevent unexpected cost
+overruns. Additionally, AWS Budgets allows you to receive alerts via email or
+SMS when your actual or forecasted spending exceeds predefined thresholds,
+enabling proactive cost management and timely intervention.
+In the context of ML workloads, AWS Budgets provides several advantages.
+For instance, you can create cost allocation tags to categorize your ML
+resources by project, department, or any other relevant criteria. This allows
+you to track and allocate costs accurately, ensuring that each ML project stays
+within its budget. AWS Budgets also integrates with AWS Cost Explorer,
+enabling you to visualize your budget performance and make data-driven
+decisions to optimize your ML infrastructure. By leveraging AWS Budgets,
+you can maintain control over your ML spending, allocate resources
+efficiently, and ensure the financial sustainability of your ML initiatives.
+Pricing Models
+AWS offers several pricing models for compute infrastructure, each designed
+to provide flexibility and cost-efficiency based on different usage patterns and
+needs. For ML workloads, selecting the right pricing model is crucial for
+managing costs while ensuring optimal performance. The primary pricing
+models include On-Demand Instances, Reserved Instances, Savings Plans,
+Spot Instances, and Dedicated Hosts. These models offer varying levels of
+commitment, cost savings, and flexibility, making it possible to tailor your ML
+infrastructure to specific project requirements and budget constraints.
+On-Demand Instances are charged on a pay-as-you-go model, making them
+ideal for unpredictable ML workloads that require flexibility without long-
+term commitments. They allow you to pay for compute capacity by the hour
+or second, depending on the instance type. Reserved Instances, on the other
+hand, provide significant cost savings for steady-state and predictable
+workloads by committing to a specific capacity for one or three years. Savings
+Plans offer a more flexible alternative to Reserved Instances, allowing you to
+commit to a specific amount of usage (measured in $/hour) for one or three
+years. At the time of writing this book, there are three different savings plans:
+Compute (applies to Amazon EC2, AWS Lambda, and AWS Fargate usage),
+EC2 Instance, and Amazon SageMaker Savings Plans. Spot Instances enable
+you to bid for unused EC2 capacity at a lower price, making them suitable for
+flexible, fault-tolerant ML tasks such as batch processing and data
+preprocessing. Dedicated Hosts provide physical servers dedicated to your
+use, ensuring compliance and security for sensitive ML workloads.
+Table 7.1 summarizes these AWS pricing models, highlighting how each
+model works, its most suitable use cases, and tenancy (whether the
+infrastructure is shared with other AWS customers or dedicated to your AWS
+account). This table serves as a useful reference for understanding the different
+pricing options available for ML compute infrastructure.
+TABLE 7.1
+AWS Pricing Models for Compute Infrastructure.
+Pricing
+Model
+How It Works
+Tenancy
+Use Cases and ML
+Relevance
+On-
+Demand
+Pay for compute time
+used, no long-term
+commitment
+Shared
+Ideal for unpredictable
+workloads and
+exploratory data
+analysis. Suitable for ad
+hoc model training and
+testing new algorithms.
+Reserved
+Instances
+Commit to capacity
+for 1 or 3 years at a
+discount
+Shared/Dedicated Best for steady-state,
+predictable workloads.
+Cost-effective for long-
+term ML projects and
+production
+environments.
+Savings
+Plans
+Commit to a specific
+dollar/hour usage for
+one or three years for
+lower prices
+Shared/Dedicated Suitable for workloads
+with predictable usage.
+Reduces costs for
+continuous training and
+inference tasks.
+Spot
+Instances
+Bid for unused
+capacity at lower
+prices: can be
+interrupted
+Shared
+Ideal for flexible, fault-
+tolerant applications.
+Useful for noncritical
+ML tasks like batch
+processing and data
+preprocessing.
+Dedicated
+Hosts
+Pay for a physical
+server dedicated to
+your use
+Dedicated
+Best for regulatory
+requirements needing
+physical isolation.
+Ensures compliance and
+security for sensitive
+ML workloads.
+The variety of different pricing models offered by AWS can help you optimize
+costs to meet your budgets, ensure efficient resource utilization, and maintain
+the performance and security of your ML environment.
+Amazon SageMaker Savings Plan
+Amazon SageMaker Savings Plans is applicable only to Amazon
+SageMaker AI instance usage.
+Amazon SageMaker Savings Plans offer a flexible and cost-effective pricing
+model for ML workloads. You commit to a consistent amount of usage
+(measured in dollars/hour) for a one- or three-year term and benefit from
+significant cost savings—up to 64% compared to On-Demand pricing. These
+savings plans automatically apply to eligible Amazon SageMaker AI instance
+usage, including Amazon SageMaker Studio Notebook, Amazon SageMaker
+On-Demand Notebook, Amazon SageMaker Processing, Amazon SageMaker
+Data Wrangler, Amazon SageMaker Training, Amazon SageMaker Real-Time
+Inference, and Amazon SageMaker Batch Transform. This flexibility allows
+you to switch instance types or regions without losing the savings, making it
+easier to manage costs while optimizing your ML infrastructure.
+In addition to cost savings, Amazon SageMaker Savings Plans provide the
+most flexibility among AWS Savings Plans. You can change your usage from
+one instance type to another or move workloads across different regions while
+still benefiting from the committed Savings Plan rate. For example, you can
+switch from a CPU instance ml.c5.xlarge running in US East (Ohio) to a
+inf1.2xlarge instance in US West (Oregon) for inference workloads at any
+time, and continue to pay the Savings Plan price. This adaptability ensures that
+you can efficiently manage your ML projects without worrying about
+unexpected cost spikes, making it an ideal choice for organizations looking to
+optimize their ML investments.
+Summary
+In this chapter, we covered the essential aspects of monitoring ML model
+inference and infrastructure. Monitoring model inference is crucial to ensure
+the accuracy and reliability of ML models. We discussed the importance of
+identifying and addressing drift in models, which occurs when the
+performance of a model degrades over time due to changes in the underlying
+data patterns. By comparing the model’s predictions with actual outcomes,
+discrepancies can be detected and corrective actions, such as retraining the
+model with updated data, can be taken to maintain its performance.
+We also explored the significance of monitoring data quality and model
+performance. Ensuring that input data is accurate, complete, and consistent is
+vital for reliable predictions. Tracking key performance metrics, such as
+accuracy, precision, recall, and F1 score, allows for evaluation of the model’s
+performance and the identification of any deviations. Regular assessment of
+data quality and performance metrics enables timely intervention and
+continuous improvement of the model. We emphasized the importance of
+adhering to design principles for monitoring, such as setting up automated
+alerts for performance degradation, ensuring transparency and interpretability
+of monitoring processes, and integrating monitoring tools with existing
+workflows.
+In addition, we highlighted the need for monitoring the infrastructure
+supporting ML workloads to ensure optimal performance and cost-efficiency.
+Monitoring and observability services like Amazon CloudWatch and AWS X-
+Ray provide real-time visibility into the health and performance of the
+infrastructure. These tools track resource usage, detect anomalies, and offer
+insights into system performance, allowing for quick identification and
+resolution of issues. Effective monitoring ensures that ML workloads run
+smoothly and efficiently, minimizing downtime and maximizing productivity.
+Finally, we delved into cost tracking and optimization services, which are
+essential for managing the expenses associated with ML workloads. AWS
+provides tools like AWS Cost Explorer, AWS Cost and Usage Reports, and
+AWS Budgets to help monitor and control costs. These services offer detailed
+insights into spending patterns, enabling the identification of areas for cost
+optimization. For instance, leveraging Spot Instances or Savings Plans can
+significantly reduce expenses without compromising performance. Moreover,
+considering the sustainability pillar, you learned how designing frugal
+architectures can enable sustainability for ML workloads. Frugal architectures
+make cost a non-functional requirement, meaning that cost-efficiency is built
+into the design and operation of the system. This involves optimizing resource
+usage and reducing waste, which not only lowers costs but also minimizes the
+environmental impact of ML projects. By effectively tracking and optimizing
+costs while incorporating sustainable practices, you can ensure the financial
+and environmental sustainability of your ML projects and allocate resources
+efficiently.
+Exam Essentials
+Know the types of model monitoring provided by Amazon SageMaker
+Model Monitor. There are four types of model monitoring. The first is data
+quality monitoring, which checks for anomalies in the input data. The second
+is model quality monitoring, which tracks performance metrics like accuracy
+and precision. The third is bias drift monitoring, which ensures that the model
+remains unbiased. The fourth is feature attribution drift monitoring, which
+observes changes in the importance of features.
+Know when baselining is performed in the monitoring workflow. 
+Baselining is performed at the very beginning of model development, before
+training any complex models, to establish a reference point against which the
+performance of more advanced models can be measured and compared.
+Know the services that detect data quality monitoring. Amazon
+SageMaker Model Monitor uses the constraints in the model baseline to detect
+data drift such as the standard deviation of feature values or the rate of missing
+values in your input data. When Amazon CloudWatch detects that these
+metrics deviate significantly from the established baseline, it can trigger alerts,
+enabling you to take timely corrective actions. Additionally, Amazon
+SageMaker Data Wrangler can be used to simplify data preparation and
+profiling, whereas Amazon SageMaker Feature Store can store and maintain
+consistent feature availability. Together, these services provide robust data
+quality monitoring throughout the ML lifecycle.
+Know the services that detect model quality monitoring. Amazon
+SageMaker Model Monitor continuously tracks your model’s key performance
+metrics and alerts you of any deviations, ensuring that model performance
+remains high. Amazon SageMaker Clarify detects bias and explains model
+predictions, ensuring fairness and transparency. Amazon CloudWatch
+monitors custom metrics related to model performance and sets up alarms for
+significant changes that can trigger corrective actions, such as updating
+training data, updating the model’s parameters, and retraining the model.
+Together, these services provide robust model quality monitoring throughout
+the ML lifecycle.
+Know the pillars of the Machine Learning Well-Architected Lens specific
+to the Monitoring ML lifecycle phase. The pillars of the Machine Learning
+Well-Architected Lens specific to the Monitoring ML lifecycle phase are
+operational excellence, security, reliability, performance efficiency, cost
+optimization, and sustainability
+Know the difference between Amazon CloudWatch and Amazon
+EventBridge. Amazon CloudWatch focuses on monitoring and managing
+AWS resources by collecting metrics, logs, and events and providing
+actionable insights with alarms. Amazon EventBridge, on the other hand, is an
+event bus that routes events from various sources to targets, enabling event-
+driven architectures. In summary, Amazon CloudWatch is primarily for
+monitoring, whereas Amazon EventBridge is for routing and reacting to
+events across your AWS environment.
+Know the AWS services to track and optimize cost. AWS Cost Explorer
+provides a comprehensive view of your AWS spending and usage, allowing
+you to analyze and forecast costs with visualizations and custom reports. You
+can set custom budgets and receive alerts with AWS Budgets, ensuring you
+stay within your defined spending limits. AWS Trusted Advisor offers best
+practice recommendations to optimize your AWS resources, improve
+performance, and reduce costs. For detailed billing data, AWS Cost and Usage
+Report (CUR) delivers insights into your spending patterns over time. Lastly,
+AWS Savings Plans provide discounted pricing by committing to a consistent
+usage level over a one- or three-year term, helping you save money on your
+AWS costs.
+Review Questions
+1. What is a critical impact of not addressing model drift in a production
+environment?
+A. Increased computational efficiency
+B. Accurate long-term predictions
+C. Potential regulatory compliance issues and degradation of decision-
+making accuracy
+D. Improved model interpretability
+2. Which AWS service provides continuous monitoring for detecting
+anomalies in real-time data and comparing it against baselines?
+A. AWS Glue
+B. AWS Step Functions
+C. Amazon SageMaker Model Monitor
+D. AWS CodePipeline
+3. To ensure that ML models maintain high performance, which set of
+advanced metrics should be regularly tracked and analyzed?
+A. Mean absolute error (MAE), root mean squared error (RMSE), and
+receiver operating characteristic (ROC) curve
+B. Average network latency, CPU utilization, and disk I/O rates
+C. Total number of API requests, latency spikes, and throughput
+D. Volume of data ingress, egress, and storage capacity
+4. What is a key consequence of failing to monitor the quality of data input
+for machine learning models?
+A. Enhanced model scalability
+B. Reduced need for feature engineering
+C. Introduction of biases and inaccuracies in model predictions
+D. Increased model training speed
+5. Which aspects of infrastructure should be prioritized for monitoring to
+support large-scale ML deployments?
+A. Application load balancing, user authentication processes, and API
+gateway endpoints
+B. Network latency, resource utilization metrics, and system anomaly
+detection
+C. Interface design consistency, session state management, and cache
+invalidation
+D. User experience feedback loops, front-end load times, and graphical
+rendering
+6. How does Amazon CloudWatch contribute to maintaining the
+performance and reliability of ML infrastructure?
+A. Provides automated code deployment pipelines
+B. Offers real-time visibility into system health, enabling prompt
+anomaly detection and resource usage tracking
+C. Manages serverless function scaling and memory allocation
+D. Facilitates infrastructure as code (IaC) provisioning and version
+control
+7. For optimizing costs in ML workloads, which strategy combines
+predictive analysis and alert mechanisms to avoid unexpected expenses?
+A. Implementing cross-region replication
+B. Setting up cost and usage dashboards with AWS Cost Explorer
+C. Utilizing enhanced monitoring for server instance performance
+D. Enabling automated backup and recovery solutions
+8. What is a significant advantage of using AWS Savings Plans specifically
+for predictable and sustained ML workload patterns?
+A. Unlimited API call capacity
+B. Flexibility in choosing data storage types
+C. Substantial cost reductions for long-term consistent usage across
+multiple AWS services
+D. Access to dedicated cloud infrastructure
+9. Why is real-time monitoring of model inference critical in dynamic
+production environments?
+A. To maintain accurate prediction capabilities despite variations in
+input data over time
+B. To minimize the latency of user interface components
+C. To automate the training dataset generation process
+D. To ensure the consistency of version control systems
+10. Which AWS service is integral for orchestrating complex workflows and
+automating multi-step processes in an ML pipeline?
+A. Amazon GuardDuty
+B. AWS Step Functions
+C. Amazon CloudWatch
+D. Amazon EventBridge

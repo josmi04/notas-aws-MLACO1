@@ -1,0 +1,1830 @@
+Chapter 5
+Model Training and Evaluation
+THE AWS CERTIFIED MACHINE LEARNING (ML)
+ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED
+IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT
+LIMITED TO, THE FOLLOWING:
+✔ Domain 2: ML Model Development
+2.2 Train and refine models
+2.3 Analyze model performance
+In the machine learning (ML) lifecycle, the training phase is a critical step
+where the model learns from data to make accurate predictions. This phase
+involves feeding the model with a large dataset, allowing it to recognize
+patterns and relationships within the data. During this process, the model
+adjusts its parameters to minimize errors and improve its predictive accuracy.
+The success of this phase is fundamental to the overall performance of the
+model, as it sets the foundation for its ability to generalize and perform well
+on unseen data. Throughout this chapter, we will delve into the various
+techniques and best practices for training and evaluating ML models with
+Amazon SageMaker, ensuring that they are robust and effective.
+Hyperparameter tuning (also known as hyperparameter optimization) is an
+essential aspect of optimizing the performance of a ML model. Unlike the
+parameters learned during training, hyperparameters are preset values that
+define the model’s structure and learning process. These include, for example,
+learning rate, number of layers in a neural network, batch size, and
+regularization terms. Fine-tuning these hyperparameters can significantly
+impact the model’s ability to generalize and avoid issues like overfitting or
+underfitting. Amazon SageMaker provides robust solutions for
+hyperparameter optimization, allowing ML engineers and data scientists to
+efficiently search for the best hyperparameter configurations. This chapter will
+explore various hyperparameter tuning techniques and demonstrate how to
+implement them using Amazon SageMaker to achieve optimal model
+performance.
+Evaluating a model’s performance is key to understanding its effectiveness
+and reliability. This involves using various metrics and evaluation methods to
+assess how well the model performs on a validation or test dataset. Metrics
+such as accuracy, precision, recall, F1 score, and area under curve-receiver
+operating characteristic (AUC-ROC) are commonly used for classification
+tasks, whereas metrics like mean squared error (MSE), mean absolute error
+(MAE), and R-squared are used for regression tasks. Amazon SageMaker
+offers a comprehensive suite of tools for model evaluation, enabling users to
+conduct thorough cross-validation, monitor performance, and fine-tune the
+model based on the insights gained. Throughout this chapter, we will cover
+different evaluation techniques and metrics, providing a detailed guide on how
+to assess and improve your model’s performance using Amazon SageMaker.
+This chapter will conclude with a dedicated section on evaluating Amazon
+Bedrock foundation models. We will explore how to assess pretrained
+foundation models, ensuring they meet the specific requirements of your use
+cases. By the end of this chapter, you will have a comprehensive
+understanding of the entire model training and evaluation processes, equipped
+with the knowledge to apply best practices and techniques in your ML
+projects.
+Training
+As illustrated in Figure 5.1, the training phase of the ML lifecycle happens
+after the selection of an algorithm that best suits your specific business
+problem at hand, taking into consideration factors such as data characteristics
+and the desired outcome.
+FIGURE 5.1 The model training phase in the machine learning
+lifecycle.
+During this phase, supervised ML algorithms are provided with labeled
+datasets, which consist of input features and their corresponding output labels.
+This allows the model to learn the relationship between the inputs and outputs
+by iteratively adjusting its parameters to minimize the prediction error.
+Conversely, unsupervised ML algorithms operate on unlabeled datasets,
+aiming to uncover underlying patterns, clusters, or associations within the data
+without predefined labels.
+The training process involves several steps, including data preprocessing,
+model initialization, and iterative parameter updates through optimization
+techniques. The goal is to find the optimal set of parameters that enable the
+model to generalize well to new, unseen data. This phase is crucial as it
+directly influences the model’s ability to make accurate predictions or reveal
+meaningful insights from the data.
+There are different approaches to model training, including local training,
+remote training, and distributed training. Local training involves running the
+training process on a local machine, providing the advantage of immediate
+feedback and easy debugging. Remote training utilizes cloud services, such as
+Amazon SageMaker, to leverage more powerful resources without being
+limited by local hardware constraints. Distributed training goes a step further
+by distributing the training workload across multiple machines or nodes,
+significantly speeding up the process and handling larger datasets more
+efficiently. Each approach has its own benefits and trade-offs, allowing ML
+engineers to choose the best method based on their specific needs and
+resources available.
+Local Training
+The development of an ML model is an iterative process, requiring continuous
+refinement and experimentation to achieve optimal results. Often, datasets are
+too large to fit into a host machine’s memory, which significantly impacts
+experimentation.
+This is where local training comes into play, allowing ML engineers to test the
+chosen algorithm with a subset of the data, controlling the training
+environment and facilitating rapid testing and adjustment of algorithms,
+feature combinations, and hyperparameters. This approach ensures a more
+efficient and effective model development cycle, enabling quick iteration and
+fine-tuning to enhance the model’s predictive capabilities. For example, in the
+previous chapter, we locally trained various algorithms on the Iris dataset
+using the sklearn module of the Scikit-Learn library.
+Although Amazon SageMaker provides a Jupyter Notebook interface for
+model development, we opted to use Python scripts instead. This choice was
+driven by the limitations of notebooks, which can scale up but not out,
+meaning they are not suitable for distributed training across multiple
+machines. Additionally, notebooks are challenging to version-control
+effectively compared to Python scripts, which can be easily managed and
+maintained using version control systems like Git. This ensures a more robust
+and scalable development process, facilitating collaboration and
+reproducibility.
+Local training also offers the advantage of being able to package Python
+programs and their dependencies in containers. This approach ensures that the
+development environment is consistent across different machines and stages of
+the project, eliminating issues related to dependency management. By using
+containers, ML engineers can create a portable and reproducible setup, making
+it easier to share and deploy models in various environments.
+Docker is the most commonly used container runtime for consuming ML
+algorithm container images in Amazon SageMaker, but it's not the only
+option. Because Amazon SageMaker leverages Amazon ECR to retrieve
+container images, you can use any container runtime that produces Open
+Container Initiative (OCI)–compliant images, as Amazon ECR supports
+the OCI standard. This standard allows for flexibility in choosing a
+container runtime like Containerd or CRI-O, although Docker is the most
+widely adopted and recommended approach. For more information, visit
+https://aws.amazon.com/about-aws/whats-
+new/2024/06/amazon-ecr-oci-image-distribution-version-
+1-1.
+Moreover, containers streamline the process of scaling and deploying ML
+models. Once the model is trained locally and the dependencies are packaged
+in a container, it can be easily deployed and scaled to different environments,
+such as Amazon Elastic Kubernetes Service (EKS). This ensures that the
+model runs consistently regardless of the underlying infrastructure, enhancing
+the reliability and scalability of ML solutions. Local training, combined with
+containers, provides a powerful workflow for developing, testing, and
+deploying ML models efficiently.
+Remote Training
+After training your ML model locally on a small dataset for development and
+testing, the next step is to launch a training job on the entire dataset. This is
+where remote training becomes essential, as it allows you to leverage more
+powerful computational resources and handle larger datasets efficiently.
+Remote training ensures that your model is trained on the full dataset, enabling
+it to learn more comprehensive patterns and make better predictions.
+Amazon SageMaker provides a convenient and powerful solution for remote
+training. Using the Amazon SageMaker Python SDK, you can easily launch a
+remote training job with just a few lines of code. The SDK simplifies the
+process of setting up and managing training jobs, making it easier for
+developers to focus on their models rather than the underlying infrastructure.
+With Amazon SageMaker, you can specify the type and number of instances
+you want to use, ensuring that your training job has the necessary resources to
+complete efficiently.
+As a fully managed service, Amazon SageMaker takes care of provisioning,
+scaling, and managing the training instances for you. This eliminates the need
+to manually set up and maintain the infrastructure, saving time and reducing
+complexity. Amazon SageMaker handles everything from data loading and
+preprocessing to model training and evaluation, providing a seamless and
+scalable solution for ML workflows.
+Here’s an example of how to launch a remote training job using Amazon
+SageMaker’s Python SDK. In this example, we create an estimator instance
+and use the fit method to start the training job:
+import sagemaker
+from sagemaker.estimator import Estimator
+   
+# Define the IAM role with necessary permissions
+role = 'arn:aws:iam::your-account-id:role/SageMakerRole'
+   
+# Create the estimator instance
+estimator = Estimator(
+    image_uri='your-docker-image-uri',
+    role=role,
+    instance_count=1,
+    instance_type='ml.m5.large',
+    volume_size=50,  # Size in GB
+    max_run=3600,    # Maximum training time in seconds
+    hyperparameters={
+        'epochs': 10,
+        'batch_size': 32,
+        'learning_rate': 0.001,
+    }
+)
+     
+# Launch the training job
+estimator.fit({'train': 's3://your-bucket/train-data', 
+'validation': 's3://your-bucket/validation-data'})
+In this example, we define the training job’s configuration, including the
+Docker image URI, IAM role, instance type, and hyperparameters, which
+we’ll cover in detail in the next sections. The fit method is then used to start
+the training job, pointing to the S3 buckets where the training and validation
+data are stored. With Amazon SageMaker, you can seamlessly transition from
+local development to scalable and reliable remote training, ensuring that your
+models are trained on the full dataset with the resources they need.
+Distributed Training
+Distributed training is essential for scaling ML models to handle large datasets
+and complex architectures efficiently. By distributing the training process
+across multiple machines, we can significantly reduce the time required to
+train models. There are two primary approaches to distributed training: data
+parallel training and model parallel training. Both methods aim to utilize
+computational resources more effectively, but they differ in how they
+distribute the workload.
+Data parallel training involves splitting the dataset into smaller subsets, called
+mini-batches, and distributing these subsets across multiple devices. Each
+device processes its mini-batch independently, and the gradients calculated
+during the training are then aggregated and used to update the model
+parameters. This approach allows for parallel processing of data, leading to
+faster iterations. In the context of ML, an iteration refers to the process of
+updating the model parameters using one mini-batch, and an epoch represents
+a complete pass through the entire dataset. By leveraging data parallelism, we
+can achieve significant speed-ups in training time, especially for large
+datasets.
+Model parallel training, on the other hand, divides the model itself across
+multiple devices. Each device is responsible for computing a specific part of
+the model’s operations. This approach is particularly useful for very large
+models that cannot fit into the memory of a single device. By splitting the
+model, we can distribute the computational load and memory requirements,
+allowing us to train models that would otherwise be infeasible on a single
+device. Although model parallelism can be more complex to implement
+compared to data parallelism, it offers a solution for training cutting-edge
+models with millions or even billions of parameters.
+In practice, combining data and model parallelism can yield even greater
+benefits. For instance, a large model can be split across multiple devices using
+model parallelism, and each segment can further utilize data parallelism to
+process mini-batches concurrently. This hybrid approach maximizes resource
+utilization and enables efficient training of state-of-the-art models on large-
+scale datasets. Distributed training, with its ability to handle both extensive
+data and complex models, is a cornerstone of modern ML, driving
+advancements in fields such as natural language processing, computer vision,
+and beyond.
+Deciding whether to use data parallel training or model parallel training
+depends on various factors:
+If the dataset is large but the model fits comfortably in the memory of a
+single machine, data parallel training is the preferred choice. This allows
+for efficient processing of mini-batches across multiple machines.
+If the model is very large and cannot fit into the memory of a single
+machine (e.g., GPT-3 developed by OpenAI, which has 175 billion
+parameters), model parallel training is more suitable. This divides the
+model’s operations across multiple machines, distributing the
+computational load.
+In cases where both the dataset is large and the model is complex, a
+combination of data and model parallel training can be employed. This
+hybrid approach ensures optimal utilization of resources and efficient
+training.
+By considering the size of the dataset, the complexity of the model, and the
+available computational resources, your job as ML engineer is to choose the
+most appropriate distributed training method to achieve efficient and scalable
+model training.
+Monitoring Training Jobs
+As a fully managed service, Amazon SageMaker provides robust tools for
+monitoring and visualizing training metrics in real time. With its integration
+with Amazon CloudWatch, you can track various metrics such as training loss,
+accuracy, and resource utilization. These metrics can help you diagnose issues,
+fine-tune hyperparameters, and ensure that the model is learning effectively.
+To start monitoring a training job, you can specify the metrics you want to
+track using the AWS Management Console or the Amazon SageMaker Python
+SDK. Once the training job begins, Amazon SageMaker automatically streams
+the specified metrics to Amazon CloudWatch, where you can visualize them
+as time-series curves. This real-time monitoring allows you to make informed
+decisions during the training process, such as adjusting hyperparameters or
+stopping a job if it’s not performing as expected. The ability to access these
+metrics programmatically also enables automated workflows and integration
+with other monitoring tools.
+Amazon EventBridge is another powerful service that can help you
+proactively respond to failed training jobs. By integrating Amazon
+EventBridge with your training workflows, you can set up rules and alarms to
+detect when a training job fails. For example, you can configure Amazon
+EventBridge to monitor CloudWatch metrics for failed training jobs and
+trigger automated responses, such as sending notifications to your team,
+restarting the training job, or even initiating a rollback to a previous model
+version. Amazon EventBridge also supports the use of dead-letter queues
+(DLQs) to capture failed events and retries. This ensures that you have a
+record of any issues and can take appropriate actions to address them.
+In addition to real-time monitoring, Amazon SageMaker provides detailed
+logs and metrics after the training job completes. You can view graphs of the
+metrics in Amazon CloudWatch and retrieve the final metric values by calling
+the DescribeTrainingJob operation. This post-training analysis helps
+evaluate the model’s performance and identify areas for improvement. By
+leveraging these monitoring tools, you can ensure that your training jobs are
+running efficiently and producing high-quality models.
+Overall, monitoring training jobs in AWS with Amazon SageMaker, Amazon
+CloudWatch, and Amazon EventBridge provides a comprehensive solution for
+tracking and optimizing ML workflows. Whether you’re optimizing
+hyperparameters, diagnosing issues, or evaluating model performance, these
+tools offer the visibility and control needed to achieve successful training
+outcomes.
+Debugging Training Jobs
+Debugging training jobs in ML can be challenging due to the complexity and
+scale of modern models and datasets. Issues can arise at various stages, from
+data preprocessing to model convergence. Common challenges include
+identifying data quality problems, diagnosing nonconverging models, and
+managing resource bottlenecks. The large volume of data and the intricacy of
+the models add layers of difficulty, making it hard to pinpoint the root cause of
+issues. Additionally, the iterative nature of training, where models undergo
+numerous epochs and iterations, can hide the source of problems, requiring
+detailed logs and metrics to trace back the issue.
+Amazon SageMaker Debugger offers powerful debugging and profiling
+functions that significantly enhance the training and troubleshooting process
+for ML models. One of the key features of Amazon SageMaker Debugger is
+its ability to automatically capture and save intermediate tensors and metrics
+during the training process. This allows ML engineers to inspect the internal
+states of the model at various points, making it easier to identify and diagnose
+issues such as vanishing gradients and improper data preprocessing. By
+providing detailed insights into the training dynamics, Amazon SageMaker
+Debugger helps ensure that models are trained effectively and efficiently.
+Profiling is another crucial function provided by Amazon SageMaker
+Debugger. It enables ML engineers and operation teams to monitor and
+analyze the performance of their training jobs by capturing detailed system
+resource utilization metrics, such as CPU, GPU, memory, and network usage.
+With these profiling capabilities, users can identify performance bottlenecks
+and optimize their training jobs for better efficiency. Amazon SageMaker
+Debugger offers built-in rules to automatically detect common performance
+issues, and it provides visualizations and reports to help users understand and
+address these issues promptly. This proactive approach to profiling ensures
+that training resources are used optimally, reducing costs and improving
+training times.
+Additionally, Amazon SageMaker Debugger supports the open-source library
+smdebug, which extends the debugging and profiling capabilities to custom
+and complex training workflows. This library allows users to define custom
+rules and save specific tensors, metrics, and other data during training. It
+integrates seamlessly with popular deep learning frameworks such as
+TensorFlow, PyTorch, and MXNet, providing a flexible and extensible
+solution for monitoring and debugging training jobs. By leveraging smdebug,
+ML engineers can create tailored debugging and profiling workflows that suit
+their unique requirements, further enhancing the effectiveness of their ML
+projects.
+Hyperparameter Tuning
+Model evaluation is a pivotal phase in the ML lifecycle. As illustrated in
+Figure 5.2, this phase takes place after the model has been trained using an
+algorithm that best fits your use case.
+FIGURE 5.2 The model evaluation phase in the machine learning
+lifecycle.
+This phase is focused on evaluating the performance of your model to ensure
+it meets the success criteria stated in your ML problem. But how do you
+evaluate the performance of your model? The evaluation process involves
+calculating a range of metrics that are specifically selected to assess the
+model’s predictive performance. These metrics, such as accuracy, precision,
+recall, and F1 score, provide insights into how well the model is performing
+on different aspects of the data. Accuracy measures the overall correctness of
+the model’s predictions, whereas precision and recall provide a deeper
+understanding of the model’s effectiveness in handling imbalanced datasets.
+The F1 score, which combines precision and recall, offers a balanced
+assessment of the model’s performance, particularly in scenarios where class
+distribution is uneven.
+Hyperparameter tuning plays a key role in this stage by optimizing these
+metrics to ensure the model can make accurate and reliable predictions.
+Hyperparameters are external settings that control the behavior of the learning
+algorithm, such as the learning rate, batch size, and number of epochs. Unlike
+model parameters, which are learned and adjusted during training,
+hyperparameters need to be set before the training begins. By carefully tuning
+these hyperparameters, you can significantly improve the model’s
+performance and its ability to generalize to new, unseen data. This process
+involves running multiple training jobs with different hyperparameter
+configurations and selecting the one that yields the best results based on the
+evaluation metrics.
+Amazon SageMaker provides powerful tools to simplify hyperparameter
+tuning. With Amazon SageMaker, you can conduct this process manually or
+automatically using Amazon SageMaker AI Automatic Model Tuning (AMT).
+Manual tuning involves selecting different hyperparameter values, running
+multiple training jobs, and evaluating their performance to identify the best
+combination. This approach can be time-consuming and resource-intensive.
+Alternatively, Amazon SageMaker AI AMT leverages optimization algorithms
+to automatically search for the best hyperparameters. It evaluates multiple
+configurations in parallel, significantly reducing the time and effort required
+for tuning. This automated approach ensures that the model achieves optimal
+performance with minimal manual intervention, allowing you to focus on
+other critical aspects of your ML project.
+By leveraging these evaluation metrics and optimizing hyperparameters, you
+can ensure that your model meets the desired performance criteria and is well-
+equipped to make accurate predictions. This iterative process of evaluation
+and tuning is essential for developing robust and effective ML models that can
+reliably address the specific challenges of your use case. Whether you are
+using manual or automated methods, the goal remains the same: to refine your
+model until it meets the highest standards of accuracy and reliability.
+Let’s start this section by highlighting the difference between model
+parameters and hyperparameters and by learning what these are for the most
+common algorithms.
+Model Parameters and Hyperparameters
+In ML, the term learning means that the model gains knowledge (i.e., learns)
+from input data. But what knowledge does the model learn? For instance, in
+regression models like linear regression, it learns coefficients. In neural
+networks, it learns weights and biases. In K-means algorithms, it learns cluster
+centroids. These entities learned by the model during training are called
+parameters and are considered internal to the model because their values
+change during training, as the model learns to minimize the error between its
+predictions and the actual outcomes. More specifically, at the core of most ML
+algorithm implementations, there is an optimization technique whose primary
+goal is to minimize the loss function based on the training data. The loss
+function (or cost function) quantifies how well the model’s predictions match
+the actual target values. It measures the “error” or “difference” between the
+predicted values and the true values. The optimization technique is an
+algorithm designed to adjust the model’s internal parameters (such as weights
+in a neural network) to minimize the loss function. Common optimization
+techniques include gradient descent, stochastic gradient descent (SGD), and
+more advanced methods like adaptive moment estimation (Adam) and root
+mean square propagation (RMSprop), which are not in the scope of the exam.
+On the other hand, there are other factors, known as hyperparameters, that
+cannot be estimated from the input training data and are independent of it.
+These hyperparameters must be set before the training process begins and
+remain constant during the training process. For this reason, they are
+considered external to the model. These include settings such as learning rate,
+batch size, and number of epochs. Unlike parameters, which are adjusted
+during training to minimize errors, hyperparameters require tuning to optimize
+the model’s performance and ensure that it can generalize well to new data.
+For the exam, it is important for you to know that model training and model
+evaluation should use different datasets to ensure that the model generalizes
+well to new, unseen data and produces accurate predictions.
+The use of separate datasets for these two different phases is critical because
+evaluating the model on the training data can lead to overly optimistic results,
+as the model has already seen this data during training. The purpose of the
+validation dataset is to provide an unbiased evaluation of the model’s ability to
+generalize to new, unseen data. By using a separate validation dataset, we can
+better understand how well the model performs in real-world scenarios and
+avoid overfitting, which occurs when the model learns the training data too
+well and fails to generalize to new data. This process helps in selecting the
+best model and tuning hyperparameters to achieve optimal performance.
+With respect to the exam analogy we used in the “Data Splitting” section in
+Chapter 3, to accurately evaluate the student’s performance, it is essential to
+assess them using a different set of questions than those they prepared with.
+Think about it: if the evaluation uses the same questions, the student’s
+performance may appear better than it actually is, as they have become
+familiar with those specific questions. Similarly, evaluating a ML model on a
+separate validation dataset provides a more accurate assessment of its ability
+to generalize and perform well on new data.
+These concepts are summarized in Figure 5.3, where model training and
+model evaluation are visually compared, highlighting the different use of
+parameters and hyperparameters in each phase, as well as training and
+validation datasets.
+FIGURE 5.3 Model training and evaluation.
+In the upcoming sections, we will cover in detail the most common
+hyperparameter tuning techniques and evaluation metrics. But before doing
+that, we need to level set on the concept of hyperparameter space.
+Exploring the Hyperparameter Space with Amazon
+SageMaker AI Automatic Model Tuning
+Hyperparameter space refers to the range of values that different
+hyperparameters can take in a ML model. Exploring this space is critical for
+identifying the best combination of hyperparameters that optimize the model’s
+performance. As you learned in the previous section, hyperparameters are
+predefined settings that influence the training process but are not learned from
+the data. They include factors such as the learning rate, batch size, number of
+epochs, regularization parameters, and architecture-specific settings like the
+number of layers and units in a neural network.
+Amazon SageMaker offers several tools to help navigate the hyperparameter
+space effectively. Amazon SageMaker AI AMT is a powerful tool that
+automates the process of hyperparameter tuning. It uses advanced
+optimization algorithms (covered in the upcoming sections), such as Bayesian
+optimization, random search, and grid search, to explore the hyperparameter
+space and find the best configurations. AMT allows you to define ranges for
+hyperparameters and automatically evaluates multiple combinations in
+parallel, significantly reducing the time and effort required for tuning.
+Additionally, Amazon SageMaker hyperparameter tuning jobs provide a
+structured way to configure and launch hyperparameter tuning experiments.
+You can specify the hyperparameter ranges, objective metric, and resource
+limits for the tuning job. Amazon SageMaker also supports warm starts,
+which allow you to use the knowledge gained from previous tuning jobs to
+inform subsequent searches, making the optimization process more efficient.
+Each Amazon SageMaker built-in algorithm comes with different types of
+hyperparameters. To view the list of hyperparameters for your chosen
+algorithm, visit
+https://docs.aws.amazon.com/sagemaker/latest/dg/algos.h
+tml. In the provided table, select the “Built-in algorithms” column and
+locate your algorithm. Click the link, and locate the hyperparameters
+section. For example, the DeepAR algorithm’s hyperparameters are
+available at
+https://docs.aws.amazon.com/sagemaker/latest/dg/deepar_
+hyperparameters.html.
+By leveraging these tools, you can systematically explore the hyperparameter
+space and identify the optimal settings for your ML model, leading to
+improved performance and better generalization to new data.
+Later in the chapter, we will walk you through a deep-dive example on how to
+use Amazon SageMaker AI AMT to select the best model that fits a use case.
+Evaluation Metrics
+In the previous section, we introduced Amazon SageMaker AI AMT as a
+powerful tool to explore your model hyperparameter space in the search for
+the best combination of hyperparameters. You may wonder, how do you
+define what optimal really means? The answer lies in the evaluation metrics
+used to assess the performance of your ML model. Key metrics depend on the
+specific ML problem you are addressing, whether it is classification,
+regression, clustering, or another type. For classification problems, metrics
+such as accuracy, precision, recall, F1 score, and AUC-ROC are essential. In
+regression tasks, metrics like root mean squared error (RMSE), mean absolute
+percentage error (MAPE), and R-squared are pivotal. Clustering requires
+metrics like silhouette score and Davies-Bouldin index, which go beyond the
+scope of the exam. This section will cover the key metrics you need to know
+for the exam, providing a comprehensive understanding of how to evaluate
+and interpret your model’s performance effectively.
+Classification Problem Metrics
+A commonly used approach to evaluate model performance for classification
+problems is a confusion matrix. A confusion matrix provides a detailed
+breakdown of how well a model predicts different classes, highlighting areas
+where the model might be making mistakes and allowing for targeted
+improvements. From the confusion matrix, we can derive key metrics such as
+accuracy, which measures overall correctness; precision, which indicates the
+accuracy of positive predictions; and recall (or sensitivity), which assesses the
+ability to identify true positives. The F1 score combines precision and recall
+into a single metric for balanced evaluation. Additionally, the AUC-ROC
+offers insight into the model’s ability to distinguish between classes across
+various thresholds. Each of these metrics provides a unique perspective on the
+model’s effectiveness.
+Confusion Matrix
+A confusion matrix provides a holistic view of the performance of a
+classification ML model. You can use a confusion matrix to determine the
+significance of an evaluation score.
+For example, with a model that performs with an accuracy score of 90%, you
+would think the model performs very well. After all, 90% seems to be a high
+accuracy score, right? But what if you were to discover that although the
+model predicts all 90% data from one class, it completely fails to predict the
+remaining 10% data from another class? In this scenario, would you still
+believe the model was performing very well? This case would prove that a
+model with an accuracy score of 90% can still be wrong.
+This is where a confusion matrix comes in handy. The key metrics associated
+with a confusion matrix are displayed in Figure 5.4—in the use case of binary
+classification—and are discussed in the following sections.
+FIGURE 5.4 Confusion matrix for a binary classification problem.
+For multiclass classification problems, the confusion matrix is a matrix
+with 
+ rows and 
+ columns. Each row represents the actual class (true
+label), and each column represents the class predicted by the model
+(predicted label). This matrix captures the counts of correct and incorrect
+classifications for each class. Mathematically, 
+, where 
+ is the number of
+classes, 
+ is the actual class, and  is the predicted class.
+Accuracy
+In a classification problem, accuracy is the simplest form of evaluation score
+and is defined by the number of correctly predicted observations over the total
+number of observations.
+The following is the formula for calculating the accuracy of your classification
+model:
+The accuracy score is considered a reliable metric for evaluating a model’s
+performance only when the dataset is balanced, meaning all classes have
+roughly equal representation; if the dataset is imbalanced, accuracy can be
+misleading and other metrics like F1 score (discussed later in this section)
+are often preferred.
+Precision
+In a classification problem, precision is a metric that measures the accuracy of
+the positive predictions made by the model. It is defined as the ratio of true
+positives (
+) to the sum of true positives and false positives (
+ + 
+):
+In simpler terms, precision indicates how many of the instances predicted as
+positive by the model are actually positive. High precision means that the
+model has a low rate of false positives, making it particularly important in
+scenarios where the cost of false positives is high, such as in medical
+diagnoses.
+Recall
+In a classification problem, recall (also called sensitivity or true positive rate
+[TPR]) measures how well a model can identify all the positive instances
+within a dataset, essentially focusing on its ability to capture all relevant cases,
+even if it might include some false positives as well. It is defined as the ratio
+of true positives (
+) to the sum of true positives and false negatives (
+ + 
+):
+Put differently, recall indicates how many of the actual positive instances in
+the dataset are correctly identified by the model. High recall means that the
+model has a low rate of false negatives, making it particularly important in
+situations where missing positive cases is costly, such as in medical diagnoses
+or fraud detection.
+Specificity
+Specificity, also known as the true negative rate (TNR), is a metric in a
+confusion matrix that measures the proportion of actual negative instances that
+are correctly identified by the model. It provides insight into the model’s
+ability to correctly classify negative cases.
+The formula for specificity is as follows:
+Specificity is key in scenarios where accurately identifying negative cases is
+important, such as in medical screening, where you want to avoid falsely
+diagnosing healthy individuals with a condition.
+False Positive Rate
+The false positive rate (FPR) in a confusion matrix measures the proportion of
+actual negative instances that are incorrectly classified as positive by the
+model. It provides insight into how often the model mistakenly identifies a
+negative instance as positive.
+The formula for FPR is
+In simpler terms, the FPR tells you how often the model incorrectly predicts
+the positive class when it should have predicted the negative class. This metric
+is important for understanding how well the model is avoiding false alarms,
+especially in scenarios where false positives can have significant
+consequences, such as in spam detection or medical screening.
+FPR and specificity are complements of each other: as FPR decreases,
+specificity increases, and vice versa. As a result of their respective
+definitions, 
+.
+F1 Score
+In a classification problem, the F1 score is a metric that combines precision
+and recall into a single number, providing a balanced measure of a model’s
+performance. It is particularly useful when you need to balance the trade-off
+between precision (the accuracy of positive predictions) and recall (the ability
+to identify all positive instances).
+The F1 score is calculated using the harmonic mean of precision and recall:
+The F1 score gives you a single metric that takes both false positives and false
+negatives into account, making it especially valuable in situations where you
+need to strike a balance between these two aspects. A high F1 score indicates
+that the model has both high precision and high recall, ensuring that it
+performs well overall in classifying positive instances.
+AUC-ROC
+The AUC-ROC is a popular evaluation metric used in ML to assess the
+performance of binary classification models. The ROC curve plots the TPR
+against the FPR at various threshold settings. The AUC represents the area
+under this curve, providing a single value that summarizes the model’s ability
+to distinguish between positive and negative classes. Although AUC-ROC is
+primarily used for binary classification problems, it can be generalized to
+multiclass classification through techniques such as one-vs.-rest (OvR) and
+one-vs.-one (OvO).
+The ROC curve is essentially a probability curve that shows the trade-off
+between sensitivity (recall) and specificity (1 – FPR) for different threshold
+values. As you move along the ROC curve, you change the threshold for
+classifying a positive instance. This helps in understanding the model’s
+performance across different decision boundaries and gives a comprehensive
+view of its behavior. The curve’s shape indicates how well the model
+distinguishes between positive and negative classes.
+An ideal AUC-ROC score is 1.0, which indicates perfect classification with no
+false positives or false negatives. In contrast, an AUC of 0.5 suggests that the
+model performs no better than random guessing, represented by the diagonal
+line in the ROC plot. Thus, the closer the AUC value is to 1.0, the better the
+model is at distinguishing between the positive and negative classes.
+Let’s demonstrate AUC-ROC with a simple example using Python. We’ll use
+the Digits dataset and evaluate different models with varying hyperparameter
+configurations to show how the AUC-ROC score improves.
+The Digits dataset is a popular benchmark in ML, consisting of 1,797 8 ×
+8-pixel grayscale images of handwritten digits (0–9). Each image is a 64-
+dimensional vector representing pixel intensities. This dataset is widely
+used for tasks like image classification and algorithm evaluation. For more
+details, visit https://scikit-
+learn.org/stable/modules/generated/sklearn.datasets.loa
+d_digits.html.
+Given that AUC-ROC is designed primarily for binary classification problems
+and the Digits dataset involves a multiclass classification scenario with 10
+classes (ranging from 0 to 9), it’s necessary to transform this 10-class problem
+into a binary classification problem.
+This example plots ROC curves for logistic regression, random forest, and
+XGBoost classifiers, comparing their performance in terms of true positive
+rate (sensitivity) versus false positive rate (1-specificity) across different
+threshold settings:
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.metrics import roc_curve, roc_auc_score
+import os
+     
+# Load the Digits dataset
+digits = datasets.load_digits()
+X = digits.data
+y = (digits.target == 1).astype(int)  # Convert to binary 
+classification (class 1 vs. rest)
+     
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, 
+test_size=0.3, random_state=42)
+     
+# Initialize different models and hyperparameters
+models = {
+    'Logistic Regression': [
+        LogisticRegression(C=1, solver='liblinear', 
+random_state=42),
+        LogisticRegression(C=0.1, solver='liblinear', 
+random_state=42)
+    ],
+    'Random Forest': [
+        RandomForestClassifier(n_estimators=50, 
+max_depth=5, random_state=42),
+        RandomForestClassifier(n_estimators=100, 
+max_depth=7, random_state=42)
+    ],
+    'XGBoost': [
+        XGBClassifier(n_estimators=50, max_depth=5, 
+eval_metric='logloss', random_state=42),
+        XGBClassifier(n_estimators=100, max_depth=7, 
+eval_metric='logloss', random_state=42)
+    ]
+}
+     
+# Create directory if it doesn't exist
+output_dir = './ch05/images'
+os.makedirs(output_dir, exist_ok=True)
+     
+# Plot ROC curves
+plt.figure(figsize=(10, 7))
+     
+for model_name, model_list in models.items():
+    for model in model_list:
+        model.fit(X_train, y_train)
+        y_pred_prob = model.predict_proba(X_test)[:, 1]
+        fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+        auc = roc_auc_score(y_test, y_pred_prob)
+        label = f'{model_name} (n_estimators=
+{getattr(model, "n_estimators", "N/A")}, C={getattr(model, 
+"C", "N/A")}, max_depth={getattr(model, "max_depth", 
+"N/A")}) (AUC = {auc:.2f})'
+        plt.plot(fpr, tpr, label=label)
+     
+# Plot random guessing line
+plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
+     
+# Add labels and legend
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve for Different Models and 
+Hyperparameters (Digits Dataset)')
+plt.legend(loc='best')
+     
+# Save the plot instead of showing it
+plt.savefig(os.path.join(output_dir, 
+'roc_curve_digits_dataset.png'))
+plt.close()
+The AUC-ROC plot in Figure 5.5 provides a clear comparison of the
+performance of logistic regression, random forest, and XGBoost classifiers in
+distinguishing “1” digits from the rest of the digits in the Digits dataset. By
+plotting the TPR (sensitivity) against the FPR (1 − Specificity) at various
+thresholds, we can visually assess each model’s ability to correctly identify the
+“1” digits while minimizing false positives. The closer the ROC curve is to the
+top-left corner, the better the model is at differentiating between the positive
+and negative classes.
+FIGURE 5.5 ROC curve comparison.
+The AUC value quantifies this performance, with a higher AUC indicating
+superior classification capability. By comparing the AUC values for logistic
+regression, random forest, and XGBoost, we can determine which model
+performs best in classifying “1” digits. A model with a higher AUC is more
+effective at distinguishing the “1” digits from the rest, making it the preferable
+choice for this binary classification task.
+Regression Problem Metrics
+Unlike classification problems, where the goal is to categorize data points into
+discrete classes, regression problems aim to predict continuous values. In
+other words, whereas a classification model might predict whether an email is
+spam (a binary decision), a regression model might predict the price of a
+house given its features (a continuous value). This fundamental difference in
+the type of output necessitates different evaluation metrics for regression
+models.
+When evaluating regression models, several key metrics are commonly used
+to assess performance. Some of these include MSE, RMSE, MAE, MAPE,
+and R-squared. These metrics help quantify the difference between the
+predicted values and the actual values, providing insights into the model’s
+accuracy and reliability. Whereas classification metrics like accuracy,
+precision, recall, and AUC-ROC are geared toward evaluating the correctness
+of categorical predictions, regression metrics focus on the magnitude of the
+errors in continuous predictions. These measures ensure that we can
+effectively gauge the quality and performance of regression models in
+predicting real-valued outcomes.
+In the following sections, we will explain the essential metrics you need to
+understand for the exam to evaluate the performance of ML regression
+models.
+Mean Squared Error
+MSE is a commonly used metric to evaluate the performance of regression
+models. It measures the average squared difference between the actual and
+predicted values, giving a sense of how close the predictions are to the actual
+values. The MSE is calculated by summing the squared differences between
+the actual 
+ and predicted values 
+ and then dividing by the number of
+data points 
+. The squaring of the differences ensures that both positive and
+negative errors contribute equally to the metric, and it penalizes larger errors
+more heavily. The formula for MSE is given by the following:
+MSE is a key metric for assessing the accuracy of regression models, with a
+lower MSE indicating better predictive performance.
+Root Mean Squared Error
+RMSE is another widely used metric for evaluating the performance of
+regression models. It is the square root of the MSE and provides an
+interpretable measure of the average error magnitude. RMSE is particularly
+useful because it retains the units of the original data, making it easier to
+understand the scale of the errors. By taking the square root of the MSE,
+RMSE gives a sense of how much prediction errors deviate from the true
+values on average. The formula for RMSE is given by the following:
+where  is the number of data points, 
+ denotes the actual value, and 
+denotes the predicted value for the -th data point.
+Just like MSE, lower RMSE values indicate higher model accuracy, resulting
+in better model performance.
+Mean Absolute Error
+MAE measures the average magnitude of the errors in predictions, without
+considering their direction (positive or negative). MAE is calculated as the
+mean of the absolute differences between the actual values 
+ and the
+predicted values (
+). This metric is easy to understand and interpret, as it
+provides a straightforward measure of how far the predictions are from the
+actual values on average. Unlike metrics that square the errors, MAE treats all
+errors equally, which can be particularly useful in applications where large
+errors should not be excessively penalized. The formula for MAE is given by
+the following:
+where  is the number of data points, 
+ denotes the actual value, and 
+denotes the predicted value for the -th data point.
+MAE is another essential metric for assessing model accuracy, with a lower
+MAE indicating better predictive performance.
+Mean Absolute Percentage Error
+MAPE is another popular metric for evaluating the accuracy of regression
+models, especially in cases where understanding the relative error is critical.
+MAPE calculates the average absolute percentage difference between the
+actual values and the predicted values, offering an intuitive understanding of
+prediction accuracy in percentage terms. This metric is particularly useful
+when dealing with data of varying scales, as it normalizes the error, making it
+easier to interpret the results. By expressing errors as percentages, MAPE
+allows for straightforward comparisons across different datasets and models.
+The formula for MAPE is given by the following:
+where  is the number of data points, 
+ denotes the actual value, and 
+denotes the predicted value for the -th data point.
+MAPE provides a percentage-based error, making it easier to understand and
+compare prediction performance across different contexts.
+R-squared
+The R-squared, also known as the coefficient of determination, is another key
+metric for evaluating regression models. It indicates the proportion of the
+variance in the dependent variable that is predictable from the independent
+variables. Essentially, R-squared measures the goodness of fit of the model.
+An R-squared value ranges from 0 to 1, where a value closer to 1 signifies that
+the model explains a large portion of the variance in the response variable, and
+a value closer to 0 indicates that the model fails to explain much of the
+variance. The formula for R-squared is as follows:
+where  is the number of data points,  denotes the mean of the actual values,
+ denotes the actual value, and 
+ denotes the predicted value for the -th
+data point.
+R-squared provides an intuitive measure of how well the regression model
+captures the underlying trend in the data.
+When compared with the other regression evaluation metrics, R-squared
+differs from MSE, RMSE, MAE, and MAPE in that it provides a measure of
+the proportion of the variance in the dependent variable explained by the
+model. Whereas MSE, RMSE, MAE, and MAPE focus on quantifying the
+magnitude of prediction errors, R-squared offers an insight into the goodness
+of fit of the model. A higher R-squared value indicates that the model explains
+a larger portion of the variance in the data, making it a useful metric for
+understanding how well the model captures the underlying trend.
+On the other hand, MSE, RMSE, MAE, and MAPE are error-based metrics
+that directly measure the accuracy of the predictions. MSE and RMSE
+penalize larger errors more heavily due to the squaring of differences, with
+RMSE providing an interpretable measure in the same units as the original
+data. MAE and MAPE, on the other hand, provide average error magnitudes,
+with MAPE expressing errors as percentages, facilitating comparison across
+different datasets and models. Each of these metrics offers unique insights into
+model performance, and the choice of metric depends on the specific
+evaluation needs and context of the problem.
+Hyperparameter Tuning Techniques
+Up until now, you’ve learned about hyperparameters and their role in shaping
+the structure of a model, as well as their distinction from the model’s internal
+parameters, which are learned during training. You’ve also explored how
+Amazon SageMaker AI AMT can assist in finding the optimal combination of
+hyperparameters. Additionally, we’ve covered the key evaluation metrics for
+both classification and regression ML problems.
+But with the vastness of the hyperparameter space, how can a ML engineer
+efficiently streamline the hyperparameter tuning process? It’s essential to
+adopt the right approach to determine the best configuration of
+hyperparameters to achieve optimal model performance.
+The high-level process of hyperparameter tuning involves several critical
+steps:
+1. Visualizing the data and understanding the ML problem
+2. Choosing the best algorithm
+3. Splitting the dataset into training, validation, and test sets
+4. Determining the list of hyperparameters and creating the hyperparameter
+space
+5. Selecting and applying the most suitable tuning technique for discovering
+the optimal hyperparameter combination
+6. Implementing cross-validation
+7. Evaluating the model score
+8. Repeating steps 5, 6, and 7 until the best possible model score is achieved
+In the upcoming sections, we’ll focus on step 5 in the aforementioned process.
+We will introduce several hyperparameter tuning techniques, including manual
+search, grid search, random search, Bayesian optimization, and multi-
+algorithm optimization. Each of these methods offers unique strategies for
+navigating the hyperparameter space and identifying the most effective set of
+hyperparameters for your ML models.
+Manual Search
+Manual search is a straightforward and intuitive method for tuning
+hyperparameters in ML models. This technique involves manually selecting
+and testing different hyperparameter values based on experience, domain
+knowledge, and intuition about the model and dataset. As you can imagine,
+this approach can be time-consuming and may not explore the hyperparameter
+space as thoroughly as automated methods. For these reasons, this method is
+generally not recommended for most use cases because the probability of
+achieving an optimized model is low, given the vastness of the hyperparameter
+space and the manual effort required. Manual search is often used as a starting
+point before applying more sophisticated hyperparameter tuning techniques.
+Grid Search
+Grid search is a hyperparameter tuning technique that involves an exhaustive
+search through a predefined set of hyperparameters. By systematically
+exploring all possible combinations within the specified grid, this method
+performs a brute-force approach to identify the optimal combination of
+hyperparameters for a ML model. The primary advantage of grid search is its
+ability to find the best hyperparameters by thoroughly evaluating every
+possible configuration, ensuring that no potential combination is overlooked.
+However, this approach can be extremely time-consuming and compute-
+intensive, especially when dealing with a large number of hyperparameters or
+an extensive ranges of values.
+The computational burden of grid search grows when dealing with large
+datasets. The volume of data can exponentially increase the time and resources
+required to complete the search, making this method impractical in such
+scenarios. As the size and complexity of the dataset grow, the exhaustive
+nature of grid search can lead to significantly longer runtimes and higher
+computational costs, which may not be feasible for many projects. As a result,
+grid search is often more suitable for smaller datasets or use cases where
+computational resources are optimized.
+Although grid search can identify the optimal hyperparameter combination, it
+also carries the risk of overfitting the model to the training data. Overfitting
+occurs when the model captures noise or random fluctuations in the training
+data rather than the underlying pattern, leading to poor generalization to new,
+unseen data. By thoroughly exploring all hyperparameter combinations, grid
+search may fine-tune the model excessively, resulting in a model that performs
+well on the training set but fails to generalize to the validation or test sets. As a
+result, it’s essential to balance the thoroughness of grid search with the
+potential risks of overfitting, and to consider alternative tuning methods for
+more complex or larger datasets.
+Random Search
+As the name suggests, this technique randomly selects different combinations
+of hyperparameters and performs cross-validation on the dataset instead of
+searching the entire hyperparameter space. Random search is faster than grid
+search, but sometimes it can miss the best combination of hyperparameters
+due to the random nature of this approach.
+Although it may still be compute-intensive and time-consuming for large
+datasets, random search is less prone to model overfitting than grid search.
+Bayesian Search
+Bayesian search is a sophisticated hyperparameter tuning technique that
+leverages the concept of “state” to remember the performance of previous
+searches. Unlike grid search and random search, which rely on brute-force or
+random exploration, Bayesian search uses probabilistic models to intelligently
+explore the hyperparameter space. By keeping track of past evaluations,
+Bayesian search continuously refines its probabilistic model of the objective
+function, typically using Gaussian processes or other surrogate models. This
+stateful approach allows the algorithm to make informed decisions about
+which hyperparameters to explore next, focusing on regions that are more
+likely to contain optimal hyperparameters.
+The process begins with evaluating an initial set of hyperparameter values.
+Based on these evaluations, the Bayesian optimization algorithm updates its
+probabilistic model, predicting the performance of different hyperparameter
+combinations. This iterative process balances exploration (trying new regions)
+and exploitation (focusing on known promising areas) until a specified
+number of evaluations is reached or performance improvement plateaus. By
+incorporating prior knowledge and adapting its search strategy, Bayesian
+search can efficiently navigate complex hyperparameter landscapes.
+One of the key advantages of Bayesian search is its efficiency in finding
+optimal hyperparameters, reducing the number of evaluations needed
+compared to exhaustive methods like grid search. However, careful
+implementation and parameterization of the optimization algorithm are
+essential. At the end of this chapter, we will provide a demonstration of
+Bayesian search with Amazon SageMaker AI AMT, showcasing how this
+technique can be applied in practice to achieve optimal model performance.
+Multi-algorithm Optimization
+Multi-algorithm optimization refers to the process of tuning hyperparameters
+for different ML algorithms to find the best solution for a given problem. This
+technique involves running multiple algorithms with various hyperparameter
+configurations and comparing their performance to identify the most suitable
+model. By leveraging the strengths of different algorithms, multi-algorithm
+optimization aims to achieve the highest possible performance for a ML
+problem.
+We used this technique to generate the plot in Figure 5.5, which illustrates
+ROC curves for logistic regression, random forest, and XGBoost classifiers
+using a binary converted version of the Digits dataset.
+This technique is particularly useful when you have a complex ML problem
+and are unsure which algorithm will perform best. For example, you might
+tune hyperparameters for a decision tree, a random forest, a support vector
+machine, and a neural network and then compare their results to determine
+which algorithm and hyperparameter combination yields the best outcome.
+Multi-algorithm optimization provides a comprehensive search across various
+models, offering a robust solution tailored to the specific needs and
+characteristics of the data and problem at hand.
+Managing Bias and Variance Trade-off
+Bias and variance are two reducible errors in ML. For accurate predictions by
+the ML model, low values of bias and variance are desired. However, you
+cannot achieve low bias and low variance simultaneously.
+When bias is high, the model tends to oversimplify your ML problem, leading
+to underfitting. This means the model cannot capture the underlying patterns
+in the data, resulting in poor performance on both the training and validation
+datasets. High bias usually occurs when the model is too simple, such as a
+linear model trying to fit nonlinear data. Reducing bias involves increasing the
+model complexity, but this can lead to an increase in variance.
+On the other hand, high variance occurs when the model is too complex,
+capturing noise and fluctuations in the training data rather than the underlying
+pattern. This results in overfitting, where the model performs well on the
+training data but poorly on new, unseen data. High variance is often observed
+in models with many parameters, such as deep neural networks. Reducing
+variance involves simplifying the model, but this can increase bias.
+As you can see, there is a trade-off between bias and variance. This trade-off is
+illustrated in Figure 5.6 (numbers are shown for illustrative purposes). The key
+to managing bias and variance is finding the optimal model complexity that
+balances both errors. This is where hyperparameter tuning comes into play. By
+adjusting the model hyperparameters, we are tweaking the model complexity.
+As we discussed earlier, hyperparameters control various aspects of the
+model’s structure and learning process, directly impacting its complexity and
+behavior.
+FIGURE 5.6 Bias-variance trade-off.
+When the bias of the model increases, the variance decreases. Conversely,
+when the bias of the model decreases, the variance increases.
+Remember, the goal of developing a ML model is always to perform well with
+new, unseen data. A low bias and high variance can make a model overfit the
+training dataset, whereas a model with high bias and low variance may
+underfit the dataset.
+As a result, your job as an ML engineer is to discover the right balance
+between bias and variance while training and evaluating your model.
+Addressing Overfitting and Underfitting
+Addressing overfitting and underfitting in model training and evaluation is
+crucial for building robust ML models that generalize well to new data.
+Underfitting
+Underfitting occurs when a model is too simple to capture the underlying
+patterns in the data, as demonstrated by the dashed black line in the regression
+plot (degree 1 polynomial in Figure 5.7) and the classification plot (degree 1
+polynomial in Figure 5.8). To address underfitting, we can increase the
+complexity of the model by incorporating more features, using higher-degree
+polynomials (if polynomial algorithms are being used), or selecting more
+sophisticated algorithms.
+FIGURE 5.7 Examples of overfitting and underfitting for polynomial
+regression.
+FIGURE 5.8 Examples of overfitting and underfitting for polynomial
+classification.
+For example, the regression plot in Figure 5.7 better captures the data’s true
+trend with the optimal fitting model (degree 5 polynomial), whereas the
+classification plot in Figure 5.8 more accurately separates the data points with
+the optimal fitting model (degree 3 polynomial).
+With respect to our exam analogy (introduced in the “Data Splitting” section
+of Chapter 3), underfitting is similar to a student skipping chapters from their
+study material, resulting in a lack of understanding and poor performance, as
+they have underfit the concepts needed to excel the exam.
+Overfitting
+Overfitting, on the other hand, occurs when a model is too complex and
+captures noise along with the underlying patterns, leading to poor
+generalization on new data. Put differently, when a model overlearns a dataset,
+to the extent of learning all the noise and errors in the dataset, the model has
+overfitted its training data.
+This is illustrated by the dotted black line in the regression plot (degree 15
+polynomial in Figure 5.7) and the classification plot (degree 25 polynomial in
+Figure 5.8). To address overfitting, techniques such as regularization (L1 or
+L2), pruning (in decision trees), and dropout (in neural networks) can be
+employed. Additionally, reducing the model’s complexity by selecting a
+lower-degree polynomial or using fewer features can help prevent overfitting.
+For instance, the optimal fitting models in both regression and classification
+plots strike a balance between capturing the data’s patterns without being
+overly complex.
+Overfitting is similar to a student who prepares for an exam by studying with
+only a single source of information. Even though the student may feel fully
+prepared because they learned really well from the (only) study material, if the
+exam questions differ in content and scenarios from the study material, they
+may struggle to pass the exam. This is because they learned too well from the
+training material (e.g., they memorized the answers from the practice exams
+without truly understanding the concepts) and are unable to generalize to real-
+world scenarios that may happen while taking the actual exam or trying to
+solve an unseen problem at work.
+For the exam, it is important you understand how regularization is an effective
+technique to address overfitting, which is covered in the next section.
+Regularization
+Regularization helps prevent your model from overfitting by adding a penalty
+term to the loss function, which the model aims to minimize during training.
+This penalty “discourages” the model from becoming too complex and fitting
+the training data too closely. There are different types of regularization
+techniques, including L1 regularization (LASSO), L2 regularization (Ridge),
+and Elastic Net:
+L1 regularization (LASSO) L1 regularization, also known as LASSO
+(least absolute shrinkage and selection operator), is commonly used in
+regression problems. It adds a penalty term  to the loss function that is
+proportional to the sum of the absolute values of the model’s coefficients.
+The formula for the loss function with L1 regularization in the context of
+linear regression can be written as follows:
+In the formula, 
+ is the regularized loss function, 
+ is
+the original loss function (e.g., MSE for regression), 
+ are the model’s
+coefficients,  is the regularization parameter, and  is the number of
+coefficients.
+The regularization parameter  controls the strength of the regularization
+by scaling the penalty applied to the model’s coefficients. When  is
+small, the penalty is small, and the regularization effect is minimal,
+allowing the model to fit the training data more closely. When  is large,
+the penalty is significant, forcing more coefficients to zero and resulting
+in a simpler, sparser model.
+Sparsity refers to having a significant number of zero or near-zero values
+among the model’s coefficients (internal parameters learned by the model
+during training). This means that the model relies on only a subset of the
+available features, effectively ignoring the rest.
+L1 regularization encourages sparsity in the model’s parameters, making
+it particularly useful for feature selection in regression problems. By
+driving some coefficients to zero, it effectively removes less relevant
+features, resulting in a simpler and more interpretable model.
+Moreover, due to the nature of its penalty term, L1 regression is
+particularly robust (less sensitive) to outliers. This is because L1
+regularization penalizes the absolute values of the coefficients, which
+don’t amplify the effect of outliers as much as the squared term in L2
+regularization—outliers typically result in large coefficients.
+These characteristics of L1 regularization (driving sparsity and
+robustness to outliers) make it an ideal regularization technique to
+prevent your model from overfitting its training data. L1 regularization
+excels in scenarios when you have a high-dimensional dataset with many
+features and you want to focus on the most relevant ones while mitigating
+the influence of outliers that could skew the model’s performance.
+L2 regularization (Ridge) L2 regularization, known as Ridge
+regression, is also used in regression problems. It adds a penalty term to
+the loss function that is proportional to the sum of the squared values of
+the model’s coefficients. The formula for the loss function with L2
+regularization in the context of linear regression can be written as
+follows:
+In the formula, 
+ is the regularized loss function, 
+ is
+the original loss function (e.g., MSE for regression), 
+ are the model’s
+coefficients,  is the regularization parameter, and  is the number of
+coefficients.
+In comparing L2 regularization with L1, the latter (L1) induces sparsity
+by driving many coefficients to zero, effectively performing feature
+selection and creating simpler models, whereas L2 regularization does
+not result in sparsity but instead shrinks coefficients evenly, maintaining
+all features. L1 is more robust to outliers due to its linear penalty on
+coefficients, whereas L2 is less robust because the squared penalty can
+disproportionately amplify the effect of outliers.
+Elastic Net Elastic Net combines both L1 and L2 regularization and
+can be used in both regression and classification problems. The formula
+for the loss function with Elastic Net regularization can be written as
+follows:
+In the formula, 
+ is the regularized loss function, 
+ is
+the original loss function (e.g., MSE for regression), 
+ are the model’s
+coefficients, 
+ and 
+ are the regularization parameters for L1 and L2
+regularization, respectively, and  is the number of coefficients.
+Elastic Net is particularly useful when dealing with datasets with highly
+correlated features (high multicollinearity). This is because Elastic Net
+regularization balances the trade-offs between L1 and L2 techniques,
+encouraging both sparsity and small coefficient values. This hybrid
+approach makes Elastic Net a versatile tool for preventing overfitting and
+ensuring robust model performance in both regression and classification
+tasks.
+The comparison in Table 5.1 will help you determine the most
+appropriate regularization method for the exam.
+TABLE 5.1
+Regularization methods comparison.
+Property
+L1 (LASSO)
+L2 (Ridge)
+Elastic Net
+Penalty
+term
+Sparsity
+Induces sparsity
+(many coefficients
+become zero)
+Does not induce
+sparsity (all
+coefficients shrink)
+Balance between
+sparsity and shrinkage
+Feature
+selection
+Effective for feature
+selection
+Not effective for
+feature selection
+Effective for feature
+selection with
+grouped features
+Robustness
+to outliers
+Robust to outliers
+due to linear penalty
+Not robust to
+outliers due to
+squared penalty
+Moderate robustness
+due to combined
+penalties
+Use cases
+High-dimensional
+data, feature
+selection
+Regularization
+without feature
+elimination
+High-dimensional
+data with high
+multicollinearity
+Advanced Techniques
+Evaluating model performance using techniques like cross-validation is
+essential for detecting and mitigating overfitting and underfitting. Cross-
+validation involves partitioning the entire dataset into training and evaluation
+datasets multiple times and averaging the results to ensure the model’s
+robustness. By comparing performance metrics such as MSE for regression or
+accuracy for classification across different folds, you can determine whether
+the model is underfitting, overfitting, or performing optimally. The regression
+and classification plots we created in Figures 5.7 and 5.8 serve as visual clues,
+showing how models with varying degrees of polynomial complexity perform,
+helping in the understanding of these concepts. Just like a well-prepared
+student reviewing multiple sources and scenarios, cross-validation ensures the
+model is well-rounded and not biased toward a single source of training data.
+We’ll cover cross-validation in detail in the upcoming section.
+Finally, feature engineering and data augmentation can also play an important
+role in addressing overfitting and underfitting. For regression problems,
+transforming features, creating interaction terms, or scaling data can help
+models better capture the underlying relationships. In classification problems,
+techniques such as oversampling, undersampling, and adding synthetic data
+can enhance the model’s ability to generalize, which is the ultimate goal of
+any ML model.
+Model Performance Evaluation
+Having covered hyperparameter tuning, it’s important now to delve into the
+various methods used to evaluate the effectiveness and generalizability of your
+ML model. Generalizability and effectiveness are directly tied to the key
+performance indicators you learned in the “Evaluation Metrics” section earlier
+in the chapter.
+Once you have selected the most suitable evaluation metrics for your model
+and the optimal set of hyperparameters, the next step is to ensure that your
+model performs consistently well on unseen data. This is where model
+evaluation methods come into play, providing a robust framework for
+assessing your model’s performance and avoiding pitfalls like underfitting and
+overfitting.
+Performance Evaluation Methods
+Among the most widely used model evaluation methods are K-fold cross-
+validation, random train-test split, holdout set, and bootstrap. Each of these
+techniques offers a unique approach to partitioning data and evaluating model
+performance. K-fold cross-validation, for instance, divides the dataset into k
+subsets, systematically training and validating the model across different folds
+to ensure a comprehensive evaluation. The random train-test split method
+randomly allocates data into training and testing sets, offering a
+straightforward yet effective way to assess model accuracy. The holdout set
+method reserves a portion of the dataset as a separate evaluation set, providing
+a final check on model performance after training. Finally, the bootstrap
+technique involves resampling the data with replacement, creating multiple
+training and testing sets to generate an ensemble of performance estimates.
+Understanding and employing these model evaluation methods is essential for
+validating your model’s reliability and ensuring it performs well in real-world
+scenarios with new, unseen data.
+K-Fold Cross-Validation
+K-fold cross-validation is a robust technique used to assess the performance of
+a ML model and its ability to generalize to unseen data. In this method, the
+entire dataset is divided into k equal-sized subsets, or “folds.” In the case of
+fourfold cross-validation, the dataset is split into four parts. Each fold acts as a
+unique segment of data that will be used for testing exactly once, and the
+remaining k − 1 folds are used for training the model. This approach ensures
+that every data point is used for both training and evaluation, providing a
+comprehensive assessment of the model’s performance.
+As illustrated in Figure 5.9, the process begins by designating the first fold as
+the evaluation (test) dataset and the remaining three folds as the training
+dataset. The model (referred to as Model 1 in Figure 5.9) is trained on the
+training dataset (step 1), learning its internal parameters from the provided
+data (step 2). Once trained, the model is then evaluated on the evaluation (test)
+fold (step 3), producing evaluation metrics such as accuracy, precision, and
+recall (step 4). These metrics provide insight into how well the model
+performs on this specific subset of data. This process is repeated for each of
+the four folds, with each fold serving as the evaluation (test) dataset once, and
+the remaining folds are used for training.
+FIGURE 5.9 K-fold cross-validation (  = 4).
+It is important to note that each fold uses its own model, which means that for
+each fold, the model is trained from scratch using the designated training data.
+As a result, each model learns its own internal parameters based on the
+specific training data for that fold. This approach ensures that the evaluation is
+not biased by a single model’s peculiarities and provides a more accurate
+measure of the model’s generalizability. Each iteration yields its own set of
+evaluation metrics, reflecting the model’s performance on that particular fold.
+After all folds have been used for evaluation, the results are aggregated to
+produce a comprehensive performance estimate. The average of the evaluation
+metrics across all folds gives a robust indication of the model’s overall
+effectiveness and generalizability. At this point, a critical decision is made:
+whether the aggregated performance metrics meet the predefined criteria for
+acceptability. If the metrics are satisfactory, the model can be retrained on the
+entire dataset using the optimal hyperparameter configuration to create a final
+model ready for deployment—the topic of Chapter 6. If the metrics fall short
+of the criteria, further adjustments may be necessary, such as additional
+hyperparameter tuning or model refinement.
+In addition to providing a holistic measurement of your model’s overall
+performance, K-fold cross-validation also helps reduce the risk of overfitting.
+This is because every data point is used for both training and evaluation. As a
+result, the model doesn’t become too specialized to any single subset of the
+data, leading to a more accurate and dependable performance assessment.
+By using K-fold cross-validation, you can confidently evaluate how well the
+model will perform on new, unseen data, ensuring that it is both reliable and
+capable of generalizing beyond the training dataset.
+Random Train-Test Split
+Random train-test split is a straightforward and widely used method for
+evaluating the performance of ML models. In this approach, the dataset is
+randomly divided into two subsets: a training dataset and a test dataset. The
+model is trained on the training dataset and then evaluated on the test dataset
+to assess its performance. This method is simple and quick to implement,
+providing a basic indication of how the model will perform on unseen data.
+However, it has the limitation of potential variability in the evaluation results,
+depending on how the data is split, and may not provide a comprehensive
+assessment as more sophisticated methods.
+In comparison, K-fold cross-validation offers a more robust and thorough
+evaluation of model performance because it is designed to ensure that every
+data point is used for both training and evaluation, resulting in a more reliable
+estimate of the model’s generalizability. Whereas random train-test split gives
+a single performance estimate, K-fold cross-validation provides multiple
+performance estimates, which are then averaged to give a more stable and
+accurate measure of the model’s effectiveness.
+Holdout Set
+Holdout set is another common method for evaluating the performance of ML
+models. In this approach, the dataset is split into three subsets: a training set, a
+validation set, and a test set. The model is trained on the training set and tuned
+using the validation set to optimize hyperparameters and improve
+performance. Finally, the model is evaluated on the test set to assess its
+generalizability to unseen data. This method ensures that the evaluation
+metrics are not biased by the tuning process. Although holdout set provides a
+clear separation between training, validation, and testing phases, just like
+random train-test split it has the limitation of potential variability in the results
+depending on how the data is split. Additionally, the evaluation is based on a
+single test set, which might not fully capture the model’s performance on
+different data distributions.
+Bootstrap
+Bootstrap is a powerful resampling technique used to estimate the
+performance of ML models, particularly when the dataset is small or when it’s
+essential to understand the variability of the model’s performance. In this
+approach, multiple bootstrap samples are created by randomly sampling the
+dataset with replacement, meaning that some data points may be repeated and
+others may be excluded in each sample. The model is trained on each
+bootstrap sample and evaluated on the out-of-bag (OOB) data, which are the
+data points not included in the bootstrap sample. This process is repeated
+many times, and the performance metrics are averaged to provide an estimate
+of the model’s generalizability. The bootstrap method is advantageous because
+it allows for the estimation of the variability and confidence intervals of the
+performance metrics, providing a more nuanced understanding of the model’s
+robustness.
+Whereas the bootstrap approach focuses on resampling with replacement and
+provides insights into the variability of the performance metrics, K-fold cross-
+validation systematically partitions the dataset and offers a more
+straightforward and stable estimate of the model’s overall effectiveness.
+Evaluating Foundation Models
+Amazon Bedrock offers a variety of evaluation tools to help you assess the
+performance and effectiveness of foundation models (FMs) and knowledge
+bases. Some of the key evaluation tools available are briefly described in the
+upcoming sections.
+Automatic Evaluations
+These evaluations use predefined metrics such as accuracy, robustness, and
+toxicity to assess the performance of foundation models. You can bring your
+own custom datasets or use built-in, curated datasets to perform these
+evaluations. This method is quick and efficient, providing computed scores
+and metrics to help you evaluate the effectiveness of your models.
+Human Evaluations
+For more subjective or custom metrics, such as friendliness, style, and
+alignment to brand voice, Amazon Bedrock allows you to set up human
+evaluation workflows. You can either use your own workforce or have AWS
+manage the evaluations, providing ratings and preferences for specific metrics.
+LLM-as-a-Judge
+This evaluation method uses a large language model (LLM) as a judge to
+evaluate model outputs. You can provide custom prompt datasets and select
+metrics such as correctness, completeness, and harmfulness to assess the
+model’s performance.
+Programmatic Evaluations
+These evaluations use traditional natural language algorithms and metrics like
+BERT score, F1, and exact matching techniques to evaluate model outputs.
+You can use built-in prompt datasets or bring your own datasets for these
+evaluations.
+Knowledge Base Evaluations
+For evaluating retrieval quality and end-to-end retrieval-augmented generation
+(RAG) workflows, Amazon Bedrock provides tools to assess the retrieval and
+generation capabilities of your knowledge bases. Metrics such as context
+relevance, context coverage, faithfulness, correctness, and completeness are
+used to ensure the quality of the retrieved and generated content.
+Deep-Dive Model Tuning Example
+In this example, we are going to train and evaluate the performance of the
+XGBoost algorithm against the Digits dataset using Amazon SageMaker AI
+AMT. The expected outcome is the optimal combination of hyperparameters
+by evaluating the performance of 20 models, each with a different
+hyperparameter combination. We will use model accuracy as performance
+metric, and the results will be visually displayed in a plot.
+I ran this Python program using the Code Editor feature of Amazon
+SageMaker Studio:
+import boto3
+import sagemaker
+from sagemaker import get_execution_role
+from sagemaker.tuner import HyperparameterTuner, 
+IntegerParameter, ContinuousParameter
+from sagemaker.inputs import TrainingInput
+from sagemaker.analytics import 
+HyperparameterTuningJobAnalytics
+from sklearn.datasets import load_digits
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+     
+# Load the Digits dataset
+digits = load_digits()
+X = digits.data
+y = digits.target
+     
+# Split the dataset
+X_train, X_test, y_train, y_test = train_test_split(X, y, 
+test_size=0.2, random_state=42)
+     
+# Convert to DataFrame and ensure the target is the first 
+column
+train_data = pd.DataFrame(X_train)
+train_data['target'] = y_train
+train_data.insert(0, 'target', train_data.pop('target'))
+     
+val_data = pd.DataFrame(X_test)
+val_data['target'] = y_test
+val_data.insert(0, 'target', val_data.pop('target'))
+    
+# Create directories if they don't exist
+data_dir = './ch05/data'
+os.makedirs(data_dir, exist_ok=True)
+    
+# Save locally
+train_data.to_csv(os.path.join(data_dir, 'train.csv'), 
+index=False)
+val_data.to_csv(os.path.join(data_dir, 'validation.csv'), 
+index=False)
+    
+# Upload to S3
+s3 = boto3.client('s3')
+bucket_name = 'ch05-ml-hpo'
+prefix = 'sagemaker/xgboost-digits'
+s3.upload_file(os.path.join(data_dir, 'train.csv'), 
+bucket_name, f'{prefix}/train/train.csv')
+s3.upload_file(os.path.join(data_dir, 'validation.csv'), 
+bucket_name, f'{prefix}/validation/validation.csv')
+    
+# Define the role and session
+role = get_execution_role()
+session = sagemaker.Session()
+    
+# Define the XGBoost image
+region = boto3.Session().region_name
+xgb_image = sagemaker.image_uris.retrieve("xgboost", 
+region, "1.2-1")
+    
+# Define the S3 paths for the input data
+s3_train_data = 
+f's3://{bucket_name}/{prefix}/train/train.csv'
+s3_val_data = 
+f's3://{bucket_name}/{prefix}/validation/validation.csv'
+    
+# Define the data channels
+train_data = TrainingInput(s3_data=s3_train_data, 
+content_type='csv')
+val_data = TrainingInput(s3_data=s3_val_data, 
+content_type='csv')
+    
+# Define the XGBoost estimator with required 
+hyperparameters
+xgb = sagemaker.estimator.Estimator(
+    image_uri=xgb_image,
+    role=role,
+    instance_count=1,
+    instance_type='ml.m5.large',
+    output_path=f's3://{bucket_name}/{prefix}/output',
+    sagemaker_session=session,
+    hyperparameters={
+        'objective': 'multi:softmax',  # Example for 
+multi-class classification
+        'num_class': 10,  # Number of classes in the 
+Digits dataset
+        'num_round': 100  # Default value; will be tuned
+    }
+)
+    
+# Define the hyperparameter ranges
+hpt_ranges = {
+    'alpha': ContinuousParameter(0.01, 0.5),
+    'eta': ContinuousParameter(0.1, 0.5),
+    'min_child_weight': ContinuousParameter(0.0, 2.0),
+    'max_depth': IntegerParameter(1, 10)
+}
+    
+# Define the hyperparameter tuner
+tuner = HyperparameterTuner(
+    estimator=xgb,
+    base_tuning_job_name='bayesian',
+    objective_metric_name='validation:accuracy',
+    hyperparameter_ranges=hpt_ranges,
+    strategy='Bayesian',
+    max_jobs=20,  # Increase to 20 max jobs
+    max_parallel_jobs=3,  # Number of parallel jobs
+    objective_type='Maximize'
+)
+    
+# Launch the hyperparameter tuning job
+tuner.fit({'train': train_data, 'validation': val_data})
+tuner.wait()
+    
+# Get the best training job name
+best_training_job_name = tuner.best_training_job()
+    
+# Retrieve the tuning results
+tuning_job_name = tuner.latest_tuning_job.name
+tuner_analytics = 
+HyperparameterTuningJobAnalytics(tuning_job_name)
+tuner_df = tuner_analytics.dataframe()
+    
+# Extract the best hyperparameters
+if 'FinalHyperParameters' in tuner_df.columns:
+    best_hyperparameters = 
+tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name, 'FinalHyperParameters'].values[0]
+else:
+    best_hyperparameters = 
+tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name].drop(['TrainingJobName', 
+'FinalObjectiveValue'], axis=1).to_dict('records')[0]
+    
+# Print the best training job and hyperparameters
+print(f"Best Training Job: {best_training_job_name}")
+print("Best Hyperparameters:")
+for key, value in best_hyperparameters.items():
+    print(f"  {key}: {value}")
+    
+# Plot the tuning job results
+plt.figure(figsize=(12, 8))
+plt.scatter(tuner_df.index, 
+tuner_df['FinalObjectiveValue'], label='Tuning Jobs')
+plt.scatter(tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name].index,
+            tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name]['FinalObjectiveValue'],
+            color='red', marker='*', s=200, label='Best 
+Job')
+    
+plt.xlabel('Iteration')
+plt.ylabel('Cross-Validation Accuracy')
+plt.title('Hyperparameter Tuning Results')
+    
+# Display the best hyperparameters on the plot
+best_hyperparameters_str = '\n'.join([f'{key}: {value}' 
+for key, value in best_hyperparameters.items()])
+plt.figtext(0.5, -0.15, f'Best 
+Hyperparameters:\n{best_hyperparameters_str}', 
+ha='center', va='top', fontsize=10, 
+bbox=dict(facecolor='lightgrey', alpha=0.5))
+    
+# Update legend position below the x-axis
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), 
+ncol=3)
+    
+# Save the plot as an image file
+output_dir = './ch05/images'
+os.makedirs(output_dir, exist_ok=True)
+plt.savefig(os.path.join(output_dir, 
+'tuning_results.png'), bbox_inches='tight')
+Most of the steps are self-explanatory, so let's focus on the key aspects of
+training and evaluation.
+As you learned at the beginning of the chapter, because we are using the
+Amazon SageMaker XGBoost built-in algorithm, we need to retrieve the
+XGBoost image URI for our specified region:
+xgb_image = sagemaker.image_uris.retrieve("xgboost", 
+region, "1.2-1")
+Then, we need to define the input data channels: the sources where the
+algorithm should expect to find the training data and the evaluation data. The
+former will be used to train the model, and the latter will be used to tune its
+hyperparameters (model evaluation):
+train_data = TrainingInput(s3_data=s3_train_data, 
+content_type='csv')
+val_data = TrainingInput(s3_data=s3_val_data, 
+content_type='csv')
+The XGBoost estimator in the provided code is used to train a model for
+multiclass classification on the Digits dataset:
+xgb = sagemaker.estimator.Estimator(
+    image_uri=xgb_image,
+    role=role,
+    instance_count=1,
+    instance_type='ml.m5.large',
+    output_path=f's3://{bucket_name}/{prefix}/output',
+    sagemaker_session=session,
+    hyperparameters={
+        'objective': 'multi:softmax',  # Example for 
+multi-class classification
+        'num_class': 10,  # Number of classes in the 
+Digits dataset
+        'num_round': 100  # Default value; will be tuned
+    }
+)
+In the instantiation of the xgb estimator, we pass the XGBoost image URI
+xgb_image, the IAM role being used for this session, the EC2 instance count
+1, the instance type m1.m5.large, the S3 path where the artifacts generated
+after training will be stored, the session initiated by the boto3 (AWS SDK for
+Python) client, and finally the hyperparameters dictionary object. For more
+information about the Estimator signature, visit
+https://sagemaker.readthedocs.io/en/stable/api/training/es
+timators.html.
+The hyperparameters dictionary object is specific to the XGBoost
+algorithm. For example, the objective key is set to the value
+multi:softmax to tell XGBoost to do multiclass classification using the
+softmax objective. Likewise, the key num_class specifies the number of
+classes (there are 10 classes in the Digits dataset), and the key num_round
+indicates the number of boosting rounds (iterations). For more information
+about the XGBoost hyperparameters, visit
+https://docs.aws.amazon.com/sagemaker/latest/dg/xgboost-
+tuning.html.
+Upon defining the hyperparameter ranges dictionary object hpt_ranges—
+whose keys are also specific to the XGBoost algorithm—we are ready to
+optimize the hyperparameters using Bayesian optimization. This action is
+performed by creating a tuner object with this statement:
+tuner = HyperparameterTuner(
+    estimator=xgb,
+    base_tuning_job_name='bayesian',
+    objective_metric_name='validation:accuracy',
+    hyperparameter_ranges=hpt_ranges,
+    strategy='Bayesian',
+    max_jobs=20,  # Increase to 20 max jobs
+    max_parallel_jobs=3,  # Number of parallel jobs
+    objective_type='Maximize'
+)
+and by fitting the tuner using the training dataset and the validation dataset:
+tuner.fit({'train': train_data, 'validation': val_data})
+Notice how the XGBoost hyperparameter tuner object is constructed by
+setting the estimator argument to the previously created xgb object,
+validation:accuracy as objective metric to be maximized, our
+hyperparameter ranges hpt_ranges, a Bayesian tuning strategy, and most
+importantly the maximum number of tuning and parallel jobs the tuner will
+utilize during the optimization process (respectively, 20 and 3). For more
+information about the HyperparameterTuner class, visit
+https://sagemaker.readthedocs.io/en/stable/api/training/tu
+ner.html.
+After the tuning job is complete, the best training job is identified:
+best_training_job_name = tuner.best_training_job()
+and the tuning results are analyzed to extract the best hyperparameter
+configuration. The results are finally visualized and plotted for better
+understanding.
+Let’s see this program in action! Figure 5.10 shows the program at runtime.
+FIGURE 5.10 Running the program in Code Editor.
+As a result of running this program, three new training jobs appear in the list
+of training jobs, as displayed in Figure 5.11. Why three? Because we set the
+maximum number of parallel jobs to three in the tuner object’s constructor.
+FIGURE 5.11 Training jobs start.
+The program takes about 15 minutes to complete (45 seconds per job). It is
+always a good idea to proactively monitor the status of your training jobs in
+Amazon SageMaker Studio. Because we specified a maximum of 20 training
+jobs, 20 jobs are created in total.
+In the program, the training jobs will naturally terminate upon completion.
+This is because of how Amazon SageMaker handles training jobs. Once a
+training job is finished, Amazon SageMaker automatically shuts down the
+training instances, ensuring that we won’t incur additional charges.
+However, to force the duration of a training job to a given amount of time,
+we could have set the Estimator argument max_run to a timeout in
+seconds. After this amount of time, Amazon SageMaker terminates the job
+regardless of its current status. Its default value is 86,400 seconds.
+Upon successful completion, all jobs are marked with Completed status, as
+shown in Figure 5.12.
+FIGURE 5.12 Training jobs completion.
+The expected outcome is the plot illustrated in Figure 5.13, which is saved in
+the images folder in the EFS file system attached to my Amazon SageMaker
+Studio instance.
+FIGURE 5.13 Tuning evaluation plot.
+As displayed in Figure 5.13, the fourth job from the left—marked with a star
+—is the best training job: i.e., the job with the maximum accuracy. Its
+hyperparameter combination is displayed in the bottom of the plot.
+When you are done using Amazon SageMaker Studio, remember to stop your
+instance to avoid incurring in unwanted charges. Click the Stop button, as
+shown in Figure 5.14.
+FIGURE 5.14 Stopping the Amazon SageMaker Studio instance.
+In this exercise, you learned how to use Amazon SageMaker AI AMT to
+optimize a XGBoost model using the Digits dataset. The program involved
+several steps: loading and splitting the dataset, saving the data locally and
+uploading it to an S3 bucket, defining the XGBoost estimator with required
+hyperparameters, and setting up a hyperparameter tuner with specified ranges
+for optimization. The tuner performed Bayesian optimization to find the best
+hyperparameter combination, and the program waited for the tuning jobs to
+complete. After tuning, the best training job and hyperparameter combination
+were identified, and the tuning results were visualized and saved as an image.
+Summary
+In this chapter, we explored various facets of training ML models, including
+local, remote, and distributed training. We delved into monitoring and
+debugging techniques to ensure that model training runs smoothly and
+efficiently. These foundational concepts provide us with the necessary skills to
+manage and troubleshoot the training process, whether it’s conducted on local
+machines or distributed across cloud resources.
+The chapter then transitioned into hyperparameter tuning, differentiating
+between model parameters and hyperparameters and examining strategies for
+exploring the hyperparameter space using Amazon SageMaker AI AMT.
+Evaluation metrics were covered in detail, tailored to both classification and
+regression problems. We investigated various hyperparameter tuning
+techniques, including manual search, grid search, random search, Bayesian
+search, and multi-algorithm optimization. Additionally, we learned how to
+manage bias and variance tradeoff, as well as addressing overfitting and
+underfitting through regularization methods (L1, L2, Elastic Net).
+Next, we focused on model performance evaluation, discussing various
+performance evaluation methods like K-fold cross-validation, random train–
+test, holdout set, and bootstrap. Each method was compared and contrasted,
+highlighting their strengths and limitations. These techniques are crucial for
+validating the model’s performance and ensuring that it generalizes well to
+unseen data, which is the ultimate goal of any ML model.
+We also provided insights into evaluating foundation models using Amazon
+Bedrock. We explored specific tools and methods for evaluating foundation
+models, including automatic evaluations, human evaluations, and knowledge
+base evaluations. This section emphasized the importance of a comprehensive
+evaluation framework to build and deploy generative AI applications with
+confidence and responsibility.
+Finally, we concluded with a model tuning example, where we applied the
+concepts learned throughout the chapter. This practical example involved
+using Amazon SageMaker AI AMT configured with Bayesian optimization to
+perform hyperparameter tuning and model evaluation on the Digits dataset. By
+following the step-by-step instructions, we gained hands-on experience in
+optimizing ML models and evaluating their performance, reinforcing the
+theoretical knowledge acquired in the previous sections.
+Exam Essentials
+Know the difference between local, remote, and distributed training.  
+Local training involves training a machine learning model on a single machine
+using its available resources. Remote training, on the other hand, runs the
+training process on a cloud service (e.g., Amazon SageMaker) or remote
+server, leveraging external compute resources without overloading the local
+system. Distributed training involves spreading the training workload across
+multiple machines or nodes, either locally or remotely, to handle larger
+datasets and reduce training time by parallelizing the computations.
+Know the difference between model parameters and hyperparameters.  
+Model parameters are the internal configurations that a machine learning
+model learns from the training data, such as the weights in a neural network or
+the coefficients in a linear regression model. These parameters are adjusted
+during the training process to minimize the error, also known as the loss
+function, and improve the model’s performance. On the other hand,
+hyperparameters are external settings that control the overall behavior of the
+learning algorithm, such as the learning rate, the number of trees in a random
+forest, or the number of layers in a neural network. Hyperparameters are set
+before training begins and are typically tuned during evaluation through
+methods like grid search, random search, or Bayesian search to optimize the
+model’s performance.
+Know the main evaluation metrics for classification problems.  For
+classification problems, the main evaluation metrics include accuracy,
+precision, recall, F1 score, and AUC-ROC. Accuracy measures the proportion
+of correctly classified instances out of the total instances. Precision evaluates
+the proportion of true positive predictions among all positive predictions,
+reflecting the quality of positive predictions. Recall (or sensitivity) measures
+the proportion of true positive predictions among all actual positives,
+indicating the model’s ability to identify positive instances. The F1 score is the
+harmonic mean of precision and recall, providing a balanced measure that
+considers both false positives and false negatives. Area under the curve–
+receiver operating characteristic assesses the model’s ability to discriminate
+between classes by plotting the true positive rate against the false positive rate
+across different threshold settings.
+Know the main evaluation metrics for regression problems.  For
+regression problems, the main evaluation metrics include mean squared error
+(MSE), root mean squared error (RMSE), mean absolute error (MAE), mean
+absolute percentage error (MAPE), and R-squared (R²). MSE calculates the
+average of the squared differences between predicted and actual values,
+highlighting significant discrepancies. RMSE, the square root of MSE,
+provides error metrics in the same units as the target variable, making it easier
+to interpret. MAE measures the average magnitude of the absolute errors,
+offering a straightforward interpretation of prediction accuracy. MAPE
+provides a percentage-based evaluation of errors, useful for comparing models
+across different datasets. R² indicates the proportion of variance in the target
+variable predictable from the features, with values closer to 1 implying better
+model performance.
+Know the difference between Bayesian search and other hyperparameter
+tuning techniques.  Bayesian search is a hyperparameter optimization
+(HPO) technique that uses Bayesian inference to model the relationship
+between hyperparameters and the objective function, guiding the search for
+optimal hyperparameters based on prior knowledge and past evaluations. The
+objective function is a metric or measure that the optimization process aims to
+maximize or minimize, such as accuracy, loss, or other performance metrics.
+Unlike other HPO techniques such as grid search, which exhaustively searches
+a predefined space, or random search, which samples hyperparameters
+randomly, Bayesian search intelligently selects the next set of hyperparameters
+to evaluate by predicting their performance, thereby improving efficiency and
+often requiring fewer evaluations to find the best configuration. This makes
+Bayesian search particularly effective for complex models with large
+hyperparameter spaces. We used Bayesian search in our deep dive example to
+efficiently optimize our XGBoost model on the Digits dataset with Amazon
+SageMaker AI Automatic Model Tuning.
+Understand the difference between underfitting and overfitting as well as
+the methods to address them.  Underfitting occurs when a model is too
+simple to capture the underlying patterns in the data, resulting in poor
+performance on both the training and test datasets. Overfitting, on the other
+hand, happens when a model is too complex and captures noise or random
+fluctuations in the training data, leading to excellent performance on the
+training dataset but poor generalization to new, unseen data. To address
+underfitting, we can increase the model’s complexity by adding more features,
+using a more sophisticated algorithm, or extending the training duration. To
+overcome overfitting, techniques such as K-fold cross-validation, pruning,
+regularization (e.g., L1, L2, Elastic Net), and data augmentation can be
+employed. These methods help strike a balance between model complexity
+and generalization, improving overall performance.
+Understand the use of K-fold cross-validation and its benefits.  K-fold
+cross-validation involves partitioning the dataset into k equally-sized folds or
+subsets. The model is then trained on k – 1 folds and tested on the remaining
+fold. This process is repeated k times, each time using a different fold as the
+test set, and the results are averaged to provide a comprehensive evaluation of
+the model’s performance. This approach helps mitigate the bias and variance
+issues associated with a single train-test split by ensuring that every data point
+is used for both training and validation. Compared to methods like a single-
+holdout validation or random train-test split, K-fold cross-validation provides
+a more accurate and reliable assessment of the model’s ability to generalize to
+unseen data, making it particularly useful for small or imbalanced datasets.
+Review Questions
+1. Which technique effectively combines the benefits of L1 and L2
+regularization to control model complexity and improve generalization?
+A. LASSO regularization.
+B. Ridge regularization.
+C. Elastic Net regularization.
+D. It’s not possible to combine the benefits of L1 and L2
+2. What is a key advantage of Bayesian optimization over grid search in
+hyperparameter tuning?
+A. Bayesian optimization requires more hyperparameter evaluations.
+B. Bayesian optimization does not require prior evaluations.
+C. Bayesian optimization selects hyperparameters randomly.
+D. Bayesian optimization predicts the performance of hyperparameters
+to efficiently guide the search.
+3. In the context of hyperparameter tuning, what is the primary goal of the
+objective function?
+A. To maximize the number of hyperparameters
+B. To minimize the computational cost
+C. To evaluate and optimize model performance
+D. To determine the model architecture
+4. Which evaluation metric should be used to assess the performance of a
+regression model when comparing errors on different datasets with
+varying scales?
+A. Mean absolute error (MAE)
+B. Mean squared error (MSE)
+C. Root mean squared error (RMSE)
+D. Mean absolute percentage error (MAPE)
+5. When using K-fold cross-validation, what is the primary benefit of
+stratifying the folds in classification problems?
+A. To increase the complexity of the model
+B. To ensure that each fold is representative of the overall class
+distribution
+C. To reduce the number of folds
+D. To maximize the training time
+6. Which of the following scenarios indicates that a model is overfitting the
+training data?
+A. High training accuracy and high test accuracy
+B. Low training accuracy and high test accuracy
+C. High training accuracy and low test accuracy
+D. Low training accuracy and low test accuracy
+7. What is a potential drawback of using random search for hyperparameter
+tuning compared to Bayesian search?
+A. Random search always finds the best hyperparameters.
+B. Random search is less efficient in searching large hyperparameter
+spaces.
+C. Random search requires prior evaluations.
+D. Random search is deterministic.
+8. How does regularization help in addressing the issue of overfitting in
+machine learning models?
+A. By increasing the model’s complexity
+B. By adding a penalty to the loss function to constrain model
+parameters
+C. By removing training data
+D. By increasing the number of training epochs
+9. Which of the following is a common method to monitor and debug
+distributed training jobs in Amazon SageMaker?
+A. Using Jupyter Notebooks
+B. Enabling Spot Instances
+C. Implementing Amazon SageMaker Debugger
+D. Disabling Auto Scaling
+10. In model evaluation, what does a high AUC-ROC score indicate for a
+classification model?
+A. The model has a high number of false positives.
+B. The model has a strong ability to discriminate between classes.
+C. The model is likely overfitting the training data.
+D. The model has a high number of false negatives.

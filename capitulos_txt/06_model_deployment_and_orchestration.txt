@@ -1,0 +1,2530 @@
+Chapter 6
+Model Deployment and Orchestration
+THE AWS CERTIFIED MACHINE LEARNING (ML)
+ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED
+IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT
+LIMITED TO, THE FOLLOWING:
+✔ Domain 3: Deployment and Orchestration of ML Workflows
+3.1 Select deployment infrastructure based on existing
+architecture and requirements
+3.2 Create and script infrastructure based on existing
+architecture and requirements
+3.3 Use automated orchestration tools to set up continuous
+integration and continuous delivery (CI/CD) pipelines
+AWS Model Deployment Services
+In the previous chapter, you learned how to train and how to evaluate the
+performance of your model. You learned different training approaches to
+ensure that your chosen model has sufficient amounts of data to learn patterns
+and relationships between features and labels for supervised ML problems, as
+well as how it can uncover hidden structures and patterns in unsupervised ML
+problems.
+Now, it’s time to move forward and explore how to deploy these models
+effectively. Model deployment is the integration of your model and all its
+resources into a production environment so it can be used to generate
+predictions, or inferences.
+In this chapter, we will delve into the Deploy Model and Derive Inference
+phases, as illustrated in Figure 6.1. These phases are essential for delivering
+the insights and predictions your model is capable of.
+FIGURE 6.1 The machine learning lifecycle.
+Throughout the chapter we will use the term “ML app” to denote the
+application responsible for producing inferences in response to inference
+requests. This application will receive inference requests as input, will pass
+this data to the model, and will eventually return inference responses upon
+receiving an output from the model.
+I used the term eventually to indicate that the response produced by the ML
+app (after consuming the model) will be returned to the requestor “one way or
+the other.” This may happen immediately (in real time), in near real time (with
+a few seconds delay), or after an undetermined period of time. In the last
+scenario, the processing of the inferences usually occurs in batches, because
+the requestor does not expect an immediate response. As a result, the period it
+takes for the ML app to return inferences depends on—among other factors—
+the batch size (how many inference requests are being batched?) and the
+amount of data for each inference request, also referred to as the payload.
+Depending on your specific use case, you may choose to leverage Amazon AI
+Services that use pretrained models and obtain inferences by invoking directly
+their APIs, or you may choose to expose your model with an endpoint
+provided by Amazon SageMaker, now referred to as Amazon SageMaker AI.
+Either way, it is critical that the deployment approach you pursue complies
+with well-architected best practices. This means ensuring that your
+organization’s teams support efficient development and workload
+management, protecting your identities, data, infrastructure, and applications
+with robust security measures and maintaining the expected levels of
+reliability metrics. Additionally, it’s essential to use resources efficiently to
+meet system requirements, minimize costs by avoiding unnecessary expenses,
+and adopt sustainable practices to reduce your environmental impact. By
+adhering to these principles of operational excellence, security, reliability,
+performance efficiency, cost optimization, and sustainability, you can build a
+performant, robust, secure, and cost-effective model deployment that aligns
+with your organizational goals and environmental responsibilities.
+Let’s start the chapter with deployment techniques for Amazon AI services.
+Deploying AI Services
+Although Amazon SageMaker AI is often used to build, train, and deploy
+custom ML models, it also integrates seamlessly with several fully managed
+AI services provided by AWS. As you learned in Chapter 4, these services
+offer pretrained models that can be easily incorporated into your applications
+via API calls.
+For the exam, it’s important to know that these pretrained models are
+hosted in managed AWS accounts owned by the respective services, so
+there is limited access to them. These models are exposed for consumption
+in the form of API calls.
+This section explores how these AI services can be effectively deployed with
+your ML applications.
+Amazon Rekognition
+Amazon Rekognition offers pretrained models for image and video analysis.
+Deploying Amazon Rekognition involves making API calls to the service to
+analyze images and videos for objects, faces, text, and scenes. Amazon
+SageMaker AI can be used to orchestrate these API calls within your ML
+workflows, ensuring seamless integration with your applications. The
+orchestration aspect is a key requirement of the exam and will be covered in
+detail at the end of this chapter. This approach allows for scalable image and
+video processing without needing direct access to the underlying models.
+The following snippet provides an example of how to use Amazon
+Rekognition:
+import boto3
+         
+client = boto3.client('rekognition')
+       
+response = client.detect_labels(
+    Image={'S3Object': {'Bucket': 'your-bucket-name', 
+'Name': 'your-image.jpg'}},
+    MaxLabels=10,
+    MinConfidence=75
+)
+       
+for label in response['Labels']:
+    print(f"Label: {label['Name']}, Confidence: 
+{label['Confidence']}")
+To get started with Amazon Rekognition using Python, you’ll first need to set
+up your environment by installing and configuring the AWS SDK for Python,
+known as boto3. Amazon SageMaker Studio Code Editor comes with boto3
+preinstalled.
+Once your environment is ready, import the boto3 library, and create a client
+for the Rekognition service using the statement client =
+boto3.client('rekognition'). Next, prepare your data by uploading the
+images or videos you want to analyze to an Amazon S3 bucket. With your
+data in place, you can call the detect_labels API method to analyze the
+images and identify objects, scenes, and activities. The Image parameter
+specifies the S3 bucket and file name, whereas the MaxLabels and
+MinConfidence parameters define the maximum number of labels to return
+and the minimum confidence level for the detected labels. The API call returns
+a response object, which includes the identified labels and their
+corresponding confidence scores (response['Labels']), which you can
+print or use in your application for further processing. With the provided code
+you learned how to use Amazon Rekognition to analyze an image stored in an
+S3 bucket and print the detected labels and their confidence scores.
+For more information, visit
+https://docs.aws.amazon.com/rekognition/latest/APIReferenc
+e/Welcome.html.
+Amazon Textract
+Amazon Textract provides pretrained models for extracting text and data from
+scanned documents. To use Amazon Textract, create a client using the
+statement client = boto3.client('textract'). Key methods include
+analyze_document, detect_document_text, and
+get_document_analysis for processing documents. Here’s an example of
+using the analyze_document method:
+import boto3
+        
+client = boto3.client('textract')
+          
+response = client.analyze_document(
+    Document={'S3Object': {'Bucket': 'your-bucket-name', 
+'Name': 'your-document.pdf'}},
+    FeatureTypes=['TABLES', 'FORMS']
+)
+        
+for block in response['Blocks']:
+    if block['BlockType'] == 'LINE':
+        print(block['Text'])
+For more information, visit:
+https://docs.aws.amazon.com/textract/latest/dg/API_Referen
+ce.html.
+Amazon Polly
+Amazon Polly converts text into lifelike speech using pretrained models. To
+use Amazon Polly, create a client using the statement client =
+boto3.client('polly'). Key methods include synthesize_speech,
+describe_voices, and list_lexicons for generating speech. Here’s an
+example of using the synthesize_speech method:
+import boto3
+       
+client = boto3.client('polly')
+         
+response = client.synthesize_speech(
+    Text='Hello, world!',
+    OutputFormat='mp3',
+    VoiceId='Joanna'
+)
+          
+with open('speech.mp3', 'wb') as file:
+    file.write(response['AudioStream'].read())
+For more information, visit
+https://docs.aws.amazon.com/polly/latest/dg/API_Reference.
+html.
+Amazon Transcribe
+Amazon Transcribe offers pretrained models for speech-to-text conversion. To
+use Amazon Transcribe, create a client using the statement client =
+boto3.client('transcribe'). Key methods include
+start_transcription_job, get_transcription_job, and
+list_transcription_jobs for managing transcription tasks. Here’s an
+example of using the start_transcription_job method:
+import boto3
+       
+client = boto3.client('transcribe')
+      
+response = client.start_transcription_job(
+    TranscriptionJobName='TranscriptionJob',
+    Media={'MediaFileUri': 's3://your-bucket-name/your-
+audio-file.mp3'},
+    MediaFormat='mp3',
+    LanguageCode='en-US'
+)
+          
+# Wait for the job to complete and retrieve the transcript
+while True:
+    status =
+client.get_transcription_job(TranscriptionJobName='Transcr
+iptionJob')
+    if status['TranscriptionJob']
+['TranscriptionJobStatus'] in ['COMPLETED', 'FAILED']:
+        break
+           
+print(status['TranscriptionJob']['Transcript']
+['TranscriptFileUri'])
+For more information, visit
+https://docs.aws.amazon.com/transcribe/latest/APIReference
+/Welcome.html.
+Amazon Comprehend
+Amazon Comprehend offers pretrained models for natural language
+processing tasks such as sentiment analysis, entity recognition, and key phrase
+extraction. To use Amazon Comprehend, create a client using the statement
+client = boto3.client('comprehend'). Key methods include
+detect_sentiment, detect_entities, and detect_key_phrases for
+analyzing text. Here’s an example of using the detect_sentiment method:
+import boto3
+         
+client = boto3.client('comprehend')
+     
+response = client.detect_sentiment(
+    Text='I love using Amazon Comprehend!',
+    LanguageCode='en'
+)
+      
+print(f"Sentiment: {response['Sentiment']}, Score: 
+{response['SentimentScore']}")
+For more information, visit
+https://docs.aws.amazon.com/comprehend/latest/APIReference
+/welcome.html.
+Amazon Lex
+Amazon Lex provides pretrained models for building conversational interfaces
+using voice and text. To use Amazon Lex, create a client using the statement
+client = boto3.client('lexv2-runtime'). A key method is
+recognize_text for managing interactions with your chatbot. Here’s an
+example of using the recognize_text method:
+import boto3
+      
+client = boto3.client('lexv2-runtime')
+          
+response = client.recognize_text(
+    botId='YourBotId',
+    botAliasId='YourBotAliasId',
+    localeId='en_US',
+    sessionId='User123',
+    text='I would like to book a flight'
+)
+        
+print(f"Bot Response: {response['messages'][0]
+['content']}")
+          
+For more information, visit
+https://docs.aws.amazon.com/lexv2/latest/APIReference/welc
+ome.html.
+Amazon Personalize
+Amazon Personalize offers pretrained models for creating individualized
+recommendations. To use Amazon Personalize, create a client using the
+statement client = boto3.client('personalize'). Key methods
+include get_recommendations, get_personalized_ranking, and
+create_campaign for managing recommendation tasks. Here’s an example
+of using the get_recommendations method:
+import boto3
+      
+client = boto3.client('personalize')
+       
+response = client.get_recommendations(
+    campaignArn='your-campaign-arn',
+    userId='User123'
+)
+     
+for item in response['itemList']:
+    print(f"Recommended Item: {item['itemId']}, Score: 
+{item['score']}")
+For more information, visit
+https://docs.aws.amazon.com/personalize/latest/dg/API_Refe
+rence.html.
+Amazon Bedrock
+Amazon Bedrock provides a secure and scalable framework for deploying and
+managing foundation models (FMs). To derive inference using Amazon
+Bedrock models, you can create a client using the statement client =
+boto3.client('bedrock-runtime'). Amazon Bedrock enables two
+primary approaches for deploying models: using agents and the Converse API.
+Using Agents
+Agents in Amazon Bedrock act as intermediaries between your application and
+the foundation model. They allow you to define specific tasks, behaviors, and
+interactions, providing a comprehensive framework for managing and
+orchestrating various types of models. The process involves creating an agent,
+configuring it with the tasks it will perform, and creating an alias for the agent
+to interact with your application. This approach is ideal for complex
+workflows and tasks that require extensive management and orchestration.
+Using the Converse API
+On the other hand, the Converse API is designed specifically for
+conversational interactions. It provides a direct way to manage text-based
+interactions by sending input text to the model and receiving responses. The
+Converse API is well-suited for use cases such as chatbots, virtual assistants,
+and customer service applications where conversational AI is the primary
+requirement. Here’s an example of using the Converse API:
+import boto3
+    
+# Create a Bedrock client
+client = boto3.client('bedrock-runtime')
+      
+# Invoke the Converse API
+     
+response = client.converse(
+    modelId='your-model-id'',   # Replace with your model 
+ID
+    messages=[{
+        'role': 'user',
+        'content':[
+            {
+                'text': 'Create a list of ten bestselling 
+books about Calculus'
+            }
+        ]
+    }]
+)
+         
+print(f"Model Response: {response['output']['message']
+['content'][0]['text']}")
+This snippet demonstrates how to create an Amazon Bedrock client, invoke
+the Converse API with the input text, and print the model’s response. The
+Converse API provides a streamlined approach for conversational interactions,
+making it a suitable alternative for scenarios where agents might be too
+complex.
+For more information on using Amazon Bedrock’s boto3 API, you can refer to
+the Amazon Bedrock User Guide:
+https://docs.aws.amazon.com/bedrock/latest/userguide/getti
+ng-started-api.html.
+Deploying Your Model
+In the previous section, you learned how to deploy AI services provided by
+AWS. In this section, we will explore a more customized approach tailored to
+your specific use case, where you have built and fine-tuned your own model
+and now it’s ready for deployment. The deployment phase is critical as it
+ensures that your ML model is accessible and can deliver predictions on new
+data in real time or batch mode. Amazon SageMaker AI offers robust and
+flexible deployment options that cater to various requirements, ranging from
+fully managed services to more customizable, self-managed solutions.
+Managed model deployments in Amazon SageMaker AI provide a streamlined
+and hassle-free way to deploy your models. With managed endpoints, Amazon
+SageMaker AI takes care of all the underlying infrastructure, including
+provisioning, scaling, and load balancing, ensuring high availability and fault
+tolerance. This approach allows you to focus on your application’s logic and
+performance without worrying about the operational aspects of deploying and
+maintaining your model. Managed deployments are ideal for production
+environments where reliability and scalability are paramount.
+Unmanaged model deployments offer greater flexibility and control over the
+deployment process. By leveraging Amazon SageMaker AI’s powerful SDKs
+and APIs, you can deploy your models on custom infrastructure that fits your
+unique needs. This approach is suitable for scenarios where you require
+specific configurations, custom networking setups, or integration with existing
+systems. Unmanaged deployments give you the freedom to optimize resource
+allocation and cost while maintaining full control over the deployment
+lifecycle.
+Choosing the right infrastructure (type and size) to support your deployments
+depends on several key criteria: scalability, ease of management,
+customization needs, security, and cost considerations. Managed deployments
+are ideal for applications requiring high availability and effortless scaling, as
+they offload the operational burden to Amazon SageMaker AI. This option is
+best for teams looking for a hassle-free, production-ready solution.
+Conversely, unmanaged deployments offer greater flexibility and control,
+making them suitable for complex configurations or integration with existing
+systems. This approach allows for fine-tuned resource allocation and cost
+optimization. Evaluating these criteria will help determine the most suitable
+deployment strategy for your specific use case.
+Infrastructure Selection Considerations
+Because the main purpose of deploying your model is to derive inferences, it
+is important to understand the computational aspects of inference and how
+they are different from training.
+Inference is the phase where a trained model is utilized to make predictions on
+testing samples, involving a forward pass similar to the one used during
+training to generate predictions. However, unlike training, inference does not
+include a backward pass to calculate errors or update the model’s weights (or
+other internal parameters) to minimize the loss function.
+As a result, there are some important differences between inferencing and
+training that you need to know for the exam. This understanding will help you
+select the most suitable infrastructure for each use case. Table 6.1 summarizes
+these differences.
+TABLE 6.1
+Inference and Training Comparison.
+Inference compute
+Training compute
+Runs on single real-time
+endpoints (except batch
+inference)
+Requires high parallelism with large batch
+processing for higher throughput
+Less compute
+More compute
+Less memory
+More memory
+Runs ubiquitously (on devices at
+the edge and in the cloud)
+Runs in the cloud
+Runs all the time
+Runs as needed (trains once, retrain
+infrequently)
+Integrated into ML app stack
+Standalone
+In short, training infrastructure in ML is designed for high computational
+power to handle extensive data processing and model optimization, whereas
+inferencing infrastructure prioritizes low latency and efficiency for real-time
+or batch prediction tasks.
+Managed Model Deployments
+Hosting a model in Amazon SageMaker AI, known as managed model
+deployments, offers numerous benefits that streamline the ML deployment
+process. By using Amazon SageMaker AI, you leverage the power of AWS to
+manage the underlying infrastructure, enabling you to focus more on
+developing and refining your models rather than handling the complexities of
+deployment. Amazon SageMaker AI provides a robust, scalable, and secure
+environment that ensures that your models can handle varying workloads and
+deliver reliable inferences. The service handles infrastructure provisioning,
+scaling, load balancing, and health monitoring, significantly reducing
+operational overhead.
+Amazon SageMaker AI’s managed model deployment options are highlighted
+in Figure 6.2 and include Batch Inference, Asynchronous Inference, Serverless
+Inference, and Real-time Inference.
+FIGURE 6.2 Amazon SageMaker AI managed model deployment
+types.
+Each of these deployment types caters to different use cases, providing
+flexibility and efficiency based on your ML problem’s unique requirements.
+With managed endpoints, you benefit from automatic scaling and integration
+with other AWS services, such as Identity and Access Management (IAM) for
+secure access control and Amazon CloudWatch for monitoring and logging.
+Amazon SageMaker AI’s seamless integration with the AWS ecosystem
+ensures that your models are not only robust but also compliant with best
+practices in security, performance, and cost optimization in accordance with
+the pillars of the AWS Well-Architected Framework.
+An essential aspect of all Amazon SageMaker AI’s model deployment options
+is the reliance on containers. Containers encapsulate the model and its
+dependencies, ensuring a consistent environment across different stages of the
+ML lifecycle. This approach provides flexibility and portability, enabling
+seamless transitions from development to production.
+Additionally, the trained and evaluated model artifacts, typically saved as
+model.tar.gz, play a crucial role in deployments. This artifact contains the
+model parameters and any other necessary files required for inference. When
+you deploy a model in Amazon SageMaker AI, the service decompresses this
+artifact in the preconfigured instances to make the model ready to serve
+inference requests. This process ensures that all components of the model are
+intact and can be accessed efficiently during inference.
+Now, let’s dive into the specifics of each deployment method.
+Real-Time Inference
+Real-time inference in Amazon SageMaker AI is designed to provide instant
+predictions for incoming inference requests. This deployment approach is best
+suited for applications that require low-latency responses in the form of small
+payloads, such as fraud detection, recommendation systems, and interactive
+applications.
+For real-time inference, Amazon SageMaker AI uses a trained model artifact
+from Amazon S3 and an inference container from Amazon Elastic Container
+Registry (ECR) with multiple, auto-scalable instances (Figure 6.3).
+FIGURE 6.3 Real-time inference architecture.
+Here is how real-time inference works at a high level.
+Decompressing the model artifact. When you deploy a model for
+real-time inference, the first step performed by Amazon SageMaker AI is
+to decompress the model artifact. This artifact is a compressed file
+(usually a tar.gz file) that contains the serialized model and any other
+necessary files (such as learned parameters during training, configuration
+files or scripts) that were output by the training job. As shown in Figure
+6.3, Amazon SageMaker AI retrieves this artifact from the specified S3
+bucket.
+Serving the model. Next, the model is loaded and served by a
+framework-specific container. Amazon SageMaker AI supports various
+ML frameworks like TensorFlow, PyTorch, and many built-in algorithms,
+as you learned in Chapter 4. The serving container includes the necessary
+libraries to deserialize the model and make it ready for predictions.
+Amazon SageMaker AI accesses your selected algorithm/framework’s
+container image from Amazon ECR and uses this image to create a
+container. The model is now running in a container runtime (Docker)
+hosted on an instance (or multiple instances based on incoming traffic)
+managed by Amazon SageMaker AI. In Figure 6.3, the model is
+represented as an hexagon and is running and waiting to serve inference
+requests.
+Endpoint configuration. Amazon SageMaker AI creates an endpoint
+configuration, which includes details such as the instance type (e.g.,
+ml.m5.large), the instance count, and the model to be deployed. This
+configuration allows Amazon SageMaker AI to manage the resources
+required to serve the model and handle incoming requests. The endpoint
+configuration can be customized based on the performance and
+scalability requirements of your deployment. Figure 6.3 shows some of
+the properties you can set when you create an endpoint configuration.
+HTTPS endpoint. Once the endpoint configuration is ready, Amazon
+SageMaker AI creates an HTTPS endpoint. This endpoint is a unique
+URL that clients can use to send real-time inference requests to the
+model. The endpoint uses HTTPS for secure communication, ensuring
+that data sent between the client and the server is encrypted and secure.
+Autoscaling and load balancing (optional).   For real-time inference,
+you can optionally enable autoscaling to automatically adjust the number
+of instances based on incoming traffic. Amazon SageMaker AI integrates
+with AWS Application Auto Scaling, allowing the endpoint to elastically
+scale in or out based on predefined policies or real-time metrics.
+Application load balancing distributes incoming requests across all
+available instances, ensuring efficient balancing of traffic.
+Monitoring and logging. Amazon SageMaker AI provides monitoring
+and logging capabilities to track the performance and health of the
+endpoint. You can view metrics such as invocation count, latency, and
+error rate in Amazon CloudWatch. Logs are captured and can be
+reviewed to debug issues or analyze the performance of the model.
+Invoking the endpoint. Clients can now make real-time predictions by
+sending HTTPS POST requests to the endpoint. These requests include
+the input data, and the response contains the model’s prediction. The
+serving container processes the input data, runs it through the model, and
+passes the response to the ML app, which returns the predictions to the
+client.
+Before delving into other managed model deployment types, the exam
+requires you to know the different “flavors” of real-time inference
+deployments available with Amazon SageMaker AI. These are multi-model
+endpoints (MMEs) and multi-container endpoints (MCEs).
+Multi-model Endpoints
+MMEs offer an efficient and cost-effective solution for deploying multiple ML
+models on a single endpoint. With MMEs, different models share the same
+container image, optimizing resource usage and reducing the costs associated
+with managing separate endpoints for each model. This setup is particularly
+advantageous for scenarios where you have numerous models that are
+infrequently used, as it allows you to dynamically load and unload models as
+needed. By leveraging a shared serving infrastructure, MMEs simplify model
+management while ensuring high performance, scalability, and reliability. This
+architecture, as illustrated in Figure 6.4, showcases a single endpoint with a
+shared container image, three models stored in Amazon S3, and efficient
+handling of inference requests by dynamically loading the required model into
+memory.
+FIGURE 6.4 MME architecture.
+However, MMEs do have their limitations. One key limitation is that all
+models deployed on an MME must use the same container image, which
+includes the same framework and runtime environment. This requirement can
+be restrictive if you need to deploy models that rely on different frameworks
+or dependencies. Additionally, although MMEs provide isolated memory
+spaces for each model, the models still share the same container runtime,
+which may lead to resource contention in high-demand scenarios. It’s
+important to carefully manage the loading and unloading of models to ensure
+optimal performance and avoid latency issues. Despite these limitations, MMS
+remain a powerful and flexible solution for deploying multiple ML models
+efficiently and cost-effectively. The architecture in Figure 6.4 highlights the
+key components of this deployment, ensuring a seamless and scalable
+inference experience.
+Multi-container Endpoints
+MCEs allow you to deploy containers with different frameworks, overcoming
+the limitation of MMEs where all models must use the same container image.
+As of the writing of this book, MCEs allow you to deploy up to 15 containers
+on a single endpoint. The containers can be run in a sequence (serial
+invocation) or individually (direct invocation). With direct invocation, each
+container can be accessed independently to improve endpoint utilization and
+optimize costs. By running multiple containers on the same EC2 instance,
+MCEs streamline resource utilization and simplify the deployment of complex
+inference pipelines.
+The architecture in Figure 6.5 illustrates an MCE configured with direct
+invocation. The figure shows how you would create an MCE model with the
+CreateModel API.
+The CreateModel API is a RESTful API that you can call directly to
+create a model in Amazon SageMaker AI. You provide the necessary
+information, such as the model name, container details, and execution role,
+in a structured request format. To learn more, visit
+https://docs.aws.amazon.com/sagemaker/latest/APIReferen
+ce/API_CreateModel.html.
+Notice how we define a “polymorphic” model by specifying which form
+(container) it can use. In our example, the model can be built from three
+distinct container images: Container1, Contaner2, and Container3.
+These could be, for example, the container image URIs for Scikit-Learn,
+TensorFlow, and PyTorch. With a direct invocation mode the three models are
+consumed by your ML app individually.
+FIGURE 6.5 MCE architecture with container direct invocation.
+When the client calls the ML app requesting inference, it can select one of the
+three models by specifying which target container hostname to use. This
+selection can be accomplished with the invoke_endpoint API from the
+SageMaker Runtime client. For more details, visit
+https://boto3.amazonaws.com/v1/documentation/api/latest/re
+ference/services/sagemaker-runtime.html.
+Just like MMEs, your containers are hosted in the same EC2 instance,
+resulting in potential resource contention. This can lead to performance issues
+if the containers require substantial computational resources. Despite this
+limitation, MCEs provide a powerful and versatile solution for deploying
+sophisticated ML workflows, leveraging the modularity and flexibility of
+containerization to enhance the scalability and efficiency of your inference
+deployments.
+For the exam, be aware of some of the most common MCE use cases,
+including the following:
+Hosting models across different frameworks
+Hosting models from the same framework with different ML algorithms
+A/B testing
+If you need to deploy a complex ML workflow involving multiple models or
+preprocessing steps, each potentially requiring different frameworks and
+dependencies, then MCEs are a valid option to consider.
+Serverless Inference
+With serverless inference, you no longer have to guess how many instances
+you need and what instance type are best suited for your ML models. Amazon
+SageMaker AI serverless inference automatically provisions and scales the
+necessary compute resources based on your model’s workload. Because
+Amazon SageMaker AI manages your model endpoint’s infrastructure based
+on inference demand, you are charged only for the instances used to respond
+to inference requests. This flexibility ensures that your application can handle
+varying amounts of traffic without the need for manual intervention, providing
+a seamless and cost-effective solution for deploying ML models.
+Figure 6.6 illustrates the serverless inference architecture.
+FIGURE 6.6 Serverless Inference architecture.
+The process begins by configuring the memory size and maximum
+concurrency for your serverless endpoint. These parameters help Amazon
+SageMaker AI allocate the appropriate compute resources to meet your ML
+app’s performance requirements. When an inference request is made, Amazon
+SageMaker AI dynamically scales the compute capacity to match the demand
+(scale-out), ensuring that your model can handle bursts of traffic while
+maintaining low latency. Conversely, when inference requests are completed,
+this architecture reduces the compute resources (scale-in), deprovisioning the
+excess capacity to minimize costs. This elastic compute behavior is
+symbolized in Figure 6.6 with downward chevrons (scale-out) and upward
+chevrons (scale-in). This serverless architecture eliminates the need to
+preallocate resources, reducing costs when your model is idle or experiencing
+low traffic.
+Max concurrency refers to the maximum number of concurrent requests
+that can be processed by your serverless endpoint at any given time. By
+setting this parameter, you define the upper limit of simultaneous requests
+the endpoint can handle, which helps manage traffic spikes and ensures
+consistent performance. Provisioned concurrency, on the other hand,
+ensures that a specified number of execution environments are always
+ready to handle requests, reducing latency and providing a more
+predictable response time.
+Another advantage of serverless inference is its seamless integration with
+Amazon SageMaker AI’s model deployment pipeline. Once your model is
+trained and tuned, you can easily deploy it using the serverless inference
+configuration. This involves specifying the model artifacts (such as
+model.tar.gz) and the serving container image URI. Similarly to real-time
+inference, Amazon SageMaker AI takes care of downloading and
+decompressing the model files, initializing the model, and exposing an API
+endpoint for inference requests. This automated process simplifies deployment
+and ensures that your model is ready to serve predictions without manual
+setup.
+By leveraging a serverless infrastructure, you can focus on building and
+optimizing your models rather than managing the underlying infrastructure.
+Serverless inference is particularly suited for applications with variable or
+unpredictable traffic patterns, enabling efficient resource utilization and cost
+management.
+At the end of the chapter, you will be walked through a deep-dive
+demonstration of how serverless inference works with the Amazon SageMaker
+Python SDK. Specifically, we will use an instance of the
+ServerlessInferenceConfig class to programmatically create a
+serverless endpoint exposing the best XGBoost model for the Digits dataset
+we tuned at the end of Chapter 5.
+To learn more about the ServerlessInferenceConfig class, visit
+https://sagemaker.readthedocs.io/en/stable/api/inference/s
+erverless.html#sagemaker.serverless.serverless_inference_c
+onfig.ServerlessInferenceConfig.
+Asynchronous Inference
+Asynchronous inference is another managed model deployment designed to
+handle large-scale, long-running tasks that do not require an immediate
+response. Unlike real-time endpoints that process requests and return results
+within a short timeframe, asynchronous inference allows you to submit
+inference requests and process them at a later time. This means that requests
+can be queued and processed as resources become available, making it ideal
+for scenarios where inference latency is not a critical factor. Asynchronous
+inference helps manage and balance your workload effectively, ensuring that
+large volumes of data can be processed without overwhelming your
+infrastructure.
+The workflow for Amazon SageMaker AI asynchronous inference is
+straightforward. You start by creating an asynchronous inference endpoint,
+similar to a real-time endpoint, and then submit your inference requests to this
+endpoint. Each request is stored in an Amazon S3 bucket, and Amazon
+SageMaker AI retrieves the requests from the bucket for processing. Once the
+inference is completed, the results are stored back in the Amazon S3 bucket,
+and you can retrieve them at your convenience. You can optionally choose to
+receive success or error notifications with Amazon SNS. This decoupled
+architecture allows for efficient handling of large datasets and long-running
+inference tasks without the constraints of real-time processing.
+Asynchronous inference is best suited for use cases where inference tasks are
+resource-intensive and time-consuming and can tolerate delayed responses.
+Examples include processing large image datasets, running complex ML
+models, and performing extensive data transformations.
+Batch Inference
+As the volume and payload of your inference requests increase, a well-
+architected solution to generate inference at scale becomes essential. Amazon
+SageMaker AI batch inference is designed to address this challenge by
+allowing you to process large datasets in bulk. Unlike real-time endpoints,
+which cater to immediate predictions, batch inference is tailored for scenarios
+where low-latency responses are not a priority. By leveraging batch inference,
+you can efficiently handle extensive workloads, ensuring that your ML models
+can process significant amounts of data without compromising performance.
+It’s important to highlight that batch transform jobs do not require endpoints;
+instead, they operate by processing data in bulk and storing the results in
+specified locations.
+The process begins with creating a batch transform job, where you specify the
+input data location, the model to be used, and the output data location.
+Amazon SageMaker AI then processes the input data in parallel, utilizing its
+scalable infrastructure to optimize resource usage. Once the batch transform
+job is completed, the results are stored in the specified output location,
+allowing you to retrieve and analyze them at your convenience. Similarly to
+asynchronous inference, this decoupled architecture ensures that batch
+inference tasks can be managed effectively, minimizing the need for
+continuous monitoring and intervention.
+Amazon SageMaker AI batch inference is particularly well-suited for use
+cases where large volumes of data need to be processed simultaneously and
+the immediacy of the model predictions is not critical. Examples include
+offline analytics, data preprocessing, and periodic model updates. It is also
+ideal for generating predictions for entire datasets, such as scoring customer
+data for marketing campaigns or analyzing sensor data for predictive
+maintenance.
+Unmanaged Model Deployments
+With AWS, you don’t have to deploy your models with Amazon SageMaker
+AI. Although Amazon SageMaker AI offers a robust and fully managed
+solution for model deployment, providing numerous benefits such as
+automatic scaling, built-in algorithms, and simplified model training and
+deployment processes, it may not always be the best fit for every scenario.
+Unmanaged model deployments are referred to as a method where you, as the
+user, take on the responsibility for managing all the deployment infrastructure.
+This approach offers greater flexibility and control compared to fully managed
+services like Amazon SageMaker AI, but it also involves the trade-off of
+taking on the cost and complexity of managing the deployment infrastructure
+yourself.
+Unmanaged deployments grant you greater control and customization over
+your environment, allowing for specific hardware configurations, custom
+software dependencies, and specialized network settings. This level of
+granularity is ideal for users who need to tailor their deployment setups
+extensively. Additionally, unmanaged deployments can lead to cost
+optimizations, as you have the flexibility to fine-tune instance types, utilize
+spot instances, and manage scaling policies manually, potentially providing
+significant cost savings. However, it is important to recognize that this control
+comes with the responsibility of maintaining and managing the infrastructure,
+which can introduce additional complexity and overhead.
+Beyond control and cost, other factors such as complex workflows and
+integration needs, data residency, compute residency requirements, and
+compliance or regulatory considerations also drive the choice for unmanaged
+deployments. For instance, when deploying models in environments with strict
+data residency requirements or industry-specific regulations like GDPR and
+HIPAA, having full control over the infrastructure ensures that you can
+implement custom security measures and meet all necessary legal standards.
+In such cases, AWS compute services like Amazon EC2, ECS, EKS, and
+Lambda offer the flexibility and control needed to address these specific
+demands for your model deployments.
+In the upcoming sections, you will learn how each of these AWS compute
+services can be used to deploy your ML models in AWS.
+Amazon Elastic Compute Cloud (EC2)
+Amazon EC2 provides scalable compute capacity in the cloud, allowing users
+to launch virtual servers and manage their own infrastructure. For unmanaged
+model deployments, EC2 instances can be used to host ML models, providing
+full control over the environment, including the operating system, network
+configuration, and security settings. This flexibility is ideal for users who need
+to customize their deployment setup extensively. By leveraging EC2, you can
+choose the instance types that best fit your workload requirements, ensuring
+optimal performance and cost efficiency.
+When selecting EC2 instance types, it’s important to consider whether your
+workload would benefit more from CPU or GPU resources.
+CPUs are generally suitable for traditional ML workloads, data preprocessing,
+and applications that do not require intensive parallel processing. They are
+best suited for the early phases of the ML lifecycle, such as data cleaning,
+feature engineering, and model inference tasks that do not demand heavy
+computational power.
+GPUs are highly efficient for deep learning tasks, image processing, and other
+compute-intensive operations that can take advantage of parallel processing
+capabilities. They are particularly beneficial during the training and evaluation
+phases of the ML lifecycle, where large datasets and complex algorithms
+require substantial computational resources to reduce training time and
+improve model accuracy.
+Whereas training a deep learning model often necessitates a high-powered
+GPU instance due to the heavy computational load, performing inferences
+(applying the trained model to new data) typically requires significantly
+less processing power and can often be done on a less powerful GPU or
+even a CPU, depending on the application and desired latency. As a result,
+deploying these deep learning models on a full-sized GPU may lead to
+underutilization and unnecessary costs.
+Table 6.2 can help you select the appropriate EC2 instance types for different
+ML inference tasks. Because the cost varies by region and other factors, the
+provided figures are approximations. Keep in mind that although model
+training typically demands high memory consumption due to the large datasets
+processed during the learning phase, inference primarily focuses on achieving
+high throughput and low latency, meaning quick responses to new data with
+minimal delay.
+For the exam, be aware of how AWS Inferentia EC2 instance types (Inf1,
+Inf2) deliver high performance at the lowest cost for your deep learning
+(DL) and generative AI inference applications. More advanced inference
+capabilities on these compute architectures are enabled by the newly
+developed AWS Neuron SDK, which integrates natively with popular
+frameworks, such as PyTorch and TensorFlow, so that you can continue to
+use your existing code and workflows and run on AWS Inferentia chips.
+For more information, visit
+https://aws.amazon.com/ec2/instance-types/inf2.
+TABLE 6.2
+Inference-Based EC2 Instance Types.
+Instance
+type
+Use case
+Key
+features
+Approximate
+cost
+GPU-
+based
+Compute
+architecture
+t2 (burstable
+performance)
+Development,
+testing, basic
+inference
+Low-cost,
+burstable
+CPU
+performance
+Low
+No
+x86–64 (64-
+bit)
+c5 (general
+purpose)
+Versatile ML
+workloads,
+basic
+inference
+Balanced
+CPU,
+memory,
+and network
+resources
+Moderate
+No
+x86–64 (64-
+bit)
+m5 (general
+purpose)
+Mixed
+workloads,
+basic
+inference
+Balanced
+CPU,
+memory,
+and network
+resources
+Moderate
+No
+x86–64 (64-
+bit)
+Inf1
+(inferentia)
+High-
+performance,
+cost-effective
+inference
+Powered by
+AWS
+Inferentia
+chips
+Moderate
+No
+AWS
+Inferentia
+Inf2
+(inferentia)
+High-
+performance,
+cost-effective
+inference
+Powered by
+second-
+generation
+AWS
+Inferentia
+chips
+Moderate
+No
+AWS
+Inferentia
+g4dn (GPU
+optimized)
+Deep learning
+inference
+NVIDIA
+GPUs, cost-
+effective
+High
+Yes
+NVIDIA T4
+Tensor Core
+GPUs
+g5 (GPU
+optimized)
+Deep learning
+inference
+Higher-
+performance
+NVIDIA
+GPUs
+High
+Yes
+NVIDIA
+A10G
+Tensor Core
+GPUs
+Instance
+type
+Use case
+Key
+features
+Approximate
+cost
+GPU-
+based
+Compute
+architecture
+g6 (GPU
+optimized)
+Deep learning
+inference
+NVIDIA L4
+Tensor Core
+GPUs
+High
+Yes
+NVIDIA L4
+Tensor Core
+GPUs
+p4 (compute
+optimized)
+High-
+performance
+inference
+Higher-
+performance
+NVIDIA
+GPUs
+Highest
+Yes
+NVIDIA
+A100 Tensor
+Core GPUs
+p5 (compute
+optimized)
+High-
+performance
+inference
+Higher-
+performance
+NVIDIA
+GPUs
+Highest
+Yes
+NVIDIA
+H100 Tensor
+Core GPUs
+Trn1
+High-
+performance
+AI training
+and inference
+(LLMs and
+generative AI)
+Powered by
+AWS
+Trainium
+chips
+Highest
+No
+AWS
+Trainium
+Trn2
+High-
+performance
+AI training
+and inference
+(LLMs and
+generative AI)
+Powered by
+AWS
+Trainium2
+chips
+Highest
+No
+AWS
+Trainium2
+Amazon Elastic Container Service
+Amazon ECS is another powerful option for unmanaged model deployments.
+Amazon ECS allows you to run and manage containerized applications,
+making it well-suited for deploying ML models in a flexible and scalable
+manner. With Amazon ECS, you can define and manage your containerized
+model deployment using task definitions, which specify the necessary Docker
+container images, resources, and networking settings. One of the key
+advantages of using Amazon ECS for unmanaged model deployment is the
+ability to utilize both EC2 and AWS Fargate launch types. The EC2 launch
+type allows for granular control over the underlying infrastructure, enabling
+you to optimize performance and cost by selecting specific instance types. On
+the other hand, the AWS Fargate launch type abstracts away the infrastructure
+management, providing a serverless experience where you focus only on
+running your containerized models. This flexibility makes Amazon ECS an
+attractive choice for a variety of deployment scenarios.
+In addition to flexibility, Amazon ECS offers robust integration with other
+AWS services, enhancing the overall deployment experience. For instance,
+Amazon ECS integrates seamlessly with Amazon CloudWatch for monitoring
+container performance, AWS Identity and Access Management (IAM) for
+security and access control, and Amazon EFS for persistent storage. By
+leveraging these integrations, you can build a comprehensive deployment
+pipeline that includes logging, monitoring, and scaling. Furthermore, Amazon
+ECS provides support for service discovery, allowing your containerized
+applications to easily communicate with each other within the same network.
+This feature is particularly useful for microservices architectures where
+different components of your ML application need to interact seamlessly.
+Overall, Amazon ECS offers a powerful, flexible, and integrated platform for
+unmanaged model deployments, enabling you to efficiently run and manage
+your ML models at scale.
+Amazon Elastic Kubernetes Service
+Amazon Elastic Kubernetes Service (Amazon EKS) leverages the power of
+Kubernetes, a leading open-source container orchestration platform, for
+unmanaged model deployments. By utilizing Amazon EKS, you can
+efficiently deploy, manage, and scale containerized ML models with
+Kubernetes-native tools and APIs. Amazon EKS automates critical aspects of
+setting up and maintaining a Kubernetes control plane, providing high
+availability, security, and performance, which allows you to concentrate on
+running your ML workloads. Additionally, Amazon EKS integrates
+seamlessly with other AWS services, such as Amazon S3 for data storage,
+AWS IAM for secure access control, and Amazon CloudWatch for monitoring
+and logging.
+Moreover, Amazon EKS offers unparalleled flexibility and control, allowing
+you to leverage Kubernetes’ full capabilities for your ML deployments. With
+support for Kubernetes add-ons and third-party tools, you can enhance your
+deployment environment with advanced features like service meshes, logging,
+and monitoring solutions. Amazon EKS enables you to take advantage of
+essential Kubernetes features such as autoscaling, rolling updates, and self-
+healing, ensuring that your models are running optimally at all times. This
+flexibility is beneficial for organizations with existing Kubernetes
+infrastructure or expertise, as it provides a consistent deployment experience
+whether operating on-premises or in the cloud. Overall, Amazon EKS delivers
+a robust and scalable platform for deploying and managing ML models,
+making it another valuable choice for organizations looking to harness the full
+potential of Kubernetes.
+AWS Lambda
+AWS Lambda offers a serverless computing model that is well-suited for
+deploying ML models, especially when you need to run inference at scale
+without managing the underlying infrastructure. With AWS Lambda, you can
+package your ML model as a Lambda function and deploy it to automatically
+scale in response to incoming requests. This pay-as-you-go model ensures that
+you pay only for the compute time consumed by your model, making it a cost-
+effective solution for running inference tasks. Lambda functions can be
+triggered by various AWS services such as API Gateway, S3, or DynamoDB,
+allowing you to build a seamless and integrated deployment pipeline for your
+ML applications.
+One of the significant advantages of using AWS Lambda for unmanaged
+model deployment is its ability to handle highly variable workloads with ease.
+Lambda automatically scales up and down based on the number of requests,
+ensuring that your model can handle sudden spikes in demand without manual
+intervention. This is particularly beneficial for applications with unpredictable
+traffic patterns or seasonal variations. Additionally, Lambda’s integration with
+Amazon CloudWatch provides robust monitoring and logging capabilities,
+enabling you to track the performance and health of your deployed models.
+You can set up alarms and notifications to stay informed about any issues or
+anomalies, ensuring that your models are always running optimally.
+Finally, AWS Lambda supports a variety of programming languages,
+including Python, which is widely used for ML. This flexibility allows you to
+use familiar tools and frameworks to develop and deploy your models. You
+can also leverage AWS Lambda Layers to manage dependencies and share
+common code across multiple functions, simplifying the deployment process.
+Lambda’s stateless nature means that each invocation of the function is
+independent, ensuring consistent performance and reliability. By combining
+AWS Lambda with other AWS services like S3 for model storage and API
+Gateway for creating RESTful APIs, you can build a scalable, cost-effective,
+and fully managed deployment solution for your ML models.
+Optimizing ML Models for Edge Devices
+Optimizing ML models for edge devices involves several strategies to ensure
+efficient performance and resource utilization. Amazon SageMaker Neo is a
+powerful service designed specifically for this purpose, enabling developers to
+optimize and deploy ML models on various edge devices with ease. Amazon
+SageMaker Neo compiles and tunes models to run efficiently on specific
+hardware and software configurations, making it ideal for edge deployment.
+With Amazon SageMaker Neo, you can optimize models for a wide range of
+edge devices, including those powered by ARM, Intel, Nvidia, and other
+processors. This service supports popular frameworks such as TensorFlow,
+TensorFlow-Lite, PyTorch, and the Open Neural Network Exchange (ONNX)
+standard format, providing flexibility and compatibility with different
+development workflows. Amazon SageMaker Neo automatically applies
+techniques like quantization, compression, and pruning to reduce the size and
+complexity of ML models, ensuring that they run efficiently on resource-
+constrained devices.
+The process begins by training your ML model (in the cloud using Amazon
+SageMaker or somewhere else). Once the model is trained, you can use
+Amazon SageMaker Neo to compile and optimize it for your target edge
+device. Amazon SageMaker Neo creates a binary file that is highly optimized
+for the target hardware, allowing for faster and more efficient inference. This
+approach not only reduces latency but also conserves energy, making it
+suitable for low-power edge devices.
+To continuously monitor and update ML models deployed on edge devices,
+Amazon SageMaker Neo provides tools for over-the-air (OTA) updates. This
+ensures that models remain up to date and maintain high accuracy over time
+without requiring physical access to the devices. With Amazon SageMaker
+Neo you can create responsive, secure, and robust AI applications that deliver
+exceptional user experiences on edge devices.
+You can see the list of supported edge devices, cloud instances, and
+framework versions by visiting
+https://docs.aws.amazon.com/sagemaker/latest/dg/neo-
+supported-devices-edge.html.
+The following snippet shows an example of exporting a pretrained
+TensorFlow model, uploading it to S3, and creating an Amazon SageMaker
+Neo compilation job to optimize it for an iPhone using Apple Core ML:
+import tensorflow as tf
+import boto3
+from sagemaker import get_execution_role, Session
+           
+# Step 1: Export the Pre-trained Model
+# Load your pre-trained model
+model = 
+tf.keras.models.load_model('path_to_your_model.h5')
+       
+# Save the model in the SavedModel format
+model.save('saved_model_path')
+       
+# Step 2: Upload the Model to S3
+s3 = boto3.client('s3')
+s3.upload_file('saved_model_path', 'your-bucket', 
+'saved_model_path')
+       
+# Step 3: Create a SageMaker Neo Compilation Job
+# Initialize SageMaker session
+sagemaker_session = Session()
+       
+# Get the execution role
+role = get_execution_role()
+       
+# Define the S3 bucket paths
+input_model_path = 's3://your-bucket/saved_model_path'
+output_model_path = 's3://your-bucket/compiled-model'
+       
+# Create a Neo compilation job
+sagemaker_client = boto3.client('sagemaker')
+       
+response = sagemaker_client.create_compilation_job(
+    CompilationJobName='MyCompilationJob',
+    RoleArn=role,
+    InputConfig={
+        'S3Uri': input_model_path,
+        'DataInputConfig': '{"input": [1, 224, 224, 3]}',
+        'Framework': 'TENSORFLOW'
+    },
+    OutputConfig={
+        'S3OutputLocation': output_model_path,
+        'TargetDevice': 'ml_coreml'  # Target device for 
+iPhone
+    },
+    StoppingCondition={
+        'MaxRuntimeInSeconds': 3600
+    }
+)
+       
+# Wait for the compilation job to complete
+sagemaker_client.get_waiter('compilation_job_completed_or_
+stopped').wait(
+    CompilationJobName='MyCompilationJob'
+)
+       
+# Check the status of the compilation job
+status = sagemaker_client.describe_compilation_job(
+    CompilationJobName='MyCompilationJob'
+)['CompilationJobStatus']
+print(f'Compilation job status: {status}')
+Advanced Model Deployment Techniques
+Amazon SageMaker AI offers advanced deployment techniques to ensure that
+your ML models perform optimally and reliably in production. With Amazon
+Application Auto Scaling, you can automatically scale your SageMaker
+endpoints based on predefined metrics, ensuring efficient resource utilization
+and cost management during variable traffic loads. Deployment strategies such
+as Blue/Green deployments and testing strategies like canary, shadow, and
+A/B testing allow for seamless and reliable transitions to new model versions
+with minimal disruption. These techniques will be described in the following
+sections, providing a comprehensive framework for deploying ML models
+effectively using Amazon SageMaker AI.
+Autoscaling Endpoints
+Autoscaling Amazon SageMaker AI endpoints ensures that your deployed ML
+models can handle varying levels of traffic efficiently by scaling horizontally
+(scale-in, scale-out) the instances responsible for serving incoming inference
+requests. Amazon Application Auto Scaling allows you to automatically
+adjust the number of instance replicas for your Amazon SageMaker AI
+endpoints based on predefined metrics, such as CPU utilization or request
+count. This helps in maintaining optimal performance while keeping costs
+under control. To begin with, you need to configure your endpoint with an
+autoscaling policy using the application-autoscaling boto3 client.
+First, let’s create an autoscaling policy for a real-time endpoint. To do so, you
+need to define two components:
+A scaling target: Sets the boundaries for scaling (e.g., minimum 1
+instance, maximum 10 instances)
+A scaling policy: Specifies the metric to monitor (e.g.,
+SageMakerVariantInvocationsPerInstance or
+CPUUtilization), the target value for this metric, and the conditions
+under which to scale in or out
+Here’s a simple example in Python to illustrate this:
+import boto3
+      
+client = boto3.client('application-autoscaling')
+      
+# Register a scalable target
+response = client.register_scalable_target(
+    ServiceNamespace='sagemaker',
+    ResourceId='endpoint/your-endpoint-
+name/variant/AllTraffic',
+ 
+   ScalableDimension='sagemaker:variant:DesiredInstanceCou
+nt',
+    MinCapacity=1,
+    MaxCapacity=10
+)
+      
+# Create a scaling policy
+response = client.put_scaling_policy(
+    PolicyName='ScalingPolicy',
+    ServiceNamespace='sagemaker',
+    ResourceId='endpoint/your-endpoint-
+name/variant/AllTraffic',
+ 
+   ScalableDimension='sagemaker:variant:DesiredInstanceCou
+nt',
+    PolicyType='TargetTrackingScaling',
+    TargetTrackingScalingPolicyConfiguration={
+        'TargetValue': 70.0,  # Target number of endpoint 
+invocations per instance
+          'PredefinedMetricSpecification': {
+            'PredefinedMetricType': 
+'SageMakerVariantInvocationsPerInstance',
+        },
+        'ScaleInCooldown': 300,
+        'ScaleOutCooldown': 300
+    }
+)
+In this example, autoscaling is triggered based on the number of invocations
+(requests) per instance for your Amazon SageMaker AI endpoint. Specifically,
+the scaling policy is set to maintain an average of 70 invocations per instance.
+If the average number of invocations per instance goes above 70, the policy
+will automatically add more instances (scale out) to handle the increased load.
+Conversely, if the average number of invocations per instance drops below 70,
+the policy will reduce the number of instances (scale in) to optimize resource
+usage. This “elastic” behavior ensures that your real-time inference endpoint
+can dynamically adapt to changing traffic levels, maintaining performance and
+efficiency.
+The ScaleInCooldown and ScaleOutCooldown parameters define the cool
+down period in seconds for scaling in and scaling out actions, respectively. In
+this case, both are set to 300 seconds (5 minutes). When a scaling action is
+triggered, such as adding more instances (scaling out) or reducing instances
+(scaling in), the cooldown period ensures that no further scaling actions of the
+same type can be taken until the cooldown period has elapsed. This helps
+prevent rapid and excessive scaling actions in response to short-term
+fluctuations in traffic, ensuring that the system has sufficient time to stabilize
+before considering another scaling adjustment.
+Let’s look at another example where we scale based on CPU utilization. We
+can modify the scaling policy to use a custom metric, such as average CPU
+utilization. Here’s how you can achieve this:
+import boto3
+        
+client = boto3.client('application-autoscaling')
+      
+# Register a scalable target
+response = client.register_scalable_target(
+    ServiceNamespace='sagemaker',
+    ResourceId='endpoint/your-endpoint-
+name/variant/AllTraffic',
+ 
+   ScalableDimension='sagemaker:variant:DesiredInstanceCou
+nt',
+    MinCapacity=1,
+    MaxCapacity=10
+)
+      
+# Create a scaling policy
+response = client.put_scaling_policy(
+    PolicyName='CPUScalingPolicy',
+    ServiceNamespace='sagemaker',
+    ResourceId='endpoint/your-endpoint-
+name/variant/AllTraffic',
+ 
+   ScalableDimension='sagemaker:variant:DesiredInstanceCou
+nt',
+    PolicyType='TargetTrackingScaling',
+    TargetTrackingScalingPolicyConfiguration={
+        'TargetValue': 50.0,  # Target average CPU 
+utilization
+        'CustomizedMetricSpecification': {
+            'MetricName': 'CPUUtilization',
+            'Namespace': 'AWS/SageMaker',
+            'Dimensions': [{'Name': 'EndpointName', 
+'Value': 'your-endpoint-name'}],
+            'Statistic': 'Average',
+            'Unit': 'Percent'
+        },
+        'ScaleInCooldown': 300,
+        'ScaleOutCooldown': 300
+    }
+)
+In this second example, autoscaling is triggered based on the average CPU
+utilization of the instances running the Amazon SageMaker AI endpoint. The
+scaling policy is set to maintain an average CPU utilization of 50%. If the
+average CPU usage across the instances exceeds 50%, the policy will
+automatically add more instances (scale out) to handle the increased load.
+Conversely, if the average CPU usage drops below 50%, the policy will
+reduce the number of instances (scale in) to optimize resource usage. The
+cooldown periods ensure that these scaling actions are not triggered too
+frequently, allowing the system to stabilize before making further adjustments.
+These two programs demonstrate the use of Amazon Application Auto Scaling
+—Target Tracking autoscaling, specifically—to “elastically” adjust the
+number of instances for your Amazon SageMaker AI endpoints, ensuring
+optimal performance, reliability, and cost efficiency.
+For the exam, be aware of other types of autoscaling, such as step scaling
+and scheduled scaling. Step scaling adjusts the number of instances
+(resources) based on predefined steps that you define in response to a
+target threshold triggering event (e.g., the lower bound, the upper bound
+and the amount by which to scale). Scheduled scaling adjusts the number
+of instances (resources) based on a set schedule.
+Amazon Application Auto Scaling is fully supported by MMEs and MCEs. In
+the latter use case (MCEs), use caution. If you want to configure automatic
+scaling for an MCE using the InvocationsPerInstance metric, make sure
+the model in each container exhibits similar CPU utilization and latency on
+each inference request. This is best practice because if traffic to the MCE
+shifts from a low-CPU-utilization model to a high-CPU-utilization model, but
+the overall volume of invocations remains the same, the endpoint will not
+scale out. This will result in an insufficient number of instances to handle all
+the requests to the high CPU utilization model.
+Notice how both examples denote the real-time inference endpoint with the
+ResourceId variable, whose value is set to endpoint/your-endpoint-
+name/variant/AllTraffic. The term variant refers to different versions
+or configurations of the model deployed to the same Amazon SageMaker
+endpoint. This concept allows for multiple variants within the same endpoint,
+each potentially having different instance types, counts, or even different
+model versions. By specifying the suffix variant/AllTraffic, we apply
+the autoscaling policy to all the traffic directed to the endpoint. You can also
+define specific named variants (e.g., variant/VersionA), enabling you to
+manage and scale different model versions independently. This flexibility is
+especially useful for tasks such as Blue/Green deployments, shadow testing, or
+canary testing when deploying new model updates, which will be discussed in
+the next section.
+Deployment and Testing Strategies
+A key aspect of any deployment strategy is to minimize downtime to the
+consumers of your models (or applications). To avoid disrupting service for
+users while updating to a new, or an improved, model, you can take advantage
+of Amazon SageMaker AI’s production variants feature.
+This feature comes really handy if you consider how frequently a ML model
+gets updated and continuously evaluated for performance. A new version of a
+model may be created as a result of training on more recent data,
+hyperparameter tuning (with Amazon SageMaker AI AMT, for example),
+improving feature selection, or using better instances and inference containers.
+You can leverage production variants to compare your models and choose the
+best-performing candidate to respond to inference requests.
+With Amazon SageMaker AI multivariant endpoints, you can distribute
+endpoint invocation requests across multiple production variants by providing
+the traffic distribution for each variant, or you can invoke a specific variant
+directly for each request. In this section, we look at these methods for
+deploying and testing ML models.
+Blue/Green Deployment
+Blue/Green deployment is a strategy that reduces the risk and downtime
+associated with deploying new versions of a model. In Amazon SageMaker
+AI, this approach can be effectively implemented by leveraging the production
+variant concept you just learned, which allows seamless traffic shifting
+between different model versions or configurations. By carefully controlling
+the traffic flow, you can ensure that users experience minimal disruption while
+you validate the performance and stability of the new model version.
+Before going into more details, let’s level set on a few terms you need to know
+for the exam and constitute the basis of this strategy. In the Blue/Green
+deployment strategy, the blue fleet refers to the compute infrastructure where
+the existing model version is serving live traffic. The green fleet, on the other
+hand, is the compute infrastructure that hosts the new model version you want
+to deploy. The goal is to shift traffic from the blue fleet to the green fleet in a
+controlled manner, ensuring that the new model performs well under real-
+world conditions before fully replacing the old one. By using this approach,
+you can minimize downtime and mitigate the risk of introducing issues with
+the new deployment.
+Before fully transitioning to the new model, the new model version undergoes
+rigorous testing and validation to ensure its performance and reliability.
+During this interval—referred to as the baking period—the new model
+(deployed on the green fleet) is monitored while serving live traffic. This will
+ensure that it performs as expected, in accordance to performance metrics you
+established. Once the green fleet starts receiving live traffic, the baking period
+begins. To accomplish this, CloudWatch alarms must be properly configured
+to continuously monitor key performance metrics and the behavior of the new
+model. The baking period allows you to detect any issues early and address
+them before directing more traffic to the new model. This additional validation
+step is essential to maintaining service quality and minimizing the risk of
+disruptions.
+The term traffic shifting mode denotes the pattern of ingress traffic you want
+your Amazon SageMaker AI endpoint to use while distributing inference
+requests between the blue fleet and the green fleet.
+Last, auto-rollbacks indicate the Amazon CloudWatch alarms Amazon
+SageMaker AI uses to monitor how the new version of your model performs
+on the (containers hosted on the) green fleet.
+Remember, Amazon CloudWatch alarms are required to implement the
+Blue/Green deployment strategy.
+In the next three sections, the three traffic-shifting modes you need to know
+for the exam are explained: namely, All At Once, Canary, and Linear.
+All at Once
+When implementing All At Once traffic shifting, Amazon SageMaker AI
+directs 100% of the traffic to the new fleet (green fleet). As soon as the green
+fleet starts serving traffic, the baking period begins. This period is a
+predetermined interval during which Amazon CloudWatch alarms monitor the
+green fleet’s performance. If no alarms are triggered during this time, Amazon
+SageMaker AI removes the old fleet (blue fleet). However, if any alarms are
+activated, an automatic rollback is initiated, redirecting 100% of the traffic
+back to the blue fleet.
+Figure 6.7 illustrates the All At Once traffic-shifting mode.
+FIGURE 6.7 Blue/Green deployment with All At Once traffic-shifting
+mode.
+In Figure 6.7, we want to deploy a new version of our model named
+Model_v2. In the beginning the current version of the model, Model_v1, is
+serving live production traffic. Ingress traffic is initiated by an Amazon
+SageMaker AI client, which uses the invoke_endpoint boto3 API to get
+inferences from Model_v1 hosted in the blue fleet. To learn more about this
+API, visit
+https://boto3.amazonaws.com/v1/documentation/api/1.35.9/re
+ference/services/sagemaker-
+runtime/client/invoke_endpoint.html.
+As you can see in Figure 6.7, the endpoint has a configuration that contains
+two production variants, the first one for Model_v1 and the second one for
+Model_v2. This is the Blue/Green Create step in the process.
+Then we change the traffic pattern by redirecting all live traffic to Model_v2.
+This is when the baking period begins. To implement this step, we use the
+update_endpoint boto3 API with the following snippet:
+import boto3
+client = boto3.client("sagemaker")
+         
+response = client.update_endpoint(
+    EndpointName="<your-endpoint-name>",
+    EndpointConfigName="<your-config-name>",
+    DeploymentConfig={
+        "BlueGreenUpdatePolicy": {
+            "TrafficRoutingConfiguration": {
+                "Type": "ALL_AT_ONCE"
+            },
+            "TerminationWaitInSeconds": 600,
+            "MaximumExecutionTimeoutInSeconds": 1800
+        },
+        "AutoRollbackConfiguration": {
+            "Alarms": [
+                {
+                    "AlarmName": "<your-cw-alarm>"
+                },
+            ]
+        }
+    }
+)
+In the snippet, the parameter MaximumExecutionTimeoutInSeconds sets
+the maximum amount of time that the deployment can run before it times out
+(30 minutes in this example). The parameter TerminationWaitInSeconds
+tells Amazon SageMaker AI to wait for the specified amount of time (in
+seconds) after your green fleet is fully active before terminating the instances
+in the blue fleet. In this example, Amazon SageMaker AI waits for 10 minutes
+after the final baking period before terminating the blue fleet.
+For a detailed syntax of the update_endpoint API call, visit
+https://boto3.amazonaws.com/v1/documentation/api/latest/re
+ference/services/sagemaker/client/update_endpoint.html.
+The effect of the update_endpoint API call is the new endpoint
+configuration shown in the middle of Figure 6.7.
+In the best-case scenario, no alarms are triggered during the baking period,
+resulting in a termination of the blue fleet. Otherwise, an auto-rollback
+initiates, and 100% of the traffic shifts back to the blue fleet.
+Canary
+In a Canary deployment with Amazon SageMaker AI, the traffic shifting is
+more gradual compared to the All At Once approach. Initially, a small portion
+of the traffic deemed feasible is directed to the new fleet (green fleet), and the
+majority continues to be directed to the old fleet (blue fleet). This initial phase
+is called the “canary test.” If the new fleet performs well during the canary test
+without triggering any Amazon CloudWatch alarms, traffic is gradually
+increased to the new fleet in additional steps until it reaches 100%. This
+method allows for closer monitoring of the new version in a production
+environment and reduces the risk of introducing issues by catching potential
+problems early with a smaller subset of users.
+The approach to implement a Canary deployment programmatically is similar
+to the All At Once, as shown in the following snippet:
+import boto3
+client = boto3.client("sagemaker")
+          
+response = client.update_endpoint(
+    EndpointName="<your-endpoint-name>",
+    EndpointConfigName="<your-config-name>",
+    DeploymentConfig={
+        "BlueGreenUpdatePolicy": {
+            "TrafficRoutingConfiguration": {
+                "Type": "CANARY",
+                "CanarySize": {
+                    "Type": "CAPACITY_PERCENT",
+                    "Value": 30
+                },
+                "WaitIntervalInSeconds": 600
+            },
+            "TerminationWaitInSeconds": 600,
+            "MaximumExecutionTimeoutInSeconds": 1800
+        },
+        "AutoRollbackConfiguration": {
+            "Alarms": [
+                {
+                    "AlarmName": "<your-cw-alarm>"
+                }
+            ]
+        }
+    }
+)
+The update_endpoint API allows you to set the Type parameter of the
+TrafficRoutingConfiguration dictionary to the value CANARY. The
+Value parameter of the CanarySize dictionary sets the percentage of your
+green fleet you want to use as the canary. In the example, we configured the
+endpoint to shift 30% of the ingress traffic to the green fleet. We could have
+chosen to direct traffic to the green fleet based on INSTANCE_COUNT instead
+of CAPACITY_PERCENT, which is another valid option for Type.
+The canary size should be equal to or less than 50% of the green fleet’s
+capacity.
+The WaitIntervalInSeconds parameter denotes the duration (in seconds)
+of the canary baking period. In the preceding example, Amazon SageMaker
+AI waits for 10 minutes after the canary shift and then completes the second
+and final traffic shift.
+When comparing Canary with All At Once, it is important to remember that
+the All At Once approach shifts 100% of the traffic to the green fleet in a
+single step as soon as the deployment starts. Although this method is faster, it
+carries higher risk because any undetected issues in the new fleet can affect all
+users immediately. All At Once relies heavily on extensive predeployment
+testing and a robust rollback plan, as the entire user base is exposed to the new
+version immediately.
+As a result, the key difference between the two approaches lies in the risk
+management and traffic transition speed. Canary deployments provide a safer,
+more controlled rollout by gradually increasing traffic and monitoring each
+phase for stability, whereas All At Once deployments prioritize speed and
+immediate transition but come with higher risks. Choosing between these
+methods depends on your application’s tolerance for risk and the criticality of
+ensuring seamless, uninterrupted user experience.
+Linear
+The linear Blue/Green deployment option provides the most granular control
+over traffic shifting. Instead of deploying your green fleet in one step (All At
+Once) or in two steps (Canary), linear traffic shifting gradually directs traffic
+from the blue fleet to the green fleet in small, equal increments over a
+specified period.
+Just like Canary traffic shifting, you can choose the increment size by
+specifying the number of instances or the percentage (10–50%) of the green
+fleet’s capacity to activate during each phase.
+For each phase of the deployment, you define a baking period where your
+preconfigured Amazon CloudWatch alarms monitor the green fleet’s metrics.
+If the baking period concludes without any alarms being triggered, the green
+fleet continues to receive a greater share of traffic as the process moves to the
+next phase. Should any alarms go off during any of these baking periods, all
+the endpoint traffic will immediately revert to the blue fleet.
+The following example shows how to implement the linear traffic-shifting
+pattern using the update_endpoint API:
+import boto3
+client = boto3.client("sagemaker")
+      
+response = client.update_endpoint(
+    EndpointName="<your-endpoint-name>",
+    EndpointConfigName="<your-config-name>",
+    DeploymentConfig={
+        "BlueGreenUpdatePolicy": {
+            "TrafficRoutingConfiguration": {
+                "Type": "LINEAR",
+                "LinearStepSize": {
+                    "Type": "CAPACITY_PERCENT",
+                    "Value": 20
+                },
+                "WaitIntervalInSeconds": 300
+            },
+            "TerminationWaitInSeconds": 300,
+            "MaximumExecutionTimeoutInSeconds": 3600
+        },
+        "AutoRollbackConfiguration": {
+            "Alarms": [
+                {
+                    "AlarmName": "<your-cw-alarm>"
+                }
+            ]
+        }
+    }
+)
+The approach is similar to the Canary deployment. The
+TrafficRoutingConfiguration dictionary allows you to set a Type
+parameter with a value LINEAR and a corresponding configuration
+LinearStepSize where you can specify how to incrementally route more
+traffic to the green fleet. In our example, at each step we will direct live traffic
+to the green fleet in 20% increments (the parameter CAPACITY_PERCENT is
+set to 20). INSTANCE_COUNT can also be used as an alternative way to direct
+traffic to the green fleet. With linear traffic-shifting mode, as the name
+suggests, the amount of inference traffic routed to the green fleet increases in a
+linear fashion.
+Notice how we also define a baking period for each step by assigning the
+value 300 to the WaitIntervalInSeconds parameter. In the example,
+Amazon SageMaker AI waits for 5 minutes between each traffic shift. If no
+alarms are triggered within 5 minutes, Amazon SageMaker directs 20% more
+traffic to the green fleet until 100% of traffic is sent to the new model. Upon
+completion—assuming no alarms are triggered—Amazon SageMaker AI
+waits for another 5 minutes (TerminationWaitInSeconds is set to 300) and
+finally terminates all the instances in the blue fleet. If an alarm is triggered in
+any of the five steps (0–20, 20–40, 40–60, 60–80, 80–100), Amazon
+SageMaker AI rolls back 100% of the endpoint traffic to the blue fleet.
+The linear deployment offers the highest level of risk reduction during your
+model deployment process at the expense of potentially longer deployment
+times. This approach is perfect for critical deployments where stability and
+minimizing risk are essential, ensuring a smooth transition with ongoing
+monitoring and the ability to roll back if any issues arise.
+Orchestrating ML Workflows
+You have learned so far how to ingest the data to train your ML models;
+engineer the relevant features; choose a suitable algorithm; train, refine, and
+optimize your model; and finally deploy it. These foundational steps are
+crucial in the ML lifecycle and set the stage for building robust and efficient
+models that can drive impactful insights and decisions.
+However, orchestrating these steps manually can be time-consuming and
+prone to errors. This is where Amazon SageMaker AI’s comprehensive suite
+of tools comes into play, providing an integrated environment to streamline
+and automate the entire ML workflow. By leveraging Amazon SageMaker AI,
+you can seamlessly manage data preprocessing tasks, engineer your features,
+and train, evaluate and deploy your model, all within a cohesive platform that
+enhances productivity and reduces complexity.
+One of the standout features in this ecosystem is Amazon SageMaker
+Pipelines. This powerful tool enables the design, deployment, and
+management of end-to-end ML workflows with ease. Amazon SageMaker
+Pipelines comes with its own SDK, allowing you to define and visualize your
+workflows programmatically, ensuring consistency and repeatability, which
+are both key characteristics of modern ML operations.
+In the upcoming sections you will learn Amazon SageMaker Pipelines’ main
+capabilities you need to know for the exam.
+Introducing Amazon SageMaker Pipelines
+In the rapidly evolving world of ML, operationalizing ML models—often
+referred to as MLOps—has become a cornerstone of successful AI-driven
+projects. MLOps bridges the gap between ML model development and
+production, ensuring seamless integration, deployment, monitoring, and
+maintenance of models.
+Amazon SageMaker Pipelines is a powerful tool that embodies the principles
+of MLOps, enabling data scientists and ML engineers to automate and
+orchestrate their workflows efficiently. The term orchestration refers to the
+automation and management of the end-to-end ML lifecycle. Amazon
+SageMaker Pipelines serves as a core tool in this orchestration process by
+offering a structured framework to define, schedule, and monitor ML
+workflows. This systematic approach ensures reliability and reduces the time
+to market for your ML models.
+Amazon SageMaker Pipelines offers several key advantages over other AWS
+workflow solutions.
+First, your ML pipelines operate on autoscaling serverless infrastructure. With
+Amazon SageMaker Pipelines there’s no need to manage the underlying
+orchestration infrastructure. This allows you to concentrate on core ML tasks.
+Amazon SageMaker AI automatically provisions, scales, and shuts down the
+pipeline orchestration compute resources according to your ML workload
+demands.
+Second, your ML pipelines can be created and managed through your
+preferred interface: visual editor, SDK, APIs, or JSON. You can easily drag
+and drop the various ML steps to design your pipelines using the Amazon
+SageMaker Studio visual interface.
+To learn how to use the Amazon SageMaker Pipeline Python SDK, visit
+https://sagemaker.readthedocs.io/en/stable/workflows/pi
+pelines/index.html.
+Last, your ML pipelines can be seamlessly integrated with all Amazon
+SageMaker AI features and other AWS services to automate data processing,
+model training, fine-tuning, evaluation, deployment, and monitoring jobs.
+Because they operate in a serverless environment, you only pay for your
+SageMaker Studio instance and the underlying jobs that are orchestrated by
+Amazon SageMaker Pipelines.
+Before seeing Amazon SageMaker Pipelines in action, let’s level set on a few
+constructs that are key to MLOps: namely, code repository, continuous
+integration/continuous deployment (CI/CD), and Orchestration.
+Code Repository and Version Control
+A code repository, often referred to simply as a repo, is a storage location for
+software code and related files. It’s a central place where developers can store,
+share, and manage their codebase. Code repositories can be hosted on
+platforms like GitHub, GitLab, and Bitbucket, which provide tools and
+services to facilitate collaborative development. These platforms enable
+multiple developers to work on the same codebase concurrently, track
+changes, and contribute to the project seamlessly. In the context of ML with
+Amazon SageMaker Pipelines, a code repository plays a crucial role in
+organizing scripts, notebooks, and other artifacts required for building,
+training, and deploying models. It ensures that all team members have access
+to different versions of the code, fostering collaboration and maintaining
+consistency across the development process.
+Version control, on the other hand, is a system that tracks changes to files over
+time. It allows developers to manage multiple versions of code, collaborate
+effectively, and maintain a history of changes. Git is one of the most widely
+used version control systems, and it operates by creating snapshots of the code
+at various points in time, known as commits. Each commit records a set of
+changes made to the codebase, along with metadata such as the author’s
+information and a timestamp. Version control systems enable developers to
+revert to previous versions of the code, compare changes between different
+commits, and merge contributions from multiple team members. In the context
+of Amazon SageMaker Pipelines, version control is essential for managing the
+iterative nature of ML development. It ensures that any modifications to data
+preprocessing scripts, model training code, or deployment configurations are
+tracked and can be reviewed or rolled back if necessary. This level of control
+enhances collaboration, improves the reliability of the pipeline, and ensures
+that the ML workflow remains repeatable and transparent.
+Introducing Amazon SageMaker Model Registry
+Because a model artifact is the result of training and fine-tuning ML
+algorithms on data, it’s critical to manage and track these artifacts effectively
+throughout their lifecycle. Amazon SageMaker Model Registry is a fully
+managed service that helps you catalog, organize, and manage your ML
+models. It allows you to keep track of different versions of a model, from
+initial development through production deployment. Amazon SageMaker
+Model Registry provides a centralized repository to store and manage models,
+enabling you to track metadata, performance metrics, and the history of each
+model version. This is particularly useful in collaborative environments where
+multiple data scientists and ML engineers work on the same project. Amazon
+SageMaker Model Registry ensures that everyone has access to the latest
+versions of the models, and it supports governance and compliance by
+providing an audit trail of changes and deployments.
+Using Amazon SageMaker Model Registry, you can automate the process of
+registering, tracking, and deploying models. It integrates seamlessly with
+Amazon SageMaker Pipelines, making it easier to automate model versioning
+and lifecycle management within your ML workflows. By incorporating the
+Model Registry into your Amazon SageMaker Pipelines, you can ensure that
+your models are version-controlled, repeatable, and easily retrievable for
+future use. This improves the efficiency and reliability of your MLOps,
+allowing you to focus on building and deploying high-quality models.
+CI/CD
+A CI/CD pipeline is a crucial component of modern software development
+practices, enabling teams to automate the process of integrating code changes,
+building applications, running tests, and deploying to production
+environments. AWS offers a suite of services to support CI/CD workflows,
+ensuring seamless and efficient software delivery. AWS CodeArtifact is a fully
+managed artifact repository service that makes it easy for organizations to
+securely store, publish, and share software packages. AWS CodeBuild is a
+fully managed build service that compiles source code, runs tests, and
+produces software packages that are ready for deployment. AWS CodeDeploy
+automates the deployment of applications to a variety of compute services
+such as Amazon EC2, AWS Lambda, and on-premises servers. Finally, AWS
+CodePipeline is a continuous integration and continuous delivery service for
+fast and reliable application updates, enabling you to model, visualize, and
+automate the steps required to release your software.
+Because modern infrastructure is virtualized, managing and provisioning
+computing resources through manual processes becomes impractical and
+prone to errors. This is where infrastructure as code (IaC) comes into play,
+allowing you to define and manage your infrastructure using machine-readable
+configuration files in a declarative manner. AWS CloudFormation and
+Terraform are two popular IaC tools that enable you to automate the setup and
+management of your infrastructure. AWS CloudFormation provides a common
+language for you to describe and provision all the infrastructure resources in
+your cloud environment. Using AWS CloudFormation, you can use a simple
+text file (in JSON or YAML format) to model and provision, in an automated
+and secure manner, all the resources needed for your applications across all
+regions and accounts. Terraform, developed by HashiCorp, is an open-source
+IaC tool that allows you to build, change, and version infrastructure safely and
+efficiently. It provides a consistent CLI workflow to manage hundreds of
+cloud services. Both tools ensure that your infrastructure setup is repeatable,
+consistent, and version-controlled, just like application code. However, AWS
+CloudFormation and Terraform require developers to use specific
+configuration languages, which can be restrictive. These tools utilize JSON,
+YAML, and HashiCorp Configuration Language (HCL), limiting the choice of
+programming languages for defining infrastructure. Many developers prefer to
+use the language they are more comfortable with, such as JavaScript or
+Python. This is where AWS Cloud Development Kit (AWS CDK) comes into
+play. With AWS CDK, developers can create IaC with JavaScript, TypeScript,
+Python, Java, C#, and Go. Figure 6.8 illustrates how these services fit into the
+CI/CD pipeline and IaC landscape.
+FIGURE 6.8 CI/CD pipeline.
+MLOps Orchestration
+Orchestration tools are key in automating and managing complex ML
+workflows. MLOps integrates the principles of DevOps into ML ensuring
+continuous integration, delivery, and deployment of ML models.
+For the exam, in addition to Amazon SageMaker Pipelines—which was
+already introduced—you need to be aware of other options: namely, AWS
+Step Functions and Amazon Managed Workflows for Apache Airflow. AWS
+Step Functions is a powerful orchestration service that enables you to
+coordinate multiple AWS services into serverless workflows, making it easier
+to build and monitor automated processes. Amazon Managed Workflows for
+Apache Airflow is another key orchestration service that simplifies the setup
+and operation of Apache Airflow, allowing you to programmatically author,
+schedule, and monitor workflows. These tools are essential for managing the
+various stages of the ML pipeline, from data preprocessing and feature
+engineering to model training, evaluation, and deployment. Let’s now review
+these two orchestration tools in more detail.
+AWS Step Functions
+AWS Step Functions is a serverless orchestration service that allows you to
+coordinate multiple AWS services into scalable workflows. By using AWS
+Step Functions, you can design and run complex workflows that are composed
+of individual tasks, each representing a step in the process. The service
+provides a visual interface to build workflows, making it easier to monitor and
+manage the execution of each step. In the context of MLOps with Amazon
+SageMaker AI, AWS Step Functions can orchestrate the entire ML lifecycle,
+from data preprocessing and feature engineering to model training, tuning, and
+deployment. You can define state machines that capture the sequence of tasks,
+and AWS Step Functions ensures that each step is executed in the correct
+order and handles errors gracefully. Additionally, AWS Step Functions
+supports large-scale parallel workflows, enabling concurrent executions of
+your data-intensive ML tasks. This orchestration capability simplifies the
+management of ML pipelines, improves repeatability, and enhances the overall
+efficiency of ML operations.
+Amazon Managed Workflows for Apache Airflow
+Amazon Managed Workflows for Apache Airflow (MWAA) is a managed
+service that simplifies the setup and operation of Apache Airflow, an open-
+source workflow orchestration platform. Airflow allows you to
+programmatically author, schedule, and monitor workflows, making it ideal
+for managing complex data pipelines. With MWAA, AWS handles the
+provisioning, scaling, and maintenance of Airflow environments, allowing you
+to focus on building and managing workflows without the overhead of
+infrastructure management. MWAA integrates seamlessly with other AWS
+services, such as S3, Redshift, and Elastic Map Reduce (EMR), enabling you
+to create highly scalable and reliable data workflows. In the context of
+MLOps, MWAA can be used to orchestrate the various stages of the ML
+pipeline, including data extraction, transformation, loading (ETL), model
+training, evaluation, and deployment. By leveraging MWAA, organizations
+can ensure that their data workflows are efficient, consistent, and resilient,
+providing a robust foundation for their ML operations.
+Choosing an Orchestration Tool
+When selecting an orchestration tool for ML workflows in AWS, it’s
+important to consider the complexity of your workflows and your team’s
+familiarity with the tools.
+AWS Step Functions is a serverless, easy-to-use orchestration service that
+integrates seamlessly with other AWS services. It is ideal for orchestrating
+end-to-end ML pipelines, providing a visual interface for designing and
+monitoring workflows. It is well-suited for teams seeking simplicity and
+minimal operational overhead.
+MWAA caters to more customizable and flexible orchestration needs. It
+supports complex workflows and offers a rich plugin ecosystem, making it
+perfect for data engineering tasks and for teams familiar with Apache Airflow.
+MWAA handles the provisioning, scaling, and maintenance of Airflow
+environments, allowing you to focus on workflow management.
+Amazon SageMaker Pipelines is specifically designed for ML workflows. It
+provides built-in orchestration capabilities that allow ML engineers and data
+scientists to define, visualize, and automate end-to-end ML processes.
+Amazon SageMaker Pipelines seamlessly integrates with other Amazon
+SageMaker services, making it an excellent choice for managing the entire
+ML lifecycle, from data preprocessing and feature engineering to model
+training, tuning, and deployment.
+The choice between AWS Step Functions, Amazon MWAA, and Amazon
+SageMaker Pipelines ultimately depends on your specific use case. AWS Step
+Functions and Amazon MWAA offer general-purpose orchestration for a
+variety of workflows, whereas Amazon SageMaker Pipelines is tailored
+specifically for ML ensuring seamless integration with the entire Amazon
+SageMaker ecosystem.
+Figure 6.9 summarizes the repository and orchestration services you just
+learned to help streamline your ML workflows and ensure efficient, repeatable
+operations.
+FIGURE 6.9 Repository and orchestration services.
+In the upcoming sections, we will focus our attention on Amazon SageMaker
+Pipelines, which is the a key requirement for the exam.
+Automating Model Building and Deployment
+Automating model building and deployment using Amazon SageMaker
+Pipelines involves creating a sequence of well-defined steps that form your
+ML workflow. This automation ensures that each phase of the ML process is
+executed efficiently, consistently, and reliably. One of the significant benefits
+provided by Amazon SageMaker Pipelines is repeatability. Amazon
+SageMaker Pipelines can help you transform manual tasks into streamlined,
+repeatable processes, resulting in workflows that can be reliably re-created and
+produce consistent results. This repeatability aspect is critical for validating
+models, conducting experiments, and ensuring that the results can be
+replicated by different team members or over time. This is particularly helpful
+if you consider the iterative nature of the ML lifecycle. Additionally, this
+approach allows data scientists and ML engineers to focus on more critical,
+high-value activities, enhancing productivity and reducing the chances of
+human error, leading to more robust and reliable models. Think of each step in
+the pipeline as a LEGO block. Just as LEGO blocks are assembled to create a
+complex structure, each step in the ML workflow is like a block that
+contributes to building a complete and functional ML pipeline.
+The first step in automating model building and deployment is to identify and
+define the critical components of your ML workflow. These components
+typically include data preprocessing, feature engineering, model training,
+evaluation, and deployment. Each of these components is represented as a
+separate step in the pipeline. For example, the data preprocessing step involves
+cleaning and transforming raw data into a format suitable for model training,
+and the feature engineering step focuses on creating new features or modifying
+existing ones to improve model performance. This modular approach ensures
+that each step is independently developed and optimized, which can
+significantly improve the overall efficiency of the workflow.
+Once the individual steps are defined, they are combined into a single pipeline
+using the Amazon SageMaker Pipeline object. This pipeline ensures that the
+steps are executed in the correct sequence, with each step being completed
+before the next one begins. Additionally, triggers and schedules can be set up
+to automate the execution of the pipeline, ensuring that it runs at regular
+intervals or in response to specific events. This automation not only saves time
+but also ensures that the models are continuously updated and refined as new
+data becomes available. Ultimately, this leads to better-performing models that
+can adapt to changing data patterns and deliver more accurate predictions.
+The following sections describe how to design and implement a simple
+pipeline to deploy a model.
+Define the Workflow Steps
+You start by identifying the critical components of your ML workflow:
+Data preprocessing: Cleaning and transforming raw data
+Feature engineering: Enhancing data to improve model accuracy
+Model training: Using algorithms to build the model
+Model evaluation: Assessing model performance
+Model deployment: Deploying the trained model to production
+Each of these components will be mapped to individual steps in the pipeline.
+Create and Configure Pipeline Steps
+The Amazon SageMaker Pipeline Python SDK provides classes for each step
+in the pipeline, so you don’t have to “reinvent the wheel.” This makes it easy
+to define and configure each component of the workflow:
+ProcessingStep: For data preprocessing tasks
+TransformStep: For feature engineering tasks
+TrainingStep: For training the model
+ModelStep: For deploying the model
+For example, you can start by creating a pipeline session:
+from sagemaker.workflow.pipeline_context import 
+PipelineSession
+       
+# Create a PipelineSession
+pipeline_session = PipelineSession()
+Define the processing step:
+from sagemaker.processing import ScriptProcessor
+from sagemaker.workflow.steps import ProcessingStep
+         
+# Define the data preprocessing step
+processor = ScriptProcessor(
+    image_uri='your_image_uri',
+    role='your_iam_role',
+    instance_count=1,
+    instance_type='ml.m5.large',
+    sagemaker_session=pipeline_session
+)
+      
+processing_step = ProcessingStep(
+    name="DataPreprocessing",
+    processor=processor,
+    inputs=[...],
+    outputs=[...],
+    code="preprocessing_script.py"
+)
+Define the feature engineering step:
+from sagemaker.transformer import Transformer
+from sagemaker.workflow.steps import TransformStep
+     
+# Define the feature engineering step
+transformer = Transformer(
+    model_name='your_model_name',
+    instance_count=1,
+    instance_type='ml.m5.large',
+    output_path='s3://your-bucket/transform-output',
+    sagemaker_session=pipeline_session
+)
+     
+feature_engineering_step = TransformStep(
+    name="FeatureEngineering",
+    transformer=transformer,
+    inputs={
+        'data': 's3://your-bucket/processed-data'
+    }
+)
+# Add dependency to ensure feature engineering step runs 
+after processing step
+feature_engineering_step.add_depends_on([processing_step])
+Define the training step:
+from sagemaker.estimator import Estimator
+from sagemaker.workflow.steps import TrainingStep
+     
+# Define the model training step
+estimator = Estimator(
+    image_uri='your_image_uri',
+    role='your_iam_role',
+    instance_count=1,
+    instance_type='ml.m5.large',
+    hyperparameters={'max_depth': 5, 'eta': 0.2},
+    sagemaker_session=pipeline_session
+)
+     
+training_step = TrainingStep(
+    name="ModelTraining",
+    estimator=estimator,
+    inputs={
+        'train': 's3://your-bucket/train-data',
+        'validation': 's3://your-bucket/validation-data'
+    }
+)
+# Add dependency to ensure training step runs after 
+feature engineering step
+training_step.add_depends_on([feature_engineering_step])
+Define the deployment step:
+from sagemaker.model import Model
+from sagemaker.workflow.steps import ModelStep
+      
+# Define the model deployment step
+model = Model(
+    model_data='s3://your-bucket/model.tar.gz',
+    role='your_iam_role',
+    entry_point='inference_script.py',
+    sagemaker_session=pipeline_session
+)
+     
+model_step = ModelStep(
+    name="ModelDeployment",
+    model=model,
+    inputs=[...],
+    outputs=[...]
+)
+# Add dependency to ensure deployment step runs after 
+training step
+model_step.add_depends_on([training_step])
+Define the Pipeline
+Once all the steps are defined, you can put them all together into a single
+pipeline using the Amazon SageMaker Pipeline object. This process
+ensures that the steps are executed in the correct sequence, with each step
+being completed before the next one begins. By composing each step into a
+unified pipeline, you create a seamless and automated workflow that is both
+efficient and reliable. Moreover, Amazon SageMaker Pipelines offers built-in
+error-handling capabilities. If an error occurs in any step of the pipeline, the
+process can be halted, and notifications can be sent to alert the relevant team
+members. This ensures that errors are promptly addressed, maintaining the
+integrity of the workflow:
+from sagemaker.workflow.pipeline import Pipeline
+      
+# Define the pipeline by putting all the steps together
+pipeline = Pipeline(
+    name="MyMLPipeline",
+    steps=[processing_step, feature_engineering_step, 
+training_step, model_step]
+)
+Set Up Triggers and Schedules
+You can now automate the pipeline execution by setting up triggers and
+schedules. For example, you can use Amazon EventBridge to trigger the
+pipeline based on specific events. The following snippet shows you how you
+can create an EventBridge rule to trigger MyMLPipeline when a new object
+is uploaded to an S3 bucket:
+import boto3
+       
+# Create an EventBridge client
+client = boto3.client('events')
+      
+# Create an EventBridge rule
+response = client.put_rule(
+    Name='MyMLPipelineRule',
+    EventPattern='{\n    "source": 
+["aws.s3"],\n    "detail-type": ["AWS API Call via 
+CloudTrail"],\n    "detail": {\n        "eventSource": 
+["s3.amazonaws.com"],\n        "eventName": 
+["PutObject"]\n    }\n}',
+    State='ENABLED',
+    Description='Rule to trigger MyMLPipeline when a new 
+object is uploaded to S3'
+)
+     
+# Add targets to the rule
+response = client.put_targets(
+    Rule='MyMLPipelineRule',
+    Targets=[
+        {
+            'Id': '1',
+            'Arn': 'arn:aws:states:us-east-
+1:123456789012:stateMachine:MyMLPipeline'
+        }
+    ]
+)
+Execute the Pipeline
+Alternatively, you can manually start the pipeline execution using the Amazon
+SageMaker SDK. Steps within the pipeline can also be executed concurrently
+if they do not have dependencies on each other, allowing for more efficient
+processing and reduced overall runtime:
+pipeline.start()
+Key Considerations
+When using Amazon SageMaker Pipelines, scalability is a significant
+advantage as it automatically manages and scales the required infrastructure,
+ensuring that your ML workflows perform efficiently and reliably. However, it
+is your responsibility—as an ML engineer—to implement robust monitoring
+and logging to keep track of pipeline performance and troubleshoot any issues
+that may arise. This integration helps maintain the health of your pipelines and
+ensures smooth operations. Error handling is another crucial aspect to
+consider. Amazon SageMaker Pipelines offers built-in error-handling
+capabilities, which halt the process if an error occurs in any step, and
+notifications are sent to alert relevant team members. This ensures that errors
+are promptly addressed, maintaining the integrity of the workflow.
+Concurrency is also a vital consideration in Amazon SageMaker Pipelines.
+Steps within the pipeline can be executed concurrently if they do not have
+dependencies on each other, optimizing processing time and efficiency. This
+concurrent execution allows for more efficient use of resources and reduced
+overall runtime. By automating these key aspects—scalability, monitoring,
+error handling, and concurrency—you can ensure that your ML processes are
+not only effective but also resilient and adaptable to changing demands.
+Deep Dive Model Deployment Example
+In this section, we will extend the model tuning deep-dive example in Chapter
+5 by exposing the best model with a serverless inference endpoint. We are also
+going to test the deployed endpoint by creating a simple inference request and
+by letting the serverless endpoint generate a prediction based on the request.
+For the sake of simplicity, cost, and time, we are going to use 3 jobs (instead
+of 20) to select the best model: i.e., the model with the maximum accuracy.
+As a quick reminder, the deep-dive example at the end of Chapter 5 was
+intended to evaluate the performance of the XGBoost algorithm against the
+Digits dataset using Amazon SageMaker AI Automatic Model Tuning (AMT)
+with Bayesian optimization strategy.
+The expected outcome of this example is a functioning model deployment in
+the form of a serverless inference endpoint that can receive inference requests
+and generate accurate predictions. The inference requests are CSV
+representations of handwritten digits, which are then processed by the
+deployed model to predict the corresponding digit class.
+I ran this Python program using the Code Editor feature of Amazon
+SageMaker Studio:
+import boto3
+import sagemaker
+import json
+from sagemaker import get_execution_role
+from sagemaker.tuner import HyperparameterTuner, 
+IntegerParameter, ContinuousParameter
+from sagemaker.inputs import TrainingInput
+from sagemaker.analytics import 
+HyperparameterTuningJobAnalytics
+from sagemaker.serverless import ServerlessInferenceConfig
+from sagemaker.model import Model
+from sagemaker.predictor import Predictor
+from sagemaker.serializers import CSVSerializer
+from sagemaker.deserializers import JSONDeserializer
+from sklearn.datasets import load_digits
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+    
+# Load the Digits dataset
+digits = load_digits()
+X = digits.data
+y = digits.target
+       
+# Split the dataset
+X_train, X_test, y_train, y_test = train_test_split(X, y, 
+test_size=0.2, random_state=42)
+      
+# Convert to DataFrame and ensure the target is the first 
+column
+train_data = pd.DataFrame(X_train)
+train_data['target'] = y_train
+train_data.insert(0, 'target', train_data.pop('target'))
+      
+val_data = pd.DataFrame(X_test)
+val_data['target'] = y_test
+val_data.insert(0, 'target', val_data.pop('target'))
+      
+# Create directories if they don't exist
+data_dir = './ch06/data'
+os.makedirs(data_dir, exist_ok=True)
+      
+# Save locally
+train_data.to_csv(os.path.join(data_dir, 'train.csv'), 
+index=False)
+val_data.to_csv(os.path.join(data_dir, 'validation.csv'), 
+index=False)
+      
+# Upload to S3
+s3 = boto3.client('s3')
+bucket_name = 'ch05-ml-hpo'
+prefix = 'sagemaker/xgboost-digits'
+s3.upload_file(os.path.join(data_dir, 'train.csv'), 
+bucket_name, f'{prefix}/train/train.csv')
+s3.upload_file(os.path.join(data_dir, 'validation.csv'), 
+bucket_name, f'{prefix}/validation/validation.csv')
+      
+# Define the role and session
+role = get_execution_role()
+session = sagemaker.Session()
+      
+# Define the XGBoost image
+region = boto3.Session().region_name
+xgb_image = sagemaker.image_uris.retrieve("xgboost", 
+region, "1.2-1")
+      
+# Define the S3 paths for the input data
+s3_train_data = 
+f's3://{bucket_name}/{prefix}/train/train.csv'
+s3_val_data = 
+f's3://{bucket_name}/{prefix}/validation/validation.csv'
+      
+# Define the data channels
+train_data = TrainingInput(s3_data=s3_train_data, 
+content_type='csv')
+val_data = TrainingInput(s3_data=s3_val_data, 
+content_type='csv')
+      
+# Define the XGBoost estimator with required 
+hyperparameters
+xgb = sagemaker.estimator.Estimator(
+    image_uri=xgb_image,
+    role=role,
+    instance_count=1,
+    instance_type='ml.m5.large',
+    output_path=f's3://{bucket_name}/{prefix}/output',
+    sagemaker_session=session,
+    hyperparameters={
+        'objective': 'multi:softmax',  # Example for 
+multi-class classification
+        'num_class': 10,  # Number of classes in the 
+Digits dataset
+        'num_round': 100  # Default value; will be tuned
+    }
+)
+      
+# Define the hyperparameter ranges
+hpt_ranges = {
+    'alpha': ContinuousParameter(0.01, 0.5),
+    'eta': ContinuousParameter(0.1, 0.5),
+    'min_child_weight': ContinuousParameter(0.0, 2.0),
+    'max_depth': IntegerParameter(1, 10)
+}
+      
+# Define the hyperparameter tuner
+tuner = HyperparameterTuner(
+    estimator=xgb,
+    base_tuning_job_name='bayesian',
+    objective_metric_name='validation:accuracy',
+    hyperparameter_ranges=hpt_ranges,
+    strategy='Bayesian',
+    max_jobs=3,  # Reduced from 20 to 3 max jobs
+    max_parallel_jobs=3,  # Number of parallel jobs
+    objective_type='Maximize'
+)
+      
+# Launch the hyperparameter tuning job
+tuner.fit({'train': train_data, 'validation': val_data})
+tuner.wait()
+      
+# Get the best training job name
+best_training_job_name = tuner.best_training_job()
+      
+# Retrieve the tuning results
+tuning_job_name = tuner.latest_tuning_job.name
+tuner_analytics = 
+HyperparameterTuningJobAnalytics(tuning_job_name)
+tuner_df = tuner_analytics.dataframe()
+      
+# Extract the best hyperparameters
+if 'FinalHyperParameters' in tuner_df.columns:
+    best_hyperparameters = 
+tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name, 'FinalHyperParameters'].values[0]
+else:
+    best_hyperparameters = 
+tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name].drop(['TrainingJobName', 
+'FinalObjectiveValue'], axis=1).to_dict('records')[0]
+      
+# Print the best training job and hyperparameters
+print(f"Best Training Job: {best_training_job_name}")
+print("Best Hyperparameters:")
+for key, value in best_hyperparameters.items():
+    print(f"  {key}: {value}")
+      
+# Plot the tuning job results
+plt.figure(figsize=(12, 8))
+plt.scatter(tuner_df.index, 
+tuner_df['FinalObjectiveValue'], label='Tuning Jobs')
+plt.scatter(tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name].index,
+            tuner_df.loc[tuner_df['TrainingJobName'] == 
+best_training_job_name]['FinalObjectiveValue'],
+            color='red', marker='*', s=200, label='Best 
+Job')
+      
+plt.xlabel('Iteration')
+plt.ylabel('Cross-Validation Accuracy')
+plt.title('Hyperparameter Tuning Results')
+      
+# Display the best hyperparameters on the plot
+best_hyperparameters_str = '\n'.join([f'{key}: {value}' 
+for key, value in best_hyperparameters.items()])
+plt.figtext(0.5, -0.15, f'Best 
+Hyperparameters:\n{best_hyperparameters_str}', 
+ha='center', va='top', fontsize=10, 
+bbox=dict(facecolor='lightgrey', alpha=0.5))
+      
+# Update legend position below the x-axis
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), 
+ncol=3)
+      
+# Save the plot as an image file
+output_dir = './ch06/images'
+os.makedirs(output_dir, exist_ok=True)
+plt.savefig(os.path.join(output_dir, 
+'tuning_results.png'), bbox_inches='tight')
+plt.close()
+      
+# Create a serverless inference configuration
+serverless_config = ServerlessInferenceConfig(
+    memory_size_in_mb=2048,
+    max_concurrency=5
+)
+      
+# Define the custom predictor class (if you have one)
+class CustomPredictor(Predictor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # You can add custom initialization code here
+      
+# Retrieve the best model from the hyperparameter tuning 
+job
+best_model = Model(
+    image_uri=xgb_image,
+     
+ 
+   model_data=f's3://{bucket_name}/{prefix}/output/{best_t
+raining_job_name}/output/model.tar.gz',
+    role=role,
+    sagemaker_session=session,
+    predictor_cls=CustomPredictor  # Specify the custom 
+predictor class
+)
+      
+# Deploy the best model as a serverless endpoint with a 
+unique endpoint name
+try:
+    predictor = best_model.deploy(
+        serverless_inference_config=serverless_config,
+        endpoint_name='xgboost-digits-serverless-endpoint-
+dario',   # Use a unique endpoint name
+        serializer=CSVSerializer(),  # Specify CSV 
+serializer
+        deserializer=JSONDeserializer()  # Optional: 
+Specify a deserializer
+    )
+    print(f"Successfully deployed serverless endpoint: 
+{predictor.endpoint_name}")
+except Exception as e:
+    print("Failed to deploy serverless endpoint")
+    print(e)
+    predictor = None
+      
+# Example inference
+if predictor is not None:
+    test_sample = X_test[0].reshape(1, -1)
+    test_sample_csv = ','.join(map(str, 
+test_sample.flatten()))  # Convert numpy array to CSV-
+encoded string
+    result = predictor.predict(test_sample_csv)
+    print('Prediction for the first test sample:', result)
+else:
+    print("Cannot perform inference because the predictor 
+object is None")
+      
+# Plot and save the test sample image without extra data 
+points
+plt.figure(figsize=(4, 4))
+image_sample = X_test[0].reshape(8, 8)
+output_image_path = os.path.join(output_dir, 
+'test_sample_image.png')
+plt.imshow(image_sample, cmap='gray')
+plt.title(f"Test sample label (actual digit): 
+{y_test[0]}")
+plt.axis('off')   # Turn off the axis
+plt.savefig(output_image_path)
+plt.close()
+      
+print(f"Test sample image saved to: {output_image_path}")
+Because we already covered in Chapter 5 the model tuning aspects of the
+program, let’s focus now on how this program deploys the best model.
+The deployment phase involves several key steps to ensure that the model can
+handle inference requests efficiently. Initially, the program sets up a serverless
+inference configuration object ServerlessInferenceConfig, specifying
+critical parameters such as memory size and maximum concurrency to
+optimize resource allocation. This configuration helps Amazon SageMaker AI
+manage the computational resources needed to serve inference requests
+dynamically, without requiring dedicated instances.
+The best trained model, saved as model.tar.gz in an S3 bucket, is then
+retrieved for deployment. The Model object is created, specifying the S3 path
+to the model.tar.gz artifact file and the XGBoost container image URI.
+This container (xgboost:1.2-1) is designed to work seamlessly with the
+serialized model format, ensuring compatibility and ease of deployment.
+When the deploy method of the Model object is called, Amazon SageMaker
+orchestrates the deployment process. The container starts up and downloads
+the model artifacts file model.tar.gz, decompressing it automatically. The
+decompressed files are placed in the appropriate directories within the
+container, and the XGBoost model is loaded into memory, ready to serve
+inference requests. This automation ensures that the model is correctly
+initialized and available for predictions.
+To handle inference requests, the endpoint expects input in CSV format, which
+is ensured by using a CSVSerializer for input data and a
+JSONDeserializer for output data. A unique endpoint name is assigned to
+avoid conflicts, and the CustomPredictor class is used to manage
+interactions with the endpoint. The endpoint exposes an API that processes
+CSV representations of hand-written digits, performs predictions, and returns
+the results.
+The program concludes by performing an example inference using the
+deployed endpoint. A test sample is converted to a CSV-encoded string and
+sent to the endpoint. The predicted digit class is then returned and displayed,
+as displayed in Figure 6.10.
+FIGURE 6.10 Prediction from the serverless inference endpoint.
+As you can see, the model correctly predicted the test sample, which is a CSV-
+representation of the digit 6.
+Figure 6.11 displays the serverless endpoint.
+FIGURE 6.11 Serverless inference endpoint summary.
+Notice at the bottom of Figure 6.11 the endpoint model, the variant, the max
+concurrency, and the memory size we set up programmatically in the code.
+Because its status is “In service,” the endpoint is ready to serve inference
+requests at the specified URL.
+Amazon SageMaker Studio allows you to test your endpoint directly from the
+UI. In Figure 6.12, you can see the result of testing the endpoint by sending
+the CSV-encoded string of the test sample.
+FIGURE 6.12 Test inference.
+Last, if you are curious to see the model’s hyperparameters and why it was
+chosen by the Bayesian strategy during the tuning process, I have included the
+plot in Figure 6.13.
+FIGURE 6.13 Model selection.
+You just learned how to programmatically deploy a model to a serverless
+inference endpoint. This deployment process, leveraging the power of
+Amazon SageMaker AI’s managed containers and serverless infrastructure,
+ensures efficient and scalable handling of inference requests without the need
+for manual resource management.
+Summary
+In this chapter, you learned how to make the models you carefully developed
+and refined ready to work. If your use case is a good fit for AWS AI services,
+AWS provides a suite of fully managed AI services that can be easily
+incorporated into applications through API calls. These services include
+Amazon Rekognition, Textract, Polly, Transcribe, Translate, Comprehend,
+Lex, and Personalize, which offer pretrained models for various tasks.
+Because these models are hosted in managed AWS accounts, users have
+limited access to the underlying models; however, these pretrained models can
+be easily consumed, allowing for rapid integration and deployment without the
+need for complex model management. Additionally, you learned how Amazon
+Bedrock requires a different approach to deploying models by using the
+concept of agents and the Converse API, which act as intermediaries between
+your application and the foundation models, offering both comprehensive
+orchestration and streamlined conversational interactions. This initial step sets
+the foundation for leveraging AI capabilities effectively in AWS.
+Building on the ease of using AWS AI services, Amazon SageMaker AI offers
+several deployment options to manage and host ML models. These options
+include real-time inference for low-latency predictions, serverless inference
+for automatic scaling (as demonstrated in the deep-dive exercise),
+asynchronous inference for handling large payloads and long processing times,
+and batch inference for processing large datasets in bulk. Each deployment
+method is designed to cater to specific use cases, ensuring flexibility and
+scalability in model deployment.
+Although Amazon SageMaker AI provides robust managed deployment
+options, there are scenarios where unmanaged model deployments are more
+suitable. This involves deploying models on alternative compute platforms,
+such as Amazon EC2 instances, Amazon EKS clusters, AWS Lambda
+functions, and even on-premises servers. Although this approach requires
+more manual effort for infrastructure setup, scaling, and maintenance, it offers
+greater control and customization over the deployment environment.
+To further enhance model performance and deployment efficiency, Amazon
+SageMaker Neo can be used to optimize models for various hardware
+platforms, reducing latency and improving performance. Advanced
+deployment techniques, such as autoscaling and Blue/Green deployments
+(including All At Once, Canary, and Linear strategies), enable safe and
+controlled updates to models as they get deployed. These methods ensure
+continuous improvement and robust deployment strategies, making the
+deployment process more resilient and efficient.
+Finally, you learned how orchestrating ML workflows is essential for
+managing the end-to-end ML lifecycle. Amazon SageMaker Pipelines
+provides a powerful way to automate workflows from data preparation to
+model deployment. Moreover, services like Amazon Managed Workflows for
+Apache Airflow and AWS Step Functions can be integrated to enhance
+orchestration capabilities, allowing for complex workflows and conditional
+logic. This orchestration ensures that ML processes are streamlined,
+repeatable, and maintainable, ultimately accelerating model deployment and
+improving operational efficiency.
+Exam Essentials
+Know the difference between inference infrastructure and training
+infrastructure. Inference infrastructure generally requires significantly less
+compute and memory than training infrastructure because inference only
+involves applying a pretrained model to new data, whereas training involves
+the computationally intensive process of learning and optimizing the model
+parameters from a large dataset.
+Know Amazon SageMaker AI’s managed deployment options. Amazon
+SageMaker AI offers four managed deployment options to cater to diverse use
+cases. Real-time inference provides low-latency endpoints for immediate
+predictions, perfect for interactive applications. Serverless inference
+automatically scales resources based on traffic, ideal for applications with
+intermittent or unpredictable patterns. Asynchronous inference handles large
+payloads and long processing times efficiently, making it suitable for heavy
+workloads. Batch inference processes large datasets in bulk, ideal for non-real-
+time predictions. These options ensure flexibility, scalability, and efficiency,
+allowing you to choose the best approach for your specific use case.
+Know when to use multi-model endpoints (MMEs) vs. multi-container
+endpoints (MCEs). Use MMEs to host multiple models within the same
+container on a single endpoint when you have many models with low traffic
+volume and want to save on costs by sharing resources. Use MCEs to host
+different models in separate containers on a single endpoint when each model
+has distinct dependencies and resource requirements and you need better
+isolation and scalability for independent updates.
+Know when to use CPU- vs. GPU-powered infrastructure. Use GPU-
+powered infrastructure for compute-intensive jobs to train deep learning
+models with large amounts of data. Use CPU-powered infrastructure for tasks
+that don’t require the massive parallel processing capabilities of GPUs. These
+tasks include preprocessing data, performing feature engineering, running
+smaller training jobs, and handling inference tasks where the computational
+demands are lower.
+Know the autoscaling metrics for Amazon SageMaker AI endpoints. 
+Autoscaling metrics include InvocationsPerInstance, which measures
+the average number of invocations per instance per minute;
+CPUUtilization, tracking the percentage of CPU usage; Latency,
+measuring the time taken to process requests; and GPUUtilization, which
+measures the percentage of GPU usage. These metrics help create scaling
+policies to automatically adjust the number of instances, ensuring optimal
+performance and cost-efficiency.
+Know when to use All At Once, Canary, and Linear traffic-shifting
+patterns with Blue/Green deployments. Use the All At Once traffic-
+shifting pattern for Blue/Green deployments when you have high confidence
+in the new version of your model and want a quick transition. Choose the
+Canary pattern when you want to minimize risk by gradually shifting a small
+portion of traffic (Canary) to the new version and monitoring its performance
+before a full rollout. Choose the Linear pattern for a controlled, step-by-step
+traffic shift, providing the most balanced approach that allows for incremental
+monitoring and adjustments.
+Know the different ML workflow orchestration services available with
+AWS and when to use them. AWS offers several ML workflow
+orchestration services to streamline and manage ML pipelines: Amazon
+SageMaker Pipelines for automating end-to-end ML workflows, perfect for
+managing the entire ML lifecycle; AWS Step Functions for coordinating
+complex workflows with multiple steps, ideal for integrating with other AWS
+services and handling error recovery; and Amazon Managed Workflows for
+Apache Airflow (MWAA) for managing Apache Airflow workflows in a fully
+managed environment, suitable for orchestrating complex workflows like ETL
+jobs or ML pipelines with minimal operational overhead.
+Review Questions
+1. Which instance type should you select for an Amazon SageMaker AI
+multi-model endpoint hosting several deep learning models trained on
+large datasets to optimize cost and performance?
+A. t2.medium
+B. m5.xlarge
+C. p3.8xlarge
+D. c5.4xlarge
+2. When configuring an Amazon SageMaker AI endpoint, under what
+circumstances would you choose a managed deployment over an
+unmanaged deployment?
+A. When you require full control over the deployment infrastructure
+B. When you need seamless scalability and managed resource
+allocation
+C. When deploying models on non-AWS environments
+D. When you need to customize the deployment setup extensively
+3. Which traffic shifting pattern is most appropriate for deploying a critical
+model update with minimum risk and thorough performance monitoring
+before full rollout?
+A. All At Once
+B. Linear
+C. Canary
+D. Partial
+4. What is the primary advantage of using Amazon SageMaker Neo for
+model deployment in an IoT environment?
+A. To reduce the cost of training models
+B. To ensure high accuracy of predictions
+C. To optimize models for diverse hardware, enabling efficient edge
+deployments
+D. To improve data preprocessing speed
+5. Which Amazon SageMaker AI orchestration service would you use to
+automate end-to-end machine learning workflows with minimal manual
+intervention?
+A. Amazon SageMaker Pipelines
+B. Amazon Managed Workflows for Apache Airflow (MWAA)
+C. AWS Step Functions
+D. Amazon SageMaker Clarify
+6. Which EC2 instance type should you choose for an inference workload
+that requires high throughput and low latency using custom-built machine
+learning models?
+A. t3.medium
+B. r5.4xlarge
+C. g4dn.xlarge
+D. inf1.2xlarge
+7. When should you select Amazon SageMaker Serverless Inference as a
+managed deployment option?
+A. When you need low-latency real-time predictions
+B. When you have intermittent or unpredictable traffic patterns
+C. When you require high-throughput batch processing
+D. When you need to run inference on large payloads with long
+processing times
+8. When should you choose AWS Step Functions over Amazon SageMaker
+Pipelines and MWAA for ML workflow orchestration?
+A. When you need to automate simple ETL tasks
+B. When you require a managed service to orchestrate complex ML
+workflows with conditional branching and error handling
+C. When you need to use prebuilt templates for ML projects
+D. When you need to perform bias detection and explain model
+predictions
+9. What are the key functionalities provided by the Amazon SageMaker
+Model Registry, and when should you use it in a continuous
+integration/continuous delivery (CI/CD) pipeline?
+A. It provides model monitoring and bias detection capabilities; use it
+to continuously monitor model performance in production.
+B. It offers model versioning, approval workflows, and deployment
+automation; use it to manage and deploy models efficiently in a
+CI/CD pipeline.
+C. It simplifies data preprocessing and feature engineering; use it to
+prepare datasets for training.
+D. It integrates with AWS Step Functions for orchestrating complex
+ML workflows; use it to coordinate multiple ML tasks.
+10. When should you use the Amazon Bedrock Converse API in Amazon
+SageMaker AI?
+A. For managing and deploying machine learning models
+B. For automated real-time natural language understanding and
+generation tasks
+C. For conducting data preprocessing and feature engineering
+D. For optimizing models for various hardware platforms
