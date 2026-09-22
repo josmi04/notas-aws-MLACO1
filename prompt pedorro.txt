@@ -1,0 +1,13 @@
+Este .txt es un texto de preparación para el examen AWS MLA-C01. Su principal problema es que casi no contiene aplicaciones en código mediante boto3, AWS CLI o SDKs de AWS.
+
+Tu tarea es convertirlo en un .md y complementarlo con implementaciones prácticas en AWS.
+
+No modifiques, reescribas, resumas ni elimines una sola palabra del .txt original. Solo puedes añadir contenido nuevo, principalmente ejemplos de código y las explicaciones mínimas necesarias para entenderlos.
+
+Los bloques de código deben ser lo más autocontenidos, realistas y contextualizados posible. Evita llamadas aisladas sin explicar qué recurso se está usando, qué se intenta hacer y de dónde salen los parámetros importantes. Usa boto3, AWS CLI o SDKs específicos según resulte más natural para cada caso.
+
+Da introducciones elementales a los componentes de los servicios usados en tu código. Aunque conozco superficialmente S3, EC2, SageMaker, IAM, etc., no estoy familiarizado con su estructura programática. Por ejemplo, si utilizas un client, un ARN, un RoleArn, InputDataConfig, ResourceConfig, Bucket, Key, etc., explica brevemente qué representan cuando sea necesario para entender el ejemplo.
+
+No seas exhaustivo con estas explicaciones: el objetivo no es reproducir la documentación completa de AWS ni explicar todos los parámetros posibles, sino dar el contexto suficiente para comprender y adaptar el código.
+
+Siempre que sea posible, sigue las pautas de /anthropic-skills:notas-de-programacion, especialmente en cuanto a claridad, contexto, realismo y autocontención de los ejemplos.
