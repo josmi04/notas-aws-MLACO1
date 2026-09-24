@@ -1,0 +1,3486 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs,array,tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+\decimalpoint
+
+% ---------- Entornos ----------
+\theoremstyle{plain}
+\newtheorem{teorema}{Teorema}[section]
+\newtheorem{proposicion}[teorema]{Proposición}
+\newtheorem{lema}[teorema]{Lema}
+\newtheorem{corolario}[teorema]{Corolario}
+\theoremstyle{definition}
+\newtheorem{definicion}[teorema]{Definición}
+\newtheorem{ejemplo}[teorema]{Ejemplo}
+\newtheorem{contraejemplo}[teorema]{Contraejemplo}
+\theoremstyle{remark}
+\newtheorem{observacion}[teorema]{Observación}
+
+% ---------- Notación ----------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Corr}{\operatorname{Corr}}
+\newcommand{\med}{\operatorname{med}}
+\newcommand{\IQR}{\operatorname{IQR}}
+\newcommand{\MAD}{\operatorname{MAD}}
+\newcommand{\SC}{\operatorname{SC}}
+\newcommand{\logit}{\operatorname{logit}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\WoE}{\operatorname{WoE}}
+\newcommand{\IV}{\operatorname{IV}}
+\newcommand{\PMI}{\operatorname{PMI}}
+\newcommand{\idf}{\operatorname{idf}}
+\newcommand{\tf}{\operatorname{tf}}
+\newcommand{\df}{\operatorname{df}}
+\newcommand{\col}{\operatorname{col}}
+\newcommand{\rango}{\operatorname{rango}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ind}[1]{\mathbf{1}\{#1\}}
+\newcommand{\Dtr}{\mathcal D_{\mathrm{tr}}}
+\newcommand{\Dte}{\mathcal D_{\mathrm{te}}}
+
+% ---------- Código ----------
+\definecolor{fondo}{gray}{0.96}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{fondo},
+  frame=single, rulecolor=\color{gray!50},
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1
+           {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+}
+\newenvironment{aws}{\par\medskip\sloppy\noindent\textbf{Implementación en AWS.}\ }{\par\medskip}
+\setlength{\emergencystretch}{3em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\title{Ingeniería de características:\\ desarrollo matemático e implementación en AWS}
+\author{Notas complementarias al capítulo 3 de la guía MLA-C01}
+\date{Documentación de AWS verificada el 24 de septiembre de 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Marco general}
+% =====================================================================
+
+Estas notas desarrollan matemáticamente las técnicas de preparación de
+datos e ingeniería de características del capítulo 3 de la guía, añaden
+dos codificaciones supervisadas que el capítulo no cubre (\emph{target
+encoding} y \emph{weight of evidence}) y describen, para cada técnica, el
+servicio de AWS con que se implementa. El nivel de formalidad es el de los
+textos clásicos de estadística y aprendizaje estadístico.
+
+\subsection{Modelo probabilístico y notación}\label{sec:notacion}
+
+\paragraph{Datos.} Se modela cada observación como un par aleatorio
+$(X,Y)$ con distribución conjunta $P$ desconocida, donde
+$X=(X_1,\dots,X_p)$ es el vector de \emph{características} (covariables)
+e $Y$ la \emph{respuesta} (variable objetivo). Cada $X_j$ toma valores en
+$\R$ (característica numérica) o en un conjunto finito (característica
+categórica, más abajo). Una \emph{muestra} es una sucesión
+$\mathcal D=((x_1,y_1),\dots,(x_n,y_n))$ de realizaciones de $n$ copias
+independientes de $(X,Y)$; se escribe $x_k=(x_{k1},\dots,x_{kp})$.
+
+\paragraph{Estadísticos de una columna numérica.} Una \emph{columna} es un
+vector $z=(z_1,\dots,z_n)\in\R^n$, típicamente $z_k=x_{kj}$ para un $j$
+fijo. Se usan:
+\begin{itemize}[leftmargin=*]
+\item la media $\bar z=n^{-1}\sum_{k=1}^nz_k$;
+\item las desviaciones estándar
+$s_n(z)=\bigl(n^{-1}\sum_k(z_k-\bar z)^2\bigr)^{1/2}$ y
+$s_{n-1}(z)=\bigl((n-1)^{-1}\sum_k(z_k-\bar z)^2\bigr)^{1/2}$; cuando el
+divisor es irrelevante o se indica en el contexto se escribe $s$;
+\item los estadísticos de orden $z_{(1)}\le z_{(2)}\le\dots\le z_{(n)}$,
+es decir, los valores de la columna ordenados de menor a mayor;
+\item el \emph{cuantil muestral} de orden $q\in[0,1]$, definido por
+interpolación lineal entre estadísticos de orden: con $h=(n-1)q+1$ y
+$r=\lfloor h\rfloor$,
+\[
+Q(q)=z_{(r)}+(h-r)\bigl(z_{(r+1)}-z_{(r)}\bigr)\qquad(\text{con }z_{(n+1)}:=z_{(n)}).
+\]
+Es la definición por defecto de NumPy y pandas, las bibliotecas que usa el
+capítulo. La mediana es $\med(z)=Q(1/2)$, los cuartiles son
+$Q_1=Q(1/4)$ y $Q_3=Q(3/4)$, y el rango intercuartílico es
+$\IQR=Q_3-Q_1$.
+\end{itemize}
+Por ejemplo, para la columna de consumo de energía del capítulo,
+\[
+z=(11,\,12,\,12.5,\,8,\,8.5,\,7.5,\,5,\,4.7,\,6,\,23),
+\]
+se tiene $n=10$; para $q=3/4$,
+$h=7.75$, $r=7$, y como $z_{(7)}=11$ y $z_{(8)}=12$, resulta
+$Q_3=11+0.75\cdot1=11.75$; análogamente $Q_1=6.375$.
+
+\paragraph{Características categóricas.} Una característica categórica
+toma valores en un conjunto finito $\mathcal C=\{c_1,\dots,c_K\}$ cuyos
+elementos se llaman \emph{niveles}; $K$ es la \emph{cardinalidad}. En una
+muestra, $n_i=\#\{k:x_{kj}=c_i\}$ es el número de observaciones del nivel
+$c_i$.
+
+\subsection{Transformaciones ajustadas y fuga de información}
+
+Casi todas las técnicas de este documento reemplazan una característica
+por una función de ella cuyos parámetros se calculan con datos: la media y
+la desviación estándar de un escalado, el exponente $\lambda$ de Box--Cox,
+la tabla de medias de un \emph{target encoding}, el vocabulario de un
+vectorizador de texto, las direcciones de un PCA. El capítulo separa
+«ajustar» (\texttt{fit}) de «aplicar» (\texttt{transform}); esta sección
+precisa esa separación y demuestra por qué es necesaria.
+
+\begin{definicion}[Transformación ajustada]\label{def:ajustada}
+Sean $\mathcal X$ el conjunto de valores posibles de $X$, $\mathcal X'$
+otro conjunto y $\Theta$ un conjunto de parámetros. Una \emph{transformación
+ajustada} consta de
+\begin{enumerate}[label=(\roman*)]
+\item una familia de funciones $T_\theta:\mathcal X\to\mathcal X'$,
+$\theta\in\Theta$, y
+\item un \emph{estimador} $\hat\theta$, es decir, una regla que a cada
+muestra asigna un elemento de $\Theta$.
+\end{enumerate}
+Dada una muestra de entrenamiento $\Dtr$, \emph{ajustar} es calcular
+$\hat\theta(\Dtr)$; \emph{aplicar} es evaluar $T_{\hat\theta(\Dtr)}$ en
+cualquier $x\in\mathcal X$, pertenezca o no a $\Dtr$.
+\end{definicion}
+
+\begin{ejemplo}
+Estandarización de la característica $j$: $\Theta=\R\times(0,\infty)$,
+$T_{(a,b)}(x)$ reemplaza $x_j$ por $(x_j-a)/b$ y deja las demás
+coordenadas, y $\hat\theta(\Dtr)=(\bar z,s_n(z))$ con $z$ la columna $j$
+de $\Dtr$. Un ejemplo sin parámetros es $T(x)=\log x_j$: $\Theta$ tiene un
+solo elemento y ajustar no hace nada.
+\end{ejemplo}
+
+Para evaluar un modelo se fija una \emph{función de pérdida}
+$L(y,\hat y)\ge0$ (por ejemplo, $(y-\hat y)^2$ en regresión o
+$\ind{y\ne\hat y}$ en clasificación) y un \emph{modelo ajustado}
+$\hat f:\mathcal X'\to\mathcal Y$, que también se calcula con $\Dtr$. La
+cantidad de interés es el \emph{riesgo condicional}
+\[
+R=\E\Bigl[L\bigl(Y,\hat f(T_{\hat\theta}(X))\bigr)\,\Big|\,\Dtr\Bigr],
+\]
+donde $(X,Y)$ es una observación nueva independiente de $\Dtr$: el error
+esperado del procedimiento ya entrenado sobre datos futuros. Se estima con
+una muestra de prueba.
+
+\begin{proposicion}[Insesgadez del error de prueba]\label{prop:test}
+Sean $\Dtr$ y $\Dte=((X'_1,Y'_1),\dots,(X'_m,Y'_m))$ independientes, con
+los pares $(X'_l,Y'_l)$ independientes entre sí y con la distribución $P$
+de $(X,Y)$. Supóngase que $\hat\theta$ y $\hat f$ se calculan solo con
+$\Dtr$ y que $R<\infty$. Entonces
+$\hat R=m^{-1}\sum_{l=1}^mL\bigl(Y'_l,\hat f(T_{\hat\theta}(X'_l))\bigr)$
+cumple $\E[\hat R\mid\Dtr]=R$.
+\end{proposicion}
+
+\begin{proof}
+Sea $G(\mathcal D,x,y)=L\bigl(y,\hat f_{\mathcal D}(T_{\hat\theta(\mathcal
+D)}(x))\bigr)$, donde el subíndice indica la muestra con que se calculan
+$\hat f$ y $\hat\theta$. Se usa la siguiente propiedad de la esperanza
+condicional: si $U$ y $V$ son independientes y $G\ge0$, entonces
+$\E[G(U,V)\mid U]=g(U)$ con $g(u)=\E[G(u,V)]$. Con $U=\Dtr$ y
+$V=(X'_l,Y'_l)$, que son independientes por hipótesis y $V$ tiene
+distribución $P$, se obtiene
+$\E[G(\Dtr,X'_l,Y'_l)\mid\Dtr]=g(\Dtr)$, donde
+$g(\mathcal D)=\E[G(\mathcal D,X,Y)]$ con $(X,Y)\sim P$. Aplicando la misma
+propiedad con $V=(X,Y)$ se tiene también $R=g(\Dtr)$. Promediando sobre
+$l$ y usando la linealidad de la esperanza condicional,
+$\E[\hat R\mid\Dtr]=g(\Dtr)=R$.
+\end{proof}
+
+La hipótesis de que $\hat\theta$ no use la muestra de prueba es necesaria.
+
+\begin{contraejemplo}\label{ce:fuga}
+Sea $X$ real con distribución continua e $Y\in\{0,1\}$ independiente de
+$X$ con $\Prob(Y=1)=1/2$, de modo que todo clasificador tiene riesgo $1/2$
+con pérdida $\ind{y\neq\hat y}$. Por la continuidad, con probabilidad $1$
+las $X'_l$ son distintas entre sí. Defínase un parámetro
+estimado con $\Dtr\cup\Dte$: $\hat\theta$ es la tabla
+$\{(X'_l,Y'_l)\}_{l=1}^m$, y $T_{\hat\theta}(x)$ añade a $x$ la
+coordenada $Y'_l$ si $x=X'_l$ y $0$ en otro caso. El clasificador que
+devuelve esa coordenada añadida tiene $\hat R=0$. Una observación
+verdaderamente nueva coincide con alguna $X'_l$ con probabilidad $0$
+(nuevamente por la continuidad), así que el clasificador predice $0$ y su
+riesgo es $\Prob(Y=1)=1/2$.
+\end{contraejemplo}
+
+El contraejemplo es extremo, pero su mecanismo es el de cualquier
+parámetro que use las respuestas de prueba; las
+secciones~\ref{sec:target} y~\ref{sec:woe} muestran que con
+\emph{target encoding} aparece incluso dentro del entrenamiento. Cuando el
+parámetro no usa respuestas (una media, un mínimo), la proposición deja
+igualmente de aplicarse y la magnitud del sesgo depende del caso. La
+proposición justifica también la regla operativa del capítulo: calcular
+$\hat\theta$ una vez con entrenamiento y aplicar la misma
+$T_{\hat\theta}$ en validación, prueba y producción. Se llama
+\emph{training-serving skew} a la situación en que la transformación
+aplicada en producción difiere de la $T_{\hat\theta}$ con que se entrenó
+$\hat f$; entonces $\hat f$ recibe entradas con otra distribución que la de
+entrenamiento, y $R$ deja de describir su desempeño.
+
+\begin{aws}
+Una transformación ajustada vive en uno de tres lugares.
+(i) \textbf{Amazon SageMaker Data Wrangler} (integrado hoy en SageMaker
+Canvas; la versión de Studio Classic sigue documentada): cada paso de un
+\emph{data flow} que aprende de los datos (codificar categóricas,
+vectorizar texto, tratar atípicos o faltantes) guarda sus parámetros,
+calculados por defecto sobre la muestra importada (las primeras 50\,000
+filas); al exportar puede reajustarlos (\emph{refit}) sobre el dataset
+completo, y los parámetros se trasladan al \emph{inference pipeline}.
+(ii) \textbf{AWS Glue DataBrew}: una \emph{receta} es una lista JSON de
+acciones que un trabajo serverless aplica al dataset en Amazon S3; los
+estadísticos que usan sus acciones se calculan sobre el dataset al que se
+aplica la receta en cada ejecución. (iii) \textbf{SageMaker Processing}: un
+contenedor (por ejemplo, el de scikit-learn) ejecuta un script propio; es
+la vía para técnicas sin paso integrado y la que da control explícito de
+\texttt{fit} sobre entrenamiento y \texttt{transform} sobre lo demás. Los
+parámetros que deben consultarse en inferencia (por ejemplo, tablas de
+codificación) pueden guardarse en S3 o en un \emph{feature group} de
+\textbf{SageMaker Feature Store}, cuyo \emph{online store} los sirve con
+baja latencia.
+\end{aws}
+
+\subsection{Tres propiedades de invariancia}\label{sec:invariancias}
+
+La conveniencia de una transformación depende del modelo que la recibe.
+Esta sección demuestra qué transformaciones no alteran a los árboles de
+decisión y a la regresión lineal, y muestra que otros modelos sí son
+sensibles; los resultados se usan en todo el documento.
+
+\begin{definicion}[Árbol de regresión construido por CART]\label{def:cart}
+Sea $\mathcal D$ una muestra con respuesta numérica. Para
+$A\subset\{1,\dots,n\}$ no vacío, sean $\bar y_A$ la media de las $y_k$ con
+$k\in A$ y $\SC(A)=\sum_{k\in A}(y_k-\bar y_A)^2$. Un \emph{nodo} es un
+conjunto de índices $N$. Un \emph{corte} del nodo $N$ sobre la columna $j$
+con umbral $t\in\R$ es la partición de $N$ en
+$N_{\le}=\{k\in N:x_{kj}\le t\}$ y $N_{>}=N\setminus N_{\le}$, con ambos
+no vacíos. El algoritmo parte de $N=\{1,\dots,n\}$ y, mientras una regla
+de parada que depende solo de $N$ y de $(y_k)_{k\in N}$ no se cumpla,
+elige entre todos los cortes de todas las columnas uno que maximice
+$\Delta=\SC(N)-\SC(N_\le)-\SC(N_>)$, desempata con una regla que depende
+solo de la columna y de la partición $\{N_\le,N_>\}$ (sin distinguir
+cuál de los dos conjuntos es el de la izquierda), y repite en cada hijo. Las
+\emph{hojas} son los nodos donde se detiene. Para clasificación, $\SC$ se
+reemplaza por $|A|$ veces el índice de Gini de las respuestas en $A$, que es $1-\sum_c\hat p_c^2$ con $\hat p_c$ la proporción de la clase $c$ en $A$.
+\end{definicion}
+
+Las condiciones sobre la regla de parada y el desempate no son técnicas:
+si el desempate dependiera del valor numérico del umbral $t$, el resultado
+podría cambiar al transformar la columna aunque los cortes candidatos
+fueran los mismos.
+
+\begin{lema}\label{lem:cortes}
+Sea $g:\R\to\R$ estrictamente creciente. Para todo nodo $N$ y toda columna
+$j$, las particiones de $N$ obtenibles con cortes sobre
+$(x_{kj})_{k\in N}$ coinciden con las obtenibles con cortes sobre
+$(g(x_{kj}))_{k\in N}$.
+\end{lema}
+
+\begin{proof}
+Sean $v_1<\dots<v_r$ los valores distintos de $(x_{kj})_{k\in N}$. Para
+un umbral $t$, sea $i(t)$ el número de $v_i$ que son $\le t$; entonces
+$N_\le=\{k\in N:x_{kj}\le v_{i(t)}\}$ (vacío si $i(t)=0$), de modo que las
+particiones obtenibles son las
+$\{k:x_{kj}\le v_i\}$, $i=1,\dots,r-1$. Como $g$ es estrictamente
+creciente, $x_{kj}\le v_i$ equivale a $g(x_{kj})\le g(v_i)$, y los valores
+distintos de la columna transformada son $g(v_1)<\dots<g(v_r)$. Aplicando
+el mismo razonamiento a la columna transformada, sus particiones
+obtenibles son las $\{k:g(x_{kj})\le g(v_i)\}=\{k:x_{kj}\le v_i\}$,
+$i=1,\dots,r-1$: las mismas.
+\end{proof}
+
+\begin{proposicion}[Árboles e invariancia monótona]\label{prop:arbol}
+Si se reemplaza la columna $j$ por $(g(x_{kj}))_k$ con $g$ estrictamente
+creciente, el árbol de la Definición~\ref{def:cart} produce las mismas
+hojas (como conjuntos de índices).
+\end{proposicion}
+
+\begin{proof}
+Por inducción sobre los nodos en el orden en que el algoritmo los crea.
+La raíz es la misma. Si un nodo $N$ es el mismo en ambas ejecuciones, la
+regla de parada toma la misma decisión porque solo depende de $N$ y de las
+respuestas. Por el Lema~\ref{lem:cortes} (aplicado a la columna $j$; las
+demás columnas no cambian), el conjunto de pares (columna, partición)
+candidatos es el mismo; el criterio $\Delta$ depende solo de la partición
+y de las respuestas, y el desempate solo de la columna y la partición. Por
+tanto se elige la misma partición y los hijos coinciden.
+\end{proof}
+
+Los umbrales numéricos cambian (en la columna transformada el umbral
+aplicable es $g(v_i)$), pero ninguna observación cambia de hoja. El mismo
+argumento vale para los métodos que agregan árboles de este tipo (bosques
+aleatorios, \emph{gradient boosting}), siempre que sus cortes candidatos se
+definan como arriba; las implementaciones que discretizan primero las
+columnas en histogramas de ancho fijo no cumplen la hipótesis.
+
+\begin{definicion}[Mínimos cuadrados con intercepto]
+Sea $X\in\R^{n\times p}$ y $Z=[\1\;X]$, con $\1\in\R^n$ el vector de unos.
+Un estimador de mínimos cuadrados es cualquier $\hat\beta$ que minimice
+$\|y-Z\beta\|^2$; el vector de valores ajustados es $\hat y=Z\hat\beta$.
+\end{definicion}
+
+\begin{lema}\label{lem:proy}
+$\hat y$ no depende del minimizador elegido: es la proyección ortogonal de
+$y$ sobre $\col(Z)$, el espacio generado por las columnas de $Z$.
+\end{lema}
+
+\begin{proof}
+Sea $\pi$ la proyección ortogonal de $y$ sobre $\col(Z)$, caracterizada
+por $\pi\in\col(Z)$ e $y-\pi\perp\col(Z)$. Para todo $\beta$, por el
+teorema de Pitágoras, $\|y-Z\beta\|^2=\|y-\pi\|^2+\|\pi-Z\beta\|^2$,
+porque $\pi-Z\beta\in\col(Z)$. El mínimo es $\|y-\pi\|^2$ y se alcanza
+exactamente cuando $Z\beta=\pi$.
+\end{proof}
+
+\begin{proposicion}[Mínimos cuadrados e invariancia afín]\label{prop:ols}
+Sea $\tilde X=XD+\1c^\top$ con $D$ diagonal con entradas no nulas y
+$c\in\R^p$, es decir, cada columna $j$ se reemplaza por
+$d_jx_{\cdot j}+c_j$ con $d_j\ne0$. Los valores ajustados por mínimos
+cuadrados con intercepto son los mismos con $X$ y con $\tilde X$.
+\end{proposicion}
+
+\begin{proof}
+$[\1\;\tilde X]=[\1\;X]M$ con
+$M=\begin{psmallmatrix}1&c^\top\\0&D\end{psmallmatrix}$, que es invertible
+porque $\det M=\det D\ne0$. Si $u=[\1\;\tilde X]\alpha$, entonces
+$u=[\1\;X](M\alpha)$, y si $u=[\1\;X]\beta$, entonces
+$u=[\1\;\tilde X](M^{-1}\beta)$; los espacios columna coinciden. Por el
+Lema~\ref{lem:proy}, los valores ajustados coinciden.
+\end{proof}
+
+La hipótesis de intercepto es necesaria para la parte de traslación: sin
+él, $\col(X)$ y $\col(X+\1c^\top)$ pueden diferir (con $p=1$,
+$x=(1,2)^\top$ genera la recta de dirección $(1,2)$ y $x+1=(2,3)^\top$ otra
+distinta).
+
+\begin{contraejemplo}[Regularización y vecinos más cercanos]\label{ce:ridge}
+(a) Regresión \emph{ridge} con una característica y sin intercepto: el
+estimador que minimiza $\sum_k(y_k-\beta x_k)^2+\lambda\beta^2$ ($\lambda>0$)
+es $\hat\beta=\sum_kx_ky_k/(\sum_kx_k^2+\lambda)$, que se obtiene
+igualando a cero la derivada de esa función cuadrática estrictamente
+convexa; el valor ajustado en un punto $u\in\R$ es $\hat\beta u$. Si la
+característica se reemplaza por $ax$, $a\ne0$ (en entrenamiento y en el
+punto, que pasa a ser $au$), el valor ajustado pasa a ser
+$au\cdot\frac{a\sum_kx_ky_k}{a^2\sum_kx_k^2+\lambda}
+=u\frac{\sum_kx_ky_k}{\sum_kx_k^2+\lambda/a^2}$, que depende de $a$:
+cambiar la unidad de la característica equivale a cambiar la penalización.
+(b) El clasificador del vecino más cercano asigna a un punto $q$ la
+respuesta del punto de entrenamiento más cercano en distancia euclídea.
+Con $q=(0,0)$, $B=(1,0)$ y $C=(0,2)$, el más cercano es $B$ (distancias
+$1$ y $2$). Si la primera coordenada se multiplica por $10$, $B=(10,0)$ y
+el más cercano pasa a ser $C$.
+\end{contraejemplo}
+
+Los árboles no necesitan escalado (Proposición~\ref{prop:arbol}), la
+regresión lineal sin penalizar tampoco para predecir
+(Proposición~\ref{prop:ols}), y los métodos penalizados y basados en
+distancias sí (Contraejemplo~\ref{ce:ridge}); la
+Proposición~\ref{prop:cond} añade el descenso de gradiente a esta última
+lista.
+
+% =====================================================================
+\section{Preparación previa: valores faltantes y atípicos}
+% =====================================================================
+
+\subsection{Valores faltantes}\label{sec:faltantes}
+
+Se considera una característica numérica $X$ que puede faltar y un vector
+$W$ de otras características siempre observadas. Sea $R=1$ si $X$ falta y
+$R=0$ si se observa; en la muestra, $r_k$ es el valor de $R$ en la
+observación $k$ y $O=\{k:r_k=0\}$ el conjunto de observaciones con $X$
+presente, de tamaño $n_o$.
+
+La práctica anterior a Rubin (1976) era el \emph{análisis de casos
+completos}: descartar toda fila con algún faltante. Su costo se ve con un
+cálculo: si cada una de $p$ columnas falta de forma independiente con
+probabilidad $q$, una fila está completa con probabilidad $(1-q)^p$, que
+para $q=0.05$ y $p=50$ vale $0.077$; se pierde más del 90\,\% de la
+muestra. La alternativa, imputar, plantea la pregunta de cuándo lo que se
+calcula con los valores observados describe correctamente a la población.
+La respuesta depende de la relación entre $R$ y los datos.
+
+\begin{definicion}[Mecanismos de falta]\label{def:mcar}
+La falta de $X$ es
+\begin{enumerate}[label=(\roman*)]
+\item \emph{completamente al azar} (MCAR) si $R$ es independiente de
+$(X,W)$;
+\item \emph{al azar} (MAR) si $R$ y $X$ son condicionalmente independientes
+dado $W$;
+\item \emph{no al azar} (MNAR) si no se cumple (ii).
+\end{enumerate}
+\end{definicion}
+
+MCAR implica MAR: si $R$ es independiente de $(X,W)$, entonces
+$\Prob(R=1\mid X,W)=\Prob(R=1)$, que en particular no depende de $X$ una
+vez fijado $W$. Ejemplos: una falla aleatoria del sensor es MCAR; que los
+jóvenes declaren menos su ingreso, con la edad en $W$, es MAR; que quien
+gana más declare menos su ingreso es MNAR. La jerarquía importa por lo
+siguiente.
+
+\begin{proposicion}\label{prop:mcar}
+Supóngase $\E|X|<\infty$ y $\Prob(R=0)>0$.
+\begin{enumerate}[label=(\alph*)]
+\item Bajo MCAR, $\E[X\mid R=0]=\E[X]$.
+\item Bajo MAR, $\E[X\mid W,R=0]=\E[X\mid W]$ (para los valores de $W$ con
+$\Prob(R=0\mid W)>0$).
+\end{enumerate}
+\end{proposicion}
+
+\begin{proof}
+(a) Por la independencia de $R$ y $X$,
+$\E[X\ind{R=0}]=\E[X]\Prob(R=0)$; dividiendo por $\Prob(R=0)$ se obtiene
+$\E[X\mid R=0]=\E[X]$. (b) Es el mismo argumento condicionado a $W$: por
+la independencia condicional,
+$\E[X\ind{R=0}\mid W]=\E[X\mid W]\Prob(R=0\mid W)$, y se divide por
+$\Prob(R=0\mid W)$.
+\end{proof}
+
+La parte (a) dice que bajo MCAR la media de los observados estima sin
+sesgo la media poblacional; la (b), que bajo MAR la regresión de $X$ sobre
+$W$ ajustada solo con las filas observadas estima la regresión poblacional,
+lo que justifica imputar con una predicción a partir de $W$ en lugar de con
+una constante. Los ejemplos siguientes muestran que las hipótesis no pueden
+quitarse.
+
+\begin{ejemplo}[MAR sin MCAR]
+Sea $W\sim N(0,1)$, $X=W+\varepsilon$ con $\varepsilon\sim N(0,1)$
+independiente de $W$, y $R=\ind{W>0}$. La falta es MAR (es función de $W$)
+pero no MCAR. $\E[X\mid R=0]=\E[W\mid W\le0]=-\varphi(0)/\Phi(0)=-\sqrt{2/\pi}\approx-0.80$,
+donde $\varphi$ y $\Phi$ son la densidad y la función de distribución
+normales estándar (se usa $\int_{-\infty}^0w\varphi(w)\,dw=-\varphi(0)$,
+consecuencia de $\varphi'(w)=-w\varphi(w)$). La media de los observados
+subestima $\E[X]=0$, pero $\E[X\mid W,R=0]=W=\E[X\mid W]$, como predice
+(b).
+\end{ejemplo}
+
+\begin{ejemplo}[MNAR]\label{ej:mnar}
+Sea $X\sim N(0,1)$ observada solo si $X<1$ (sin $W$). Entonces
+$\E[X\mid R=0]=\E[X\mid X<1]=-\varphi(1)/\Phi(1)\approx-0.288$ por el mismo
+cálculo. Los valores observados tienen la distribución de $X$ condicionada
+a $X<1$, y sin conocer el mecanismo de falta no hay forma de recuperar
+$\E[X]$ a partir de ellos: imputar con su media hereda el sesgo.
+\end{ejemplo}
+
+\begin{definicion}[Imputación simple e indicador]
+La \emph{imputación por la media} (respectivamente, por la mediana o la
+moda) reemplaza cada valor faltante de una columna por la media
+(respectivamente, la mediana o el valor más frecuente) de los valores
+observados de esa columna en entrenamiento. La \emph{indicadora de falta}
+es la columna $(r_1,\dots,r_n)$ añadida como característica.
+\end{definicion}
+
+\begin{proposicion}[Efecto de la imputación por la media]\label{prop:imput}
+Sean $z\in\R^n$ una columna con $n_o\ge2$ valores observados (índices en
+$O$) y $y\in\R^n$ otra columna completa. Sea $\tilde z$ la columna
+imputada con $\bar z_o=n_o^{-1}\sum_{k\in O}z_k$. Con varianzas y
+covarianzas muestrales de divisor $n-1$ para las columnas completas y
+$n_o-1$ para las calculadas en $O$:
+\begin{enumerate}[label=(\alph*)]
+\item $\overline{\tilde z}=\bar z_o$;
+\item $s^2(\tilde z)=\frac{n_o-1}{n-1}\,s_o^2(z)$;
+\item $s(\tilde z,y)=\frac{n_o-1}{n-1}\,s_o(z,y)$, donde $s_o(z,y)$ es la
+covarianza de $z$ e $y$ calculada sobre $O$;
+\item $\Corr(\tilde z,y)=\sqrt{\frac{n_o-1}{n-1}}\;\frac{s_o(y)}{s(y)}\;\Corr_o(z,y)$,
+donde $\Corr_o$ y $s_o(y)$ se calculan sobre $O$ y se supone $s_o(z)>0$.
+\end{enumerate}
+\end{proposicion}
+
+\begin{proof}
+(a) $\sum_k\tilde z_k=\sum_{k\in O}z_k+(n-n_o)\bar z_o=n_o\bar
+z_o+(n-n_o)\bar z_o$. (b) Por (a), las filas imputadas valen exactamente
+la media, así que $\sum_k(\tilde z_k-\bar z_o)^2=\sum_{k\in O}(z_k-\bar
+z_o)^2=(n_o-1)s_o^2(z)$; se divide por $n-1$. (c) Por lo mismo,
+$\sum_k(\tilde z_k-\bar z_o)(y_k-\bar y)=\sum_{k\in O}(z_k-\bar
+z_o)(y_k-\bar y)$. Como $\sum_{k\in O}(z_k-\bar z_o)=0$, reemplazar
+$\bar y$ por la media $\bar y_o$ de $y$ sobre $O$ no altera la suma, que
+vale $(n_o-1)s_o(z,y)$; se divide por $n-1$. (d) Se divide (c) por
+$s(\tilde z)s(y)$, con $s(\tilde z)$ tomada de (b), y se escribe
+$s_o(z,y)=\Corr_o(z,y)s_o(z)s_o(y)$.
+\end{proof}
+
+La imputación por la media conserva la media pero contrae la varianza y la
+covarianza por el factor $(n_o-1)/(n-1)$, sea cual sea el mecanismo. Bajo
+MCAR, las filas de $O$ son una muestra aleatoria de la población, $s_o(y)$
+y $s(y)$ estiman la misma desviación estándar, y (d) muestra que la
+correlación queda multiplicada por un factor cercano a
+$\sqrt{n_o/n}$: con 30\,\% de faltantes, por $\approx0.84$. En el ejemplo
+del capítulo, la columna $(1,\text{falta},5)$ se imputa como $(1,3,5)$, con
+varianza $4$ frente a la varianza $8$ de los observados:
+$(2-1)/(3-1)=1/2$.
+
+\begin{proposicion}[La indicadora absorbe la media del grupo con faltantes]\label{prop:indic}
+Sea $\tilde z$ la columna imputada con una constante $a$ y considérese la
+regresión por mínimos cuadrados de $y$ sobre $\1$, $\tilde z$ y la
+indicadora $r$, con al menos una fila con $r_k=1$. El valor ajustado en
+cada fila con $r_k=1$ es la media de $y$ sobre esas filas, cualquiera que
+sea el mecanismo de falta.
+\end{proposicion}
+
+\begin{proof}
+Por el Lema~\ref{lem:proy}, el residuo $y-\hat y$ es ortogonal a cada
+columna del diseño, en particular a $r$: $\sum_kr_k(y_k-\hat y_k)=0$. En
+las filas con $r_k=1$ se tiene $\tilde z_k=a$, luego
+$\hat y_k=\hat\beta_0+\hat\beta a+\hat\gamma$ es la misma constante para
+todas ellas; que la suma de sus residuos sea cero obliga a que esa
+constante sea la media de sus $y_k$.
+\end{proof}
+
+Bajo MNAR, la respuesta media del grupo con faltantes puede diferir de la
+de cualquier individuo con $z=a$; la indicadora permite al modelo estimarla
+directamente, al precio de una columna por característica afectada.
+
+Para comparar con la imputación por la mediana conviene el caso de una
+constante cualquiera.
+
+\begin{proposicion}\label{prop:imput-a}
+Con la notación de la Proposición~\ref{prop:imput}, sea $\tilde z^{(a)}$ la
+columna imputada con una constante $a$. Entonces
+\[
+(n-1)\,s^2\bigl(\tilde z^{(a)}\bigr)=(n_o-1)s_o^2(z)+\frac{n_o(n-n_o)}{n}(\bar z_o-a)^2 .
+\]
+\end{proposicion}
+
+\begin{proof}
+La media de $\tilde z^{(a)}$ es $\tilde m=(n_o\bar z_o+(n-n_o)a)/n$, de
+donde $\bar z_o-\tilde m=\frac{n-n_o}n(\bar z_o-a)$ y
+$a-\tilde m=-\frac{n_o}n(\bar z_o-a)$. Descomponiendo alrededor de $\bar
+z_o$, $\sum_{k\in O}(z_k-\tilde m)^2=(n_o-1)s_o^2+n_o(\bar z_o-\tilde
+m)^2$ (el término cruzado se anula porque $\sum_{k\in O}(z_k-\bar
+z_o)=0$), y las $n-n_o$ filas imputadas aportan $(n-n_o)(a-\tilde m)^2$.
+Sumando,
+$n_o\frac{(n-n_o)^2}{n^2}(\bar z_o-a)^2+(n-n_o)\frac{n_o^2}{n^2}(\bar
+z_o-a)^2=\frac{n_o(n-n_o)}{n}(\bar z_o-a)^2$.
+\end{proof}
+
+Con $a=\bar z_o$ se recupera la Proposición~\ref{prop:imput}(b). Con otra
+constante, por ejemplo la mediana de una columna asimétrica, aparece un
+término adicional que no proviene de variación real de los datos: los
+valores imputados siguen siendo idénticos entre sí y no contienen
+información sobre $y$, pero desplazan la media y añaden varianza.
+
+\paragraph{Contraste.} La media imputada conserva la media observada
+(Proposición~\ref{prop:imput}(a)) pero, como la media tiene punto de
+ruptura $1/n$ (Proposición~\ref{prop:ruptura}), un solo atípico entre los
+observados puede desplazar el valor imputado arbitrariamente; la mediana
+tiene punto de ruptura cercano a $1/2$. La moda es la única de las tres
+definida para categóricas. Toda imputación por una constante asigna el
+mismo valor a filas cuyas respuestas pueden ser distintas, y por eso
+atenúa la relación con $y$ (Proposición~\ref{prop:imput}(d) para la
+media). Bajo MAR, la imputación condicional a $W$ tiene la justificación de la
+Proposición~\ref{prop:mcar}(b); bajo MNAR, ninguna imputación calculada con los
+observados tiene garantía de insesgadez (Ejemplo~\ref{ej:mnar}), y la
+indicadora permite al menos que el modelo estime por separado la respuesta
+del grupo con faltantes.
+Algunas implementaciones de \emph{gradient boosting} (XGBoost, LightGBM,
+\texttt{HistGradientBoosting} de scikit-learn) aceptan faltantes: en cada
+corte eligen con los datos de entrenamiento hacia qué hijo enviarlos, lo
+que equivale a aprender la indicadora dentro del árbol.
+
+\begin{aws}
+\textbf{Data Wrangler}, grupo \emph{Handle missing}: \emph{Impute} (media
+o mediana para numéricas, valor más frecuente para categóricas),
+\emph{Add indicator for missing} (la indicadora de la
+Proposición~\ref{prop:indic}), \emph{Fill missing} (constante dada) y
+\emph{Drop missing}; es un paso con parámetros ajustados, con
+\emph{refit}. \textbf{Glue DataBrew}: acciones
+\texttt{FILL\_WITH\_AVERAGE}, \texttt{FILL\_WITH\_MEDIAN},
+\texttt{FILL\_WITH\_MOST\_FREQUENT}, entre otras. Su documentación indica
+que el estadístico se calcula sobre todos los valores de la columna del
+dataset al que se aplica la receta; si la receta se ejecuta por separado
+sobre prueba, usa la mediana de prueba, lo que viola la separación de la
+Proposición~\ref{prop:test}. Para respetarla se calcula el valor en
+entrenamiento y se rellena con ese valor fijo.
+\begin{lstlisting}
+{"RecipeAction": {"Operation": "FILL_WITH_MEDIAN",
+                  "Parameters": {"sourceColumn": "age"}}}
+\end{lstlisting}
+\textbf{SageMaker Processing}: \texttt{SimpleImputer(strategy=...,
+add\_indicator=True)} de scikit-learn, con \texttt{fit} sobre
+entrenamiento; la imputación condicional de la
+Proposición~\ref{prop:mcar}(b) corresponde a \texttt{IterativeImputer}.
+Para series de tiempo, Data Wrangler ofrece además relleno hacia adelante,
+hacia atrás e interpolación.
+\end{aws}
+
+\subsection{Valores atípicos}\label{sec:atipicos}
+
+Una \emph{regla de detección} asigna a cada columna $z\in\R^n$ el
+conjunto de índices que declara atípicos. Las reglas del capítulo son de
+umbral: declaran atípico a $z_k$ cuando una puntuación calculada con $z_k$
+y con estadísticos de la columna supera un valor fijo. Se comparan por dos
+propiedades: si pueden detectar algo con el tamaño de muestra disponible, y
+si el atípico altera los estadísticos con que se le juzga.
+
+\subsubsection{Regla de la puntuación $z$}
+
+\begin{definicion}
+La puntuación $z$ de $z_k$ es $\zeta_k=(z_k-\bar z)/s$, con $s>0$. La regla
+declara atípico a $z_k$ si $|\zeta_k|>c$, típicamente con $c=3$.
+\end{definicion}
+
+El valor $c=3$ se elige porque si $Z\sim N(0,1)$, $\Prob(|Z|>3)\approx0.0027$.
+Pero $\bar z$ y $s$ se calculan con la propia observación que se juzga, y
+eso limita la regla.
+
+\begin{proposicion}[Cota de Shiffler]\label{prop:shiffler}
+Para toda columna con $n\ge2$ y $s>0$, y todo $k$,
+$|\zeta_k|\le\sqrt{n-1}$ si $s=s_n$, y $|\zeta_k|\le(n-1)/\sqrt n$ si
+$s=s_{n-1}$.
+\end{proposicion}
+
+\begin{proof}
+Sea $d_i=z_i-\bar z$. Como $\sum_id_i=0$, $d_k=-\sum_{i\ne k}d_i$, y por
+la desigualdad de Cauchy--Schwarz aplicada a los vectores $(d_i)_{i\neq
+k}$ y $(1,\dots,1)\in\R^{n-1}$, $d_k^2\le(n-1)\sum_{i\ne k}d_i^2$. Luego
+$\sum_id_i^2\ge d_k^2\bigl(1+\frac1{n-1}\bigr)=d_k^2\frac n{n-1}$. Si
+$s=s_n$, $\sum_id_i^2=ns^2$ y resulta $\zeta_k^2\le n-1$; si $s=s_{n-1}$,
+$\sum_id_i^2=(n-1)s^2$ y resulta $\zeta_k^2\le(n-1)^2/n$.
+\end{proof}
+
+La igualdad en Cauchy--Schwarz ocurre cuando todos los $d_i$, $i\ne k$,
+son iguales, así que la cota se alcanza. Consecuencia: la regla con $c=3$
+no puede declarar atípico a nadie si $\sqrt{n-1}\le3$, es decir, si
+$n\le10$ con $s_n$ (el divisor de \texttt{scipy.stats.zscore}), ni si
+$(n-1)/\sqrt n\le3$, es decir, $n\le11$, con $s_{n-1}$. Esta es la razón
+aritmética de que el ejemplo del capítulo ($n=10$) no detecte nada. (La
+nota del texto base atribuye la cota $(n-1)/\sqrt n$ al divisor $n$;
+corresponde al divisor $n-1$. Su conclusión se mantiene.)
+
+El segundo defecto es el \emph{enmascaramiento}: el atípico infla $s$ y
+reduce su propia puntuación. En el ejemplo, el valor $23$ tiene
+$\zeta=2.58$ con $\bar z$ y $s_n$ calculados con las diez observaciones,
+pero $\zeta=5.31$ si se calculan con las otras nueve.
+
+\subsubsection{Regla del rango intercuartílico}
+
+\begin{definicion}[Vallas de Tukey]
+Se declara atípico a $z_k$ si $z_k<Q_1-1.5\IQR$ o $z_k>Q_3+1.5\IQR$.
+\end{definicion}
+
+Si $Z\sim N(\mu,\sigma^2)$, los cuartiles poblacionales son
+$\mu\pm0.6745\sigma$ (porque $\Phi^{-1}(0.75)=0.6745$), el $\IQR$ poblacional
+es $1.349\sigma$ y la valla superior está en $\mu+2.698\sigma$; la
+probabilidad de quedar fuera de las vallas es
+$2(1-\Phi(2.698))\approx0.0070$. La regla equivale entonces, bajo
+normalidad, a un umbral de $2.7$ desviaciones con parámetros calculados de
+otro modo. La diferencia con la regla $z$ es que esos parámetros no se
+mueven con el atípico:
+
+\begin{proposicion}[Ausencia de enmascaramiento]\label{prop:tukey}
+Sea $n\ge5$ y supóngase que $z_{(n)}>z_{(n-1)}$. Si se reemplaza el
+máximo por cualquier valor mayor, $Q_1$, $Q_3$ y las vallas no cambian. En
+particular, al aumentar el máximo acaba siendo declarado atípico.
+\end{proposicion}
+
+\begin{proof}
+Para $q=3/4$, $h=\frac34(n-1)+1$ y $r=\lfloor h\rfloor$. Si $n\ge5$,
+$h\le n-\frac14(n-1)\le n-1$, de modo que $r+1\le n$ y, si $r+1=n$, es
+porque $h=n-1$ es entero y el peso $h-r$ de $z_{(r+1)}$ es $0$. En todos
+los casos $Q_3$ depende solo de $z_{(1)},\dots,z_{(n-1)}$, que no cambian
+cuando el máximo aumenta (sigue siendo el máximo). Lo mismo vale para
+$Q_1$, con índices menores. Las vallas quedan fijas y el máximo termina
+por superarlas.
+\end{proof}
+
+En el ejemplo del capítulo, $Q_1=6.375$ y $Q_3=11.75$, así que la valla
+superior es $19.81$ y el valor $23$ queda fuera; con $100$ o $1000$ en su
+lugar, las vallas son las mismas.
+
+\subsubsection{Puntuación $z$ modificada}
+
+\begin{definicion}[Iglewicz y Hoaglin, 1993]
+Con $\MAD(z)=\med\bigl(|z_1-\med(z)|,\dots,|z_n-\med(z)|\bigr)$, la
+puntuación $z$ modificada es $M_k=0.6745\,(z_k-\med(z))/\MAD(z)$. Los
+autores sugieren declarar atípicos los $|M_k|>3.5$.
+\end{definicion}
+
+El factor $0.6745$ hace $M_k$ comparable con $\zeta_k$: si $Z\sim
+N(\mu,\sigma^2)$, la mediana poblacional de $|Z-\mu|$ es el número $a$ con
+$\Prob(|Z-\mu|\le a)=1/2$, es decir, $2\Phi(a/\sigma)-1=1/2$, $a=0.6745\sigma$;
+así, $\MAD/0.6745$ estima $\sigma$. En el ejemplo, $\med=8.25$, $\MAD=3$ y
+$M=3.32$ para el valor $23$: supera el umbral $3$ (el que usa DataBrew
+por defecto) y no el $3.5$. Los umbrales son convenciones de los autores
+y de las herramientas; ninguno es consecuencia de un resultado.
+
+\subsubsection{Punto de ruptura}\label{sec:ruptura}
+
+La sensibilidad de un estadístico al atípico se mide con el punto de
+ruptura (Donoho y Huber, 1983).
+
+\begin{definicion}
+Sea $T:\R^n\to\R$ un estadístico y $z\in\R^n$. Su \emph{punto de ruptura}
+en $z$ es $\varepsilon^*(T,z)=m^*/n$, donde $m^*$ es el menor número de
+coordenadas de $z$ que, reemplazadas por valores arbitrarios, permiten
+hacer $|T|$ tan grande como se quiera.
+\end{definicion}
+
+\begin{lema}[Estadísticos de orden bajo contaminación]\label{lem:orden}
+Sea $1\le r\le n$ y sea $z'$ obtenido de $z$ reemplazando $m$ coordenadas.
+Si $m\le\min(r-1,\,n-r)$, entonces $z'_{(r)}$ está entre el mínimo y el
+máximo de las coordenadas de $z$ no reemplazadas. Si $m\ge n-r+1$, $z'_{(r)}$
+puede hacerse arbitrariamente grande; si $m\ge r$, arbitrariamente
+negativo.
+\end{lema}
+
+\begin{proof}
+Sean $a$ y $b$ el mínimo y el máximo de las $n-m$ coordenadas no
+reemplazadas. Hay al menos $n-m\ge r$ coordenadas de $z'$ menores o iguales
+que $b$, de modo que el $r$-ésimo menor valor es $\le b$. Hay a lo sumo
+$m\le r-1$ coordenadas menores que $a$, de modo que el $r$-ésimo menor
+valor es $\ge a$. Recíprocamente, si $m\ge n-r+1$ y los valores
+reemplazados se fijan en $M>b$, hay a lo sumo $n-m\le r-1$ coordenadas
+menores que $M$, luego $z'_{(r)}=M$; el caso $m\ge r$ es simétrico.
+\end{proof}
+
+\begin{proposicion}\label{prop:ruptura}
+Para todo $z$: la media, $s_n$, $s_{n-1}$, el máximo, el mínimo y
+$\max_k|z_k|$ tienen punto de ruptura $1/n$; la mediana tiene punto de
+ruptura $\lceil n/2\rceil/n$, que tiende a $1/2$; $Q_1$, $Q_3$ y el $\IQR$
+tienen punto de ruptura que tiende a $1/4$ cuando $n\to\infty$.
+\end{proposicion}
+
+\begin{proof}
+Reemplácese $z_1$ por $M$. La nueva media es
+$\bar z'=(M+\sum_{k\ge2}z_k)/n\to\infty$ cuando $M\to\infty$. Como la
+suma de cuadrados contiene el sumando $(M-\bar z')^2$ y
+$M-\bar z'=\frac{n-1}nM-\frac1n\sum_{k\ge2}z_k\to\infty$, se tiene
+$s_n\ge|M-\bar z'|/\sqrt n\to\infty$, y lo mismo para $s_{n-1}\ge s_n$.
+El máximo y $\max_k|z_k|$ son $\ge M$; con $-M$ en lugar de $M$, el mínimo
+es $\le-M$. Así, $m^*=1$.
+
+Por la definición del cuantil, $Q(q)$ es una combinación convexa de
+$z_{(r)}$ y $z_{(r+1)}$ con $r=\lfloor(n-1)q+1\rfloor$, y está acotado
+si ambos lo están. Para la mediana con $n$ impar, $Q(1/2)=z_{((n+1)/2)}$ y
+el Lema~\ref{lem:orden} con $r=(n+1)/2$ da $m^*=n-r+1=(n+1)/2=\lceil
+n/2\rceil$. Con $n$ par, $Q(1/2)=\frac12(z_{(n/2)}+z_{(n/2+1)})$; el lema
+da acotamiento para $m\le n/2-1$ y explosión de $z_{(n/2+1)}$ con
+$m=n/2$, así que $m^*=n/2$. Para $Q_3$, $r=\lfloor\frac34(n-1)+1\rfloor$ y
+la explosión requiere $m\ge n-r$ o $n-r+1$ según el peso de
+$z_{(r+1)}$; en ambos casos $m^*/n\to1/4$. Para $Q_1$, con
+$r=\lfloor\frac14(n-1)+1\rfloor$, la explosión hacia $-\infty$ requiere
+$m\ge r$, y $r/n\to1/4$. Si ambos cuartiles quedan acotados, su
+diferencia también; y como $\IQR=Q_3-Q_1\ge0$, el $\IQR$ crece sin límite
+cuando $Q_3\to\infty$ con $Q_1$ acotado o $Q_1\to-\infty$ con $Q_3$
+acotado. Su punto de ruptura es entonces el menor de los de los cuartiles,
+que tiende a $1/4$.
+\end{proof}
+
+\paragraph{Tratamientos y contraste.} Ante una observación declarada
+atípica caben: eliminar la fila (correcto si el valor es un error de
+registro, porque entonces no describe la población); \emph{recortar}
+(\emph{winsorizar}), reemplazando $z_k$ por $\min(\max(z_k,l),u)$ con
+$l,u$ las vallas; imputar como si faltara; o transformar toda la columna
+(\S\ref{sec:log}). La comparación entre reglas se sigue de los resultados
+anteriores: la regla $z$ requiere $n>c^2+1$ para poder detectar algo
+(Proposición~\ref{prop:shiffler}) y sufre enmascaramiento porque sus
+parámetros tienen punto de ruptura $1/n$; las vallas de Tukey y la $z$
+modificada usan estadísticos con punto de ruptura $1/4$ y $1/2$ y no
+sufren enmascaramiento por un solo valor
+(Proposición~\ref{prop:tukey}). Ninguna regla aplicada columna por
+columna detecta atípicos conjuntos: en los puntos $(-2,-2)$, $(-1,-1)$,
+$(0,0)$, $(1,1)$, $(2,2)$, $(2,-2)$, el último rompe la relación $x_2=x_1$,
+pero su valor $2$ en la primera columna también lo tiene $(2,2)$ y su valor
+$-2$ en la segunda también lo tiene $(-2,-2)$; una regla de umbral que
+marcara esos valores marcaría también esas filas normales.
+
+\begin{aws}
+\textbf{Glue DataBrew}: \texttt{FLAG\_OUTLIERS},
+\texttt{REMOVE\_OUTLIERS}, \texttt{REPLACE\_OUTLIERS},
+\texttt{RESCALE\_OUTLIERS\_WITH\_Z\_SCORE} y
+\texttt{RESCALE\_OUTLIERS\_WITH\_SKEW}, con \texttt{outlierStrategy} igual
+a \texttt{Z\_SCORE} ($|\zeta_k|$), \texttt{MODIFIED\_Z\_SCORE} ($|M_k|$) o
+\texttt{IQR} (vallas con el múltiplo dado), y \texttt{threshold} con valor
+por defecto $3$:
+\begin{lstlisting}
+{"Action": {"Operation": "FLAG_OUTLIERS",
+  "Parameters": {"sourceColumn": "energia", "targetColumn": "energia_atipico",
+                 "outlierStrategy": "IQR", "threshold": "1.5",
+                 "trueString": "Yes", "falseString": "No"}}}
+\end{lstlisting}
+\textbf{Data Wrangler}, grupo \emph{Handle outliers}: \emph{Standard
+deviation numeric outliers} (regla $z$), \emph{Robust standard deviation
+numeric outliers} (centro y escala calculados entre dos cuantiles),
+\emph{Quantile numeric outliers} y \emph{Min-max numeric outliers}
+(umbrales dados), cada uno con corrección \emph{Clip} (recortar),
+\emph{Remove} o \emph{Invalidate} (convertir en faltante). Para series de
+tiempo, el análisis \emph{Anomaly detection} descompone la serie en
+tendencia, estacionalidad y residuo y marca los residuos que superan un
+múltiplo dado de su desviación estándar.
+\end{aws}
+
+% =====================================================================
+\section{Características numéricas: escalamiento lineal}
+% =====================================================================
+
+\subsection{Definición y casos}
+
+\begin{definicion}[Escalamiento lineal]\label{def:escala}
+Sea $z\in\R^n$ la columna de entrenamiento de una característica
+numérica. Un \emph{escalamiento lineal} es la transformación ajustada
+$T_{a,b}(u)=(u-a)/b$, $u\in\R$, con parámetros $a\in\R$ (centro) y $b>0$
+(escala) calculados con $z$. Los casos del capítulo son:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Nombre & $a$ & $b$\\
+\midrule
+Estandarización (puntuación $z$) & $\bar z$ & $s_n(z)$\\
+Normalización MinMax & $z_{(1)}$ & $z_{(n)}-z_{(1)}$\\
+Escalado robusto & $\med(z)$ & $\IQR(z)$\\
+Escalado MaxAbs & $0$ & $\max_k|z_k|$\\
+Normalización por la media & $\bar z$ & $z_{(n)}-z_{(1)}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{definicion}
+
+La condición $b>0$ tiene dos funciones. Excluye $b=0$, que haría $T$
+indefinida; y, frente a $b<0$, garantiza que $T$ sea creciente y conserve
+el orden de los valores. No todos los casos la cumplen en las mismas
+columnas: $s_n(z)>0$ y $z_{(n)}-z_{(1)}>0$ si y solo si $z$ no es
+constante, y $\max|z_k|>0$ si y solo si $z$ no es nula; en cambio, el
+$\IQR$ puede anularse en columnas no constantes.
+
+\begin{contraejemplo}
+Sea $z=(0,0,0,0,0,0,0,5)$, $n=8$. Para $q=1/4$, $h=2.75$ y
+$Q_1=z_{(2)}+0.75(z_{(3)}-z_{(2)})=0$; para $q=3/4$, $h=6.25$ y
+$Q_3=z_{(6)}+0.25(z_{(7)}-z_{(6)})=0$. Luego $\IQR=0$ aunque la columna
+no es constante. En general, por la definición del cuantil, $\IQR=0$ si
+y solo si todos los estadísticos de orden que intervienen en $Q_1$ y
+$Q_3$ (y por tanto los intermedios) son iguales: un mismo valor ocupa las
+posiciones centrales de la muestra ordenada, como en conteos con muchos
+ceros. scikit-learn reemplaza entonces la escala por $1$.
+\end{contraejemplo}
+
+Sobre la muestra de entrenamiento, MinMax toma valores en $[0,1]$ y MaxAbs
+en $[-1,1]$, porque $z_{(1)}\le z_k\le z_{(n)}$ y $|z_k|\le\max_i|z_i|$.
+Aplicada a un valor nuevo $u$ fuera de $[z_{(1)},z_{(n)}]$, MinMax da un
+resultado fuera de $[0,1]$: los parámetros son los de entrenamiento
+(Proposición~\ref{prop:test}). La normalización por la media da media $0$
+y valores en $[-1,1]$ (porque $|z_k-\bar z|\le z_{(n)}-z_{(1)}$), pero su
+desviación estándar es $s_n/(z_{(n)}-z_{(1)})$, que no es $1$ en general.
+
+\subsection{Qué cambia y qué no cambia}
+
+Para $z\in\R^n$ sean los momentos centrales $m_r(z)=n^{-1}\sum_k(z_k-\bar
+z)^r$, el \emph{coeficiente de asimetría} $\gamma_1(z)=m_3/m_2^{3/2}$ y la
+\emph{curtosis} $\gamma_2(z)=m_4/m_2^2$ (definidos si $m_2>0$).
+
+\begin{proposicion}[Invariancia de la forma]\label{prop:forma}
+Si $b>0$, $\gamma_1(T_{a,b}(z))=\gamma_1(z)$ y
+$\gamma_2(T_{a,b}(z))=\gamma_2(z)$, donde $T_{a,b}(z)$ se aplica
+coordenada a coordenada. Además, la correlación de Pearson entre
+$T_{a,b}(z)$ y cualquier otra columna $w$ coincide con la de $z$ y $w$.
+\end{proposicion}
+
+\begin{proof}
+La media de $T_{a,b}(z)$ es $(\bar z-a)/b$, así que sus desviaciones
+respecto de la media son $(z_k-\bar z)/b$ y $m_r(T_{a,b}(z))=b^{-r}m_r(z)$.
+Entonces
+$\gamma_1(T_{a,b}(z))=b^{-3}m_3/(b^{-2}m_2)^{3/2}=m_3/m_2^{3/2}$, donde se
+usó $(b^{-2})^{3/2}=b^{-3}$, válido porque $b>0$; para $\gamma_2$,
+$b^{-4}m_4/(b^{-2}m_2)^2=m_4/m_2^2$. La covarianza de $T_{a,b}(z)$ con $w$
+es la de $z$ con $w$ multiplicada por $1/b$, y la desviación estándar de
+$T_{a,b}(z)$ es la de $z$ multiplicada por $1/b$; el factor se cancela en
+el cociente.
+\end{proof}
+
+Si $b<0$ el mismo cálculo da $\gamma_1(T_{a,b}(z))=-\gamma_1(z)$: la
+hipótesis $b>0$ es necesaria para la invariancia de la asimetría. La
+proposición es el fundamento de la afirmación del capítulo de que ningún
+escalado lineal corrige la asimetría.
+
+\begin{proposicion}[Compresión por un valor extremo en MinMax]\label{prop:minmax}
+Fíjense $z_1,\dots,z_{n-1}$ y sea $z_n=M$. Cuando $M\to\infty$, la
+normalización MinMax de cada $z_k$, $k<n$, tiende a $0$.
+\end{proposicion}
+
+\begin{proof}
+Si $M>\max_{k<n}z_k$, entonces $z_{(n)}=M$ y $z_{(1)}=\min_{k<n}z_k$ no
+depende de $M$; el valor normalizado $(z_k-z_{(1)})/(M-z_{(1)})$ tiene
+numerador fijo y denominador que tiende a infinito.
+\end{proof}
+
+En la columna de energía del capítulo, sin el valor $23$ los otros nueve
+ocupan $[0,1]$ tras MinMax; con él, ocupan $[0,0.426]$. El fenómeno se
+explica con la Proposición~\ref{prop:ruptura}: los parámetros de MinMax,
+MaxAbs y la estandarización tienen punto de ruptura $1/n$, los del
+escalado robusto $\approx1/4$. El escalado robusto no elimina el valor
+extremo: por ser creciente, lo conserva como el mayor (en el ejemplo vale
+$2.74$ y el siguiente $0.79$); lo que protege es la escala a la que quedan
+los demás.
+
+\begin{definicion}
+Una matriz $A\in\R^{n\times p}$ es \emph{dispersa} cuando la mayoría de sus
+entradas son nulas; un \emph{formato disperso} almacena solo las entradas
+no nulas con sus posiciones, con memoria proporcional a su número
+$\mathrm{nnz}(A)$ en lugar de a $np$.
+\end{definicion}
+
+Un ejemplo es la matriz documento-término de \S\ref{sec:tfidf}, donde la
+entrada $(d,t)$ cuenta las apariciones del término $t$ en el documento
+$d$: cada documento usa una fracción ínfima del vocabulario.
+
+\begin{proposicion}[Conservación de la dispersión]\label{prop:sparse}
+$T_{a,b}(0)=0$ si y solo si $a=0$. Si $a\ne0$ y la columna tiene $n_0$
+ceros, la columna transformada tiene $n_0$ entradas iguales a $-a/b\neq0$.
+En la Definición~\ref{def:escala}, solo MaxAbs tiene $a=0$ para toda
+columna.
+\end{proposicion}
+
+\begin{proof}
+$T_{a,b}(0)=-a/b$, nulo si y solo si $a=0$ porque $b>0$. En los demás
+casos de la tabla, $a$ es la media, el mínimo o la mediana, que en general
+son no nulos (por ejemplo, la media de una columna no negativa y no nula es
+positiva).
+\end{proof}
+
+Con $10^6$ documentos, $10^5$ términos y 100 términos distintos por
+documento, la matriz tiene $10^8$ entradas no nulas; centrarla produce
+$10^{11}$. Dividir por $s_n$ sin centrar ($a=0$,
+\texttt{StandardScaler(with\_mean=False)}) también conserva la
+dispersión.
+
+\subsection{Escala y descenso de gradiente}
+
+El capítulo afirma que escalar acelera la convergencia del descenso de
+gradiente. La afirmación se precisa para mínimos cuadrados.
+
+\begin{proposicion}\label{prop:cond}
+Sea $f(\beta)=\frac1{2n}\|y-X\beta\|^2$, $X\in\R^{n\times p}$, y
+supóngase que $H=X^\top X/n$ es definida positiva, con autovalores
+$\lambda_{\max}\ge\dots\ge\lambda_{\min}>0$; sea
+$\kappa=\lambda_{\max}/\lambda_{\min}$ (\emph{número de condición}). Entonces
+$f$ tiene un único minimizador $\hat\beta$, y el descenso de gradiente
+$\beta_{t+1}=\beta_t-\eta\nabla f(\beta_t)$ con paso $\eta=1/\lambda_{\max}$
+cumple, para todo $\beta_0$,
+$\|\beta_t-\hat\beta\|\le(1-1/\kappa)^t\|\beta_0-\hat\beta\|$.
+\end{proposicion}
+
+\begin{proof}
+$\nabla f(\beta)=H\beta-X^\top y/n$; como $H$ es invertible, $\nabla f$ se
+anula solo en $\hat\beta=H^{-1}X^\top y/n$, y como la hessiana $H$ es
+definida positiva, $f$ es estrictamente convexa y $\hat\beta$ es su único
+minimizador. Usando $X^\top y/n=H\hat\beta$, $\nabla
+f(\beta)=H(\beta-\hat\beta)$, y
+$\beta_{t+1}-\hat\beta=(I-\eta H)(\beta_t-\hat\beta)$. La matriz
+$I-H/\lambda_{\max}$ es simétrica con autovalores
+$1-\lambda_i/\lambda_{\max}\in[0,1-1/\kappa]$, de modo que su norma
+espectral es $1-1/\kappa$ y
+$\|\beta_{t+1}-\hat\beta\|\le(1-1/\kappa)\|\beta_t-\hat\beta\|$; se itera.
+\end{proof}
+
+Supóngase dos características con media cero y covarianza muestral nula,
+de varianzas $s_1^2$ y $s_2^2$ (y la respuesta centrada, de modo que no
+hace falta intercepto). Entonces $H=\operatorname{diag}(s_1^2,s_2^2)$ y
+$\kappa=s_1^2/s_2^2$ si $s_1\ge s_2$. Si ambas características son
+longitudes con la misma dispersión, pero una se registra en metros
+($s_2=1$) y la otra en centímetros ($s_1=100$), $\kappa=10^4$ y la
+cota garantiza una reducción del error de solo $1-10^{-4}$ por iteración.
+Tras estandarizar, $H$ es la matriz de correlaciones muestrales; con dos
+características de correlación $\rho$, sus autovalores son $1\pm\rho$ (los
+de $\begin{psmallmatrix}1&\rho\\\rho&1\end{psmallmatrix}$, con
+autovectores $(1,\pm1)$) y $\kappa=(1+|\rho|)/(1-|\rho|)$, que depende de
+la redundancia entre las características y no de sus unidades.
+
+\paragraph{Contraste.} Ningún escalamiento lineal cambia la forma de la
+distribución (Proposición~\ref{prop:forma}); la elección depende de la
+propiedad requerida: rango acotado conocido en entrenamiento (MinMax),
+varianzas iguales para el condicionamiento y para que una penalización
+trate igual a todos los coeficientes (estandarización,
+Proposición~\ref{prop:cond} y Contraejemplo~\ref{ce:ridge}), parámetros
+poco afectados por valores extremos (robusto, con la salvedad de columnas
+con $\IQR=0$), conservación de la dispersión (MaxAbs,
+Proposición~\ref{prop:sparse}). Para árboles y regresión lineal sin
+penalizar el escalamiento no cambia las predicciones
+(Proposiciones~\ref{prop:arbol} y~\ref{prop:ols}).
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Process numeric} $\to$ \emph{Scale values},
+con \emph{Standard scaler}, \emph{Robust scaler}, \emph{Min max scaler}
+(rango configurable) y \emph{Max absolute scaler}; opera sobre una columna
+por paso. \textbf{Glue DataBrew}, acción \texttt{SCALE} (en el JSON la
+operación se llama \texttt{NORMALIZATION}) con \texttt{strategy} igual a
+\texttt{MIN\_MAX}, \texttt{SCALE\_BETWEEN} (a un rango dado),
+\texttt{MEAN\_NORMALIZATION} o \texttt{Z\_SCORE}:
+\begin{lstlisting}
+{"Action": {"Operation": "NORMALIZATION",
+  "Parameters": {"sourceColumn": "all_votes", "strategy": "MIN_MAX",
+                 "targetColumn": "all_votes_normalized"}}}
+\end{lstlisting}
+La documentación de DataBrew describe \texttt{MEAN\_NORMALIZATION} como
+«media 0 y desviación 1 en $[-1,1]$»; con la fórmula de la
+Definición~\ref{def:escala} la media es $0$ y los valores están en
+$[-1,1]$, pero la desviación estándar no es $1$ en general. Como toda
+acción de DataBrew, calcula sus estadísticos sobre el dataset al que se
+aplica la receta. \textbf{SageMaker Processing}: \texttt{StandardScaler},
+\texttt{RobustScaler}, \texttt{MinMaxScaler} y \texttt{MaxAbsScaler} de
+scikit-learn, con \texttt{fit} sobre entrenamiento.
+\end{aws}
+
+% =====================================================================
+\section{Características numéricas: transformaciones no lineales}
+% =====================================================================
+
+Las transformaciones de esta sección son funciones estrictamente
+crecientes aplicadas a toda la columna. Por la
+Proposición~\ref{prop:arbol} no alteran los árboles; su efecto recae sobre
+modelos lineales, métodos de distancia y redes neuronales. Se estudian tres
+propósitos distintos: linealizar relaciones, estabilizar la varianza y
+reducir la asimetría.
+
+\subsection{Transformación logarítmica}\label{sec:log}
+
+\paragraph{Linealización.} Si $y=a\,e^{bx}\varepsilon$ con $a>0$ y un
+error multiplicativo $\varepsilon>0$ con $\E[\log\varepsilon]=0$, entonces
+$\log y=\log a+bx+\log\varepsilon$: un modelo lineal para $\log y$ con
+error aditivo de media cero. Si $y=a\,x^b\varepsilon$ con $x>0$, la
+relación es lineal entre $\log y$ y $\log x$. En el ejemplo del capítulo,
+$y=10^{x-3}$ da $\log_{10}y=x-3$.
+
+\paragraph{Estabilización de la varianza.} Muchas medidas positivas
+(ingresos, tiempos, concentraciones) tienen desviación estándar
+aproximadamente proporcional a su media. El modelo exacto de esa situación
+es una familia de escala.
+
+\begin{definicion}
+Sea $G>0$ una variable aleatoria con distribución fija. La \emph{familia de
+escala} generada por $G$ es la familia de distribuciones de $X=\theta G$,
+$\theta>0$.
+\end{definicion}
+
+Son familias de escala la exponencial, la gamma con parámetro de forma fijo
+y la lognormal con $\sigma$ fijo (si $\log G\sim N(0,\sigma^2)$, entonces
+$\log(\theta G)\sim N(\log\theta,\sigma^2)$).
+
+\begin{proposicion}\label{prop:escala}
+Si $X=\theta G$ con $\E[G^2]<\infty$ y $\E[(\log G)^2]<\infty$, entonces
+$\E[X]=\theta\E[G]$ y $\sqrt{\Var X}=\theta\sqrt{\Var G}$, de modo que el
+cociente desviación/media no depende de $\theta$; y
+$\Var(\log X)=\Var(\log G)$ no depende de $\theta$.
+\end{proposicion}
+
+\begin{proof}
+Las dos primeras igualdades son la linealidad de la esperanza y
+$\Var(\theta G)=\theta^2\Var G$. Para la tercera,
+$\log X=\log\theta+\log G$, y sumar la constante $\log\theta$ no cambia la
+varianza.
+\end{proof}
+
+Es decir: si varios grupos difieren solo en la escala, en la escala
+original sus varianzas son proporcionales a sus medias al cuadrado, y tras
+el logaritmo son iguales. Así, con $G$ gamma de forma $3$, $\Var(\log
+X)=\psi'(3)\approx0.395$ para cualquier $\theta$ ($\psi'$ es la función
+trigamma).
+
+\paragraph{Asimetría.} Si $X$ es lognormal, $\log X$ es exactamente
+normal, simétrica. Que el logaritmo reduzca la asimetría no es, sin
+embargo, una propiedad general:
+
+\begin{contraejemplo}\label{ce:logunif}
+Si $U$ es uniforme en $(0,1)$ (asimetría $0$), entonces $-\log U$ es
+exponencial de media $1$, porque $\Prob(-\log U>t)=\Prob(U<e^{-t})=e^{-t}$
+para $t\ge0$. La exponencial de media $1$ tiene varianza $1$ y tercer
+momento central $2$, luego asimetría $2$; por tanto $\log U$ tiene
+asimetría $-2$. El logaritmo convirtió una variable simétrica en una muy
+asimétrica hacia la izquierda.
+\end{contraejemplo}
+
+El logaritmo comprime más los valores grandes que los pequeños (su
+derivada $1/x$ decrece), así que acorta colas derechas largas; aplicado a
+una variable sin esa cola, estira la izquierda. Su uso se justifica en
+variables con asimetría positiva o de la forma de la
+Proposición~\ref{prop:escala}, y conviene comprobar la asimetría resultante.
+
+\begin{proposicion}[Sesgo de retransformación]\label{prop:retrans}
+Si $\log Y\sim N(\mu,\sigma^2)$ con $\sigma>0$, entonces
+$\E[Y]=e^{\mu+\sigma^2/2}>e^{\mu}$, y $e^\mu$ es la mediana de $Y$.
+\end{proposicion}
+
+\begin{proof}
+$\E[Y]=\E[e^W]$ con $W\sim N(\mu,\sigma^2)$ es la función generadora de
+momentos de $W$, $M_W(t)=e^{\mu t+\sigma^2t^2/2}$, en $t=1$. Como $\exp$ es
+creciente, $\Prob(Y\le e^\mu)=\Prob(W\le\mu)=1/2$.
+\end{proof}
+
+Si un modelo se ajusta para $\log y$ y se reporta $\exp$ de su predicción,
+se estima la mediana de $Y$, no su media. Bajo el modelo lognormal, la
+media se recupera multiplicando por $e^{\hat\sigma^2/2}$, con $\hat\sigma^2$
+la varianza residual estimada.
+
+\paragraph{Ceros.} El logaritmo exige valores positivos. El
+desplazamiento $\log(1+x)$ (\texttt{log1p}) admite ceros, pero su efecto
+depende de la unidad de medida de $x$: para $u\ge0$,
+$0\le u-\log(1+u)\le u^2/2$ (la función $h(u)=u-\log(1+u)$ cumple
+$h(0)=0$ y $0\le h'(u)=u/(1+u)\le u$). Si $x$ se mide en una unidad
+$c$ veces mayor, $\log(1+x/c)$ difiere de la transformación lineal $x/c$
+en a lo sumo $(x/c)^2/2$, que es despreciable cuando $x/c$ es pequeño:
+con la unidad «grande», \texttt{log1p} es casi lineal y no reduce la
+asimetría. La constante de desplazamiento debe elegirse en relación con la
+escala de los datos.
+
+\subsection{Raíces cuadrada y cúbica}\label{sec:raiz}
+
+Para conteos, el modelo de referencia es Poisson, cuya varianza es igual a
+su media; la raíz cuadrada estabiliza esa varianza. El resultado se
+obtiene con el método delta.
+
+\begin{proposicion}[Método delta]\label{prop:delta}
+Sean $T_n$ variables aleatorias con
+$\sqrt n(T_n-\mu)\xrightarrow{d}N(0,\sigma^2)$ y $g$ derivable en $\mu$.
+Entonces
+$\sqrt n\bigl(g(T_n)-g(\mu)\bigr)\xrightarrow{d}N\bigl(0,g'(\mu)^2\sigma^2\bigr)$.
+\end{proposicion}
+
+\begin{proof}
+Sea $\rho(t)=\frac{g(t)-g(\mu)}{t-\mu}-g'(\mu)$ para $t\ne\mu$ y
+$\rho(\mu)=0$; por la definición de derivada, $\rho$ es continua en $\mu$.
+Se tiene
+$\sqrt n(g(T_n)-g(\mu))=\bigl(g'(\mu)+\rho(T_n)\bigr)\sqrt n(T_n-\mu)$.
+Como $\sqrt n(T_n-\mu)$ converge en distribución, está acotada en
+probabilidad, y $T_n-\mu=n^{-1/2}\sqrt n(T_n-\mu)\to0$ en probabilidad;
+por la continuidad de $\rho$ en $\mu$, $\rho(T_n)\to0$ en probabilidad. El
+teorema de Slutsky da que el producto converge en distribución a
+$g'(\mu)$ por una $N(0,\sigma^2)$.
+\end{proof}
+
+\begin{corolario}\label{cor:poisson}
+Si $X_\mu\sim\text{Poisson}(\mu)$ con $\mu\in\N$, entonces
+$\sqrt{X_\mu}-\sqrt\mu\xrightarrow{d}N(0,1/4)$ cuando $\mu\to\infty$.
+\end{corolario}
+
+\begin{proof}
+La suma de variables de Poisson independientes es de Poisson con la suma
+de los parámetros, así que $X_\mu$ tiene la distribución de
+$\sum_{i=1}^\mu V_i$ con $V_i$ Poisson$(1)$ independientes, de media y
+varianza $1$. Por el teorema central del límite,
+$\sqrt\mu(X_\mu/\mu-1)\xrightarrow{d}N(0,1)$. La
+Proposición~\ref{prop:delta} con $n=\mu$, $T_n=X_\mu/\mu$ y $g=\sqrt{\cdot}$
+(con $g'(1)=1/2$) da $\sqrt\mu(\sqrt{X_\mu/\mu}-1)\xrightarrow{d}N(0,1/4)$,
+y $\sqrt\mu\sqrt{X_\mu/\mu}=\sqrt{X_\mu}$.
+\end{proof}
+
+La varianza de $X_\mu$ es $\mu$; la de $\sqrt{X_\mu}$ se aproxima a $1/4$
+sin importar $\mu$ (por simulación, $0.252$ con $\mu=50$ y $0.286$ con
+$\mu=5$; Anscombe mostró que $\sqrt{x+3/8}$ mejora la aproximación con
+$\mu$ pequeño). La raíz cúbica $x^{1/3}$ está definida en todo $\R$, es
+impar y estrictamente creciente, así que se aplica a datos con signo sin
+desplazamientos.
+
+La intensidad con que estas funciones comprimen los valores grandes se
+ordena por su crecimiento: para $0<\lambda_1<\lambda_2$,
+$x^{\lambda_1}/x^{\lambda_2}=x^{\lambda_1-\lambda_2}\to0$, y para todo
+$\lambda>0$, $\log x/x^\lambda\to0$ cuando $x\to\infty$ (por la regla de
+L'Hôpital, el cociente de derivadas es $1/(\lambda x^\lambda)$). Así, para
+valores grandes, $\log$ crece más despacio que $\sqrt[3]{\cdot}$, y esta
+más despacio que $\sqrt{\cdot}$: es el orden de intensidad que da el
+capítulo («escalera de potencias» de Tukey).
+
+\subsection{Transformación de Box--Cox}
+
+Las transformaciones anteriores se eligen de antemano. Box y Cox (1964)
+plantearon elegir la potencia con los datos, dentro de una familia que
+contiene a $\log$, $\sqrt{\cdot}$ y $1/x$ salvo constantes afines.
+
+\begin{definicion}[Box--Cox]
+Para $x>0$ y $\lambda\in\R$,
+$x^{(\lambda)}=(x^\lambda-1)/\lambda$ si $\lambda\ne0$ y
+$x^{(0)}=\log x$.
+\end{definicion}
+
+\begin{proposicion}\label{prop:bc-basicas}
+Para cada $x>0$, $\lambda\mapsto x^{(\lambda)}$ es continua en
+$\lambda=0$. Para cada $\lambda$, $x\mapsto x^{(\lambda)}$ es
+estrictamente creciente en $(0,\infty)$.
+\end{proposicion}
+
+\begin{proof}
+$(x^\lambda-1)/\lambda=(e^{\lambda\log x}-e^{0})/\lambda$ es el cociente
+incremental en $0$ de la función $\lambda\mapsto e^{\lambda\log x}$, cuya
+derivada en $0$ es $\log x$; luego el límite cuando $\lambda\to0$ es
+$\log x=x^{(0)}$. La derivada respecto de $x$ es $x^{\lambda-1}>0$ (para
+$\lambda=0$, $1/x$).
+\end{proof}
+
+Ambas propiedades justifican la forma de la definición: sin restar $1$ y
+dividir por $\lambda$, $x^\lambda$ sería decreciente para $\lambda<0$
+(invertiría el orden) y constante para $\lambda=0$, y la familia no
+variaría con continuidad. La restricción $x>0$ es necesaria: $x^\lambda$
+no es real para $x<0$ y $\lambda$ no entero, y $\log0$ no existe. Los
+valores $\lambda=1$, $1/2$, $0$ y $-1$ corresponden, salvo transformaciones
+afines, a la identidad, la raíz cuadrada, el logaritmo y el recíproco.
+
+\begin{proposicion}[Estimación de $\lambda$]\label{prop:bc}
+Supóngase como modelo de trabajo que existen $\lambda,\mu$ y $\sigma^2>0$
+tales que $x_1^{(\lambda)},\dots,x_n^{(\lambda)}$ son i.i.d.\
+$N(\mu,\sigma^2)$. La log-verosimilitud de $\lambda$, maximizada en
+$(\mu,\sigma^2)$ para cada $\lambda$ (log-verosimilitud perfilada), es,
+salvo una constante,
+\[
+\ell_p(\lambda)=-\frac n2\log\hat\sigma^2(\lambda)+(\lambda-1)\sum_{k=1}^n\log x_k,
+\]
+donde $\hat\sigma^2(\lambda)$ es la varianza, con divisor $n$, de los
+$x_k^{(\lambda)}$. Si todos los $x_k$ se multiplican por una constante
+$c>0$, $\ell_p$ cambia en la constante $-n\log c$ y su maximizador
+$\hat\lambda$ no cambia.
+\end{proposicion}
+
+\begin{proof}
+Por la Proposición~\ref{prop:bc-basicas}, $u\mapsto u^{(\lambda)}$ es
+diferenciable y estrictamente creciente, con derivada $u^{\lambda-1}$; por
+la fórmula de cambio de variable, la densidad de cada $x_k$ es la normal
+evaluada en $x_k^{(\lambda)}$ multiplicada por $x_k^{\lambda-1}$. La
+log-verosimilitud es
+\[
+-\frac n2\log(2\pi\sigma^2)-\frac1{2\sigma^2}\sum_k\bigl(x_k^{(\lambda)}-\mu\bigr)^2+(\lambda-1)\sum_k\log x_k .
+\]
+Para $\lambda$ fijo, es la log-verosimilitud normal de los
+$x_k^{(\lambda)}$ más un término que no depende de $(\mu,\sigma^2)$, así
+que se maximiza en la media y la varianza muestrales (divisor $n$) de los
+$x_k^{(\lambda)}$; con esos valores, el término cuadrático vale $-n/2$, y
+queda $\ell_p(\lambda)$ más constantes.
+
+Para la invariancia: si $\lambda\ne0$,
+$(cx)^{(\lambda)}=c^\lambda x^{(\lambda)}+(c^\lambda-1)/\lambda$, y si
+$\lambda=0$, $\log(cx)=\log x+\log c$; en ambos casos una transformación
+afín de $x^{(\lambda)}$ con pendiente $c^\lambda$, luego
+$\hat\sigma_c^2(\lambda)=c^{2\lambda}\hat\sigma^2(\lambda)$. Además
+$\sum_k\log(cx_k)=n\log c+\sum_k\log x_k$. Sustituyendo,
+$\ell_{p,c}(\lambda)=\ell_p(\lambda)-n\lambda\log c+(\lambda-1)n\log
+c=\ell_p(\lambda)-n\log c$.
+\end{proof}
+
+Dos observaciones delimitan el resultado. Primero, el modelo de trabajo
+no puede cumplirse exactamente si $\lambda\ne0$: para $\lambda>0$,
+$x^{(\lambda)}>-1/\lambda$, y una normal pone probabilidad positiva debajo
+de cualquier número; Box y Cox lo presentan como una aproximación, y
+$\hat\lambda$ se interpreta como la potencia que más acerca los datos a la
+normalidad dentro de la familia. Segundo, el término
+$(\lambda-1)\sum\log x_k$, que proviene del cambio de variable, es
+indispensable: sin él se compararían varianzas medidas en escalas
+distintas. Por ejemplo, si todos los $x_k>1$ y $\lambda\to-\infty$,
+$x_k^\lambda\to0$ y $x_k^{(\lambda)}=-1/\lambda+x_k^\lambda/\lambda$, cuya
+varianza $\Var(x^\lambda)/\lambda^2$ tiende a $0$: minimizar
+$\hat\sigma^2(\lambda)$ sin el término elegiría siempre un $\lambda$
+extremo. Por último, el estimador es invariante a la escala pero no a la
+traslación: $\hat\lambda$ calculado para $x+c$ difiere en general, así que
+desplazar datos para volverlos positivos cambia el resultado.
+
+\begin{contraejemplo}\label{ce:gap}
+Ninguna transformación de la familia (ni ninguna función continua y
+estrictamente creciente) vuelve normal a una variable cuyo soporte tenga un
+hueco. Sea $X$ con densidad positiva solo en $[1,2]\cup[10,11]$ y $g$
+continua y estrictamente creciente. Entonces $g(X)\in[g(1),g(2)]\cup[g(10),g(11)]$
+y $\Prob\bigl(g(2)<g(X)<g(10)\bigr)=\Prob(2<X<10)=0$, mientras que una
+normal asigna probabilidad positiva al intervalo no vacío $(g(2),g(10))$.
+\end{contraejemplo}
+
+Si la función de distribución $F$ de $X$ es continua, la
+\emph{transformación cuantil} $\Phi^{-1}\circ F$ sí produce una $N(0,1)$
+exacta: para $u\in(0,1)$ sea $x_u$ el mayor $x$ con $F(x)=u$ (existe por
+la continuidad de $F$ y porque $F(x)\to1$); como $F$ es no decreciente,
+$F(X)\le u$ si y solo si $X\le x_u$, luego $\Prob(F(X)\le u)=F(x_u)=u$, es
+decir, $F(X)$ es uniforme en $(0,1)$, y $\Prob(\Phi^{-1}(F(X))\le
+t)=\Prob(F(X)\le\Phi(t))=\Phi(t)$. El precio es estimar $F$ completa (en
+la práctica, la función de distribución empírica de entrenamiento), frente
+a un solo parámetro $\lambda$.
+
+\subsection{Transformación de Yeo--Johnson}
+
+Yeo y Johnson (2000) extendieron la idea a datos con ceros y negativos,
+que Box--Cox no admite.
+
+\begin{definicion}[Yeo--Johnson]
+Para $x\in\R$ y $\lambda\in\R$,
+\[
+\psi(\lambda,x)=\begin{cases}
+\bigl((x+1)^\lambda-1\bigr)/\lambda,& x\ge0,\ \lambda\neq0,\\
+\log(x+1),& x\ge0,\ \lambda=0,\\
+-\bigl((1-x)^{2-\lambda}-1\bigr)/(2-\lambda),& x<0,\ \lambda\neq2,\\
+-\log(1-x),& x<0,\ \lambda=2.
+\end{cases}
+\]
+\end{definicion}
+
+\begin{proposicion}
+Para cada $\lambda$, $x\mapsto\psi(\lambda,x)$ es derivable en $\R$ con
+derivada positiva: $(x+1)^{\lambda-1}$ si $x\ge0$ y $(1-x)^{1-\lambda}$ si
+$x<0$. Además $\psi(\lambda,0)=0$, para $x\ge0$ coincide con la Box--Cox
+de $x+1$, y $\psi(1,x)=x$.
+\end{proposicion}
+
+\begin{proof}
+Las derivadas de cada rama se calculan directamente (también en los casos
+logarítmicos: $1/(x+1)$ y $1/(1-x)$, que coinciden con las fórmulas en
+$\lambda=0$ y $\lambda=2$); son positivas porque $x+1>0$ para $x\ge0$ y
+$1-x>0$ para $x<0$. En $x=0$ ambas ramas valen $0$ y sus derivadas
+laterales valen $1$, luego $\psi$ es derivable en $0$. La coincidencia
+con Box--Cox es la definición de la rama $x\ge0$. Con $\lambda=1$:
+$(x+1)-1=x$ si $x\ge0$ y $-((1-x)-1)=x$ si $x<0$.
+\end{proof}
+
+La estimación de $\lambda$ sigue la Proposición~\ref{prop:bc} con el
+término de cambio de variable
+$(\lambda-1)\sum_k\operatorname{sgn}(x_k)\log(|x_k|+1)$, que resulta de
+sumar los logaritmos de las derivadas anteriores. En el ejemplo del
+capítulo (datos simétricos), scikit-learn estima $\hat\lambda\approx0.92$ y
+$1.02$, cercanos al valor $1$ de la identidad.
+
+\paragraph{Contraste.}
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lYYY@{}}
+\toprule
+& Dominio & Parámetro & Situación que la justifica\\
+\midrule
+$\log x$ & $x>0$ & ninguno & familia de escala (Prop.~\ref{prop:escala}); relación multiplicativa\\
+$\log(1+x/c)$ & $x>-c$ & $c$, elegido según la unidad & ídem con ceros\\
+$\sqrt x$ & $x\ge0$ & ninguno & conteos de Poisson (Cor.~\ref{cor:poisson})\\
+$\sqrt[3]{x}$ & $\R$ & ninguno & asimetría con valores de ambos signos\\
+Box--Cox & $x>0$ & $\lambda$ por máxima verosimilitud & asimetría de grado desconocido\\
+Yeo--Johnson & $\R$ & $\lambda$ por máxima verosimilitud & ídem, con ceros y negativos\\
+$\Phi^{-1}\circ\hat F$ & $\R$ & la distribución empírica & normalidad aun con formas no alcanzables por potencias\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Las transformaciones sin parámetros no pueden producir fuga; las de
+potencia y la cuantil estiman parámetros y se ajustan con entrenamiento.
+Todas cambian la interpretación de los coeficientes: en un modelo para
+$\log y$, un coeficiente $b$ de $x$ significa que aumentar $x$ en una
+unidad multiplica la mediana de $y$ por $e^b$ (bajo el modelo de la
+Proposición~\ref{prop:retrans}).
+
+\begin{aws}
+\textbf{Glue DataBrew}, acción \texttt{SKEWNESS} con \texttt{skewFunction}
+igual a \texttt{LOG} (base en \texttt{value}), \texttt{ROOT} (índice de la
+raíz en \texttt{value}) o \texttt{SQUARE}:
+\begin{lstlisting}
+{"RecipeAction": {"Operation": "SKEWNESS",
+  "Parameters": {"sourceColumn": "ingreso", "targetColumn": "log_ingreso",
+                 "skewFunction": "LOG", "value": "2.718281828"}}}
+\end{lstlisting}
+DataBrew no tiene Box--Cox, Yeo--Johnson ni transformación cuantil.
+\textbf{Data Wrangler} no tiene un paso dedicado: se usa \emph{Custom
+formula}, con expresiones de Spark SQL como \texttt{log(x)},
+\texttt{log1p(x)}, \texttt{sqrt(x)} o \texttt{cbrt(x)}, o \emph{Custom
+transform} en pandas o PySpark (la versión de scikit-learn disponible ahí
+incluye \texttt{PowerTransformer}). \textbf{SageMaker Processing}:
+\texttt{PowerTransformer(method="box-cox"|"yeo-johnson")}, que estima
+$\lambda$ por máxima verosimilitud y estandariza la salida por defecto, y
+\texttt{QuantileTransformer(output\_distribution="normal")}.
+\end{aws}
+
+% =====================================================================
+\section{Discretización}\label{sec:discretizacion}
+% =====================================================================
+
+\begin{definicion}
+Dados puntos de corte $-\infty=t_0<t_1<\dots<t_{B-1}<t_B=+\infty$, la
+\emph{discretización} asigna a $u\in\R$ el índice $b\in\{1,\dots,B\}$ tal
+que $t_{b-1}<u\le t_b$. Los cortes interiores se calculan con la columna
+de entrenamiento $z$: con \emph{ancho igual},
+$t_b=z_{(1)}+\frac bB(z_{(n)}-z_{(1)})$; con \emph{frecuencia igual},
+$t_b=Q(b/B)$.
+\end{definicion}
+
+Con cortes por cuantiles, cada intervalo contiene aproximadamente $n/B$
+observaciones de entrenamiento; con ancho igual, los intervalos de las
+colas pueden quedar casi vacíos si la distribución es asimétrica.
+
+\begin{proposicion}\label{prop:bin-cuantil}
+Supóngase que los valores de $z$ son distintos y sea $g$ estrictamente
+creciente. La discretización por frecuencia igual de $g(z)$ asigna a cada
+observación de entrenamiento el mismo índice que la de $z$. La
+discretización por ancho igual no tiene esta propiedad.
+\end{proposicion}
+
+\begin{proof}
+El corte $t_b=Q(b/B)$ es un estadístico de orden $z_{(r)}$ o un punto
+estrictamente entre $z_{(r)}$ y $z_{(r+1)}$, con $r$ determinado solo por
+$b$, $B$ y $n$; como los valores son distintos, en ambos casos
+$\{k:z_k\le t_b\}$ es el conjunto de índices de rango $\le r$. Como $g$ es
+estrictamente creciente, los rangos de $g(z)$ son los de $z$, y el corte
+de $g(z)$ separa los mismos índices. Para ancho igual basta un ejemplo:
+$z=(1,10,20,100)$ con $B=2$ corta en $50.5$ y agrupa $\{1,10,20\}$,
+mientras que $\log_{10}z=(0,1,1.30,2)$ corta en $1$ y separa $\{1,10\}$ de
+$\{20,100\}$.
+\end{proof}
+
+La discretización pierde información. El caso extremo se cuantifica.
+
+\begin{proposicion}[Costo de dicotomizar]\label{prop:dicot}
+Sea $X\sim N(0,1)$, $D=\ind{X>0}$ e $Y=\beta X+\varepsilon$ con
+$\beta\ne0$ y $\varepsilon$ independiente de $X$ con varianza finita.
+Entonces $\Corr(Y,D)=\sqrt{2/\pi}\;\Corr(Y,X)\approx0.80\,\Corr(Y,X)$.
+\end{proposicion}
+
+\begin{proof}
+$\Cov(X,D)=\E[X\ind{X>0}]=\int_0^\infty x\varphi(x)\,dx=\varphi(0)=1/\sqrt{2\pi}$,
+usando $\varphi'(x)=-x\varphi(x)$; $\Var D=1/4$ y $\Var X=1$, así que
+$\Corr(X,D)=\frac{1/\sqrt{2\pi}}{1/2}=\sqrt{2/\pi}$. Como $\varepsilon$ es
+independiente de $X$, también lo es de $D$, y
+$\Cov(Y,D)=\beta\Cov(X,D)$ y $\Cov(Y,X)=\beta$. Entonces, con $\sigma_Y$ y
+$\sigma_D$ las desviaciones estándar de $Y$ y de $D$,
+$\Corr(Y,D)=\frac{\beta\Cov(X,D)}{\sigma_Y\sigma_D}
+=\frac{\beta}{\sigma_Y}\Corr(X,D)=\Corr(Y,X)\Corr(X,D)$, pues
+$\Corr(Y,X)=\beta/\sigma_Y$ (y $\sigma_X=1$, así que $\Corr(X,D)=\Cov(X,D)/\sigma_D$).
+\end{proof}
+
+Una lectura aproximada en términos de tamaño muestral: para probar
+asociación con la correlación muestral $r$, se usa que $\sqrt nr$ es
+aproximadamente $N(0,1)$ bajo independencia (con momentos cuartos
+finitos), y bajo la alternativa su centro es aproximadamente $\sqrt
+n\rho$. Mantener $\sqrt n\rho$ cuando $\rho$ se reduce por el factor
+$\sqrt{2/\pi}$ exige multiplicar $n$ por $\pi/2\approx1.57$: dicotomizar
+equivale, en esta aproximación, a descartar un 36\,\% de la muestra.
+
+\begin{proposicion}[Error de aproximación]\label{prop:lipschitz}
+Sea $f$ lipschitziana de constante $L$ en $[t_{b-1},t_b]$, de ancho
+$w=t_b-t_{b-1}$, y $c$ el punto medio del intervalo. Entonces
+$|f(u)-f(c)|\le Lw/2$ para todo $u$ del intervalo.
+\end{proposicion}
+
+\begin{proof}
+$|f(u)-f(c)|\le L|u-c|\le Lw/2$, porque ningún punto del intervalo dista
+más de $w/2$ de su punto medio.
+\end{proof}
+
+Si la media de la respuesta es una función $f$ lipschitziana de $x$, la
+mejor constante en cada intervalo aproxima $f$ con error a lo sumo $Lw/2$,
+y la media de $f$ sobre los puntos del intervalo, que es lo que estima un
+modelo con una constante por intervalo (discretización seguida de
+\emph{one-hot}, \S\ref{sec:onehot}), con error a lo sumo $Lw$ (porque esa
+media está entre el mínimo y el máximo de $f$ en el intervalo, que difieren
+en a lo sumo $Lw$). El sesgo disminuye con $w$; pero con intervalos más
+estrechos cada constante se estima con menos observaciones y con más
+varianza. A cambio
+de la pérdida de información, la discretización acota la influencia de los
+valores extremos (todos caen en el último intervalo, con independencia de
+su magnitud), permite a un modelo lineal representar relaciones no
+lineales mediante funciones escalonadas y es el paso previo del WoE para
+variables continuas (\S\ref{sec:woe}). En árboles no aporta: los cortes
+posibles pasan a ser a lo sumo $B-1$, un subconjunto de los que el árbol
+examina sobre la variable original (Lema~\ref{lem:cortes}).
+
+\begin{aws}
+\textbf{Glue DataBrew}, acción \texttt{BUCKETIZATION}, con cortes
+explícitos en \texttt{splits} (admite \texttt{-Infinity} e
+\texttt{Infinity}) o con \texttt{percentage} para intervalos de igual
+frecuencia; \texttt{BINARIZATION} para un único umbral:
+\begin{lstlisting}
+{"Action": {"Operation": "BUCKETIZATION",
+  "Parameters": {"sourceColumn": "peso", "targetColumn": "peso_bin",
+                 "bucketNames": "[\"Bin1\",\"Bin2\",\"Bin3\"]",
+                 "splits": "[\"-Infinity\",\"2\",\"20\",\"Infinity\"]"}}}
+\end{lstlisting}
+\textbf{Data Wrangler} no tiene paso de discretización en su lista vigente;
+se implementa con \emph{Custom formula} (\texttt{CASE WHEN}) o
+\emph{Custom transform} en PySpark (\texttt{Bucketizer},
+\texttt{QuantileDiscretizer}), seguido de \emph{Encode categorical}
+$\to$ \emph{One-hot encode}. \textbf{SageMaker Processing}:
+\texttt{KBinsDiscretizer(strategy="uniform"|"quantile"|"kmeans",
+encode="onehot")}.
+\end{aws}
+
+% =====================================================================
+\section{Características categóricas: codificaciones no supervisadas}
+% =====================================================================
+
+\subsection{Planteamiento}
+
+Sea $X$ una característica categórica con niveles
+$\mathcal C=\{c_1,\dots,c_K\}$, los observados en entrenamiento. Una
+\emph{codificación} es una función $\phi:\mathcal C\to\R^d$; el modelo
+recibe $\phi(X)$ en lugar de $X$. Cinco rasgos distinguen las
+codificaciones: si $\phi$ es inyectiva (si puede confundir niveles), la
+dimensión $d$, la geometría que induce (las distancias
+$\|\phi(c_i)-\phi(c_j)\|$, que usan los métodos basados en distancias y
+las redes), si usa la respuesta, y qué valor asigna en inferencia a un
+nivel que no está en $\mathcal C$. Para modelos lineales, el rasgo decisivo
+es el siguiente.
+
+\begin{definicion}
+Un \emph{predictor lineal} sobre $\phi$ es una función
+$\eta(c)=\beta_0+\beta^\top\phi(c)$, $(\beta_0,\beta)\in\R^{1+d}$. Su
+\emph{vector de efectos} es $(\eta(c_1),\dots,\eta(c_K))\in\R^K$. Sea
+$\Phi\in\R^{K\times d}$ la matriz cuya fila $i$ es $\phi(c_i)^\top$.
+\end{definicion}
+
+\begin{proposicion}[Efectos representables]\label{prop:repr}
+El conjunto de vectores de efectos de los predictores lineales sobre
+$\phi$ es el espacio columna de la matriz $[\1\;\Phi]\in\R^{K\times(1+d)}$;
+su dimensión es $\rango[\1\;\Phi]\le\min(K,d+1)$. En particular, todo
+vector de $\R^K$ es un vector de efectos si y solo si
+$\rango[\1\;\Phi]=K$.
+\end{proposicion}
+
+\begin{proof}
+La coordenada $i$ del vector de efectos es
+$\beta_0+\phi(c_i)^\top\beta$, la coordenada $i$ de
+$[\1\;\Phi](\beta_0,\beta^\top)^\top$. El conjunto de vectores de efectos
+es, por tanto, la imagen de la aplicación lineal
+$(\beta_0,\beta)\mapsto[\1\;\Phi](\beta_0,\beta^\top)^\top$, que es el
+espacio columna; su dimensión es el rango, acotado por el número de filas
+y de columnas. Un subespacio de $\R^K$ es todo $\R^K$ si y solo si su
+dimensión es $K$.
+\end{proof}
+
+Si la respuesta media depende de los niveles de forma arbitraria, una
+codificación con rango menor que $K$ impide a un modelo lineal
+representarla. Los árboles y las redes no están sujetos a esta
+proposición, pero sí al orden y a la geometría que $\phi$ induce.
+
+\subsection{Codificación ordinal}
+
+\begin{definicion}
+Dada una biyección $\sigma:\mathcal C\to\{1,\dots,K\}$ (un orden de los
+niveles), la \emph{codificación ordinal} es $\phi(c)=\sigma(c)\in\R$. El
+capítulo la llama \emph{label encoding}.
+\end{definicion}
+
+Si la variable es ordinal (tallas S $<$ M $<$ L $<$ XL), $\sigma$ es el orden
+natural y la codificación lo conserva; si es nominal, $\sigma$ es
+arbitraria (\texttt{LabelEncoder} de scikit-learn usa el orden
+alfabético). Con $K\ge2$, $\rango[\1\;\Phi]=2$ (las columnas $\1$ y
+$(1,2,\dots,K)^\top$ no son proporcionales), así que, por la
+Proposición~\ref{prop:repr}, un predictor lineal solo representa efectos de
+la forma $\beta_0+\beta\sigma(c)$: equiespaciados en el orden elegido.
+
+\begin{contraejemplo}
+Si los efectos de las tallas S, M, L, XL son $(0,0,0,10)$, ningún
+$(\beta_0,\beta)$ los representa: $\beta_0+\beta=\beta_0+2\beta$ obliga a
+$\beta=0$, y entonces el cuarto efecto sería $\beta_0=0\ne10$. Aun en una
+variable ordinal, la codificación ordinal restringe la forma del efecto.
+\end{contraejemplo}
+
+Para árboles, el Lema~\ref{lem:cortes} dice que un corte sobre
+$\sigma(X)$ separa los niveles en $\{c:\sigma(c)\le t\}$ y su
+complemento: hay $K-1$ particiones posibles, mientras que el número de
+particiones de $\mathcal C$ en dos conjuntos no vacíos es
+$(2^K-2)/2=2^{K-1}-1$ (los $2^K$ subconjuntos menos $\emptyset$ y
+$\mathcal C$, contando cada partición dos veces). Aislar un nivel de
+posición $t$ requiere a lo sumo dos cortes: $\sigma\le t-1$ y, en el nodo
+$\{\sigma\ge t\}$, $\sigma\le t$. Así, un árbol puede representar
+cualquier función de los niveles con suficientes cortes, pero el orden
+$\sigma$ determina cuántos necesita; el Teorema~\ref{teo:fisher} identifica
+un orden con el que basta un corte para la mejor partición en dos.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Encode categorical} $\to$ \emph{Ordinal
+encode} (enteros desde $0$), con manejo de niveles no vistos \emph{Skip},
+\emph{Keep}, \emph{Error} o \emph{Replace with NaN}; paso con parámetros
+ajustados (\emph{refit}). \textbf{Glue DataBrew},
+\texttt{CATEGORICAL\_MAPPING}, que permite fijar $\sigma$ explícitamente:
+\begin{lstlisting}
+{"Action": {"Operation": "CATEGORICAL_MAPPING",
+  "Parameters": {"sourceColumn": "talla", "targetColumn": "talla_ord",
+                 "categoryMap": "{\"S\":\"1\",\"M\":\"2\",\"L\":\"3\",\"XL\":\"4\"}",
+                 "mapType": "NUMERIC", "keepOthers": "false",
+                 "deleteOtherRows": "false", "other": "0"}}}
+\end{lstlisting}
+\textbf{SageMaker Processing}: \texttt{OrdinalEncoder(categories=[[...]])}
+con el orden explícito.
+\end{aws}
+
+\subsection{Codificación \emph{one-hot}}\label{sec:onehot}
+
+\begin{definicion}
+La codificación \emph{one-hot} es $\phi(c_i)=e_i\in\R^K$, el $i$-ésimo
+vector de la base canónica. La \emph{codificación de referencia} elimina
+la coordenada de un nivel fijado (el de referencia), con $d=K-1$. Para una
+muestra, la matriz \emph{one-hot} $D\in\{0,1\}^{n\times K}$ tiene
+$D_{ki}=1$ si y solo si la observación $k$ tiene el nivel $c_i$.
+\end{definicion}
+
+\begin{proposicion}[Trampa de las variables ficticias]\label{prop:trampa}
+La matriz $Z=[\1\;D]\in\R^{n\times(K+1)}$ no tiene rango completo por
+columnas, y $Z^\top Z$ no es invertible.
+\end{proposicion}
+
+\begin{proof}
+Cada fila de $D$ tiene exactamente un $1$, luego $D\1_K=\1_n$ y
+$Z\,(1,-\1_K^\top)^\top=\1_n-D\1_K=0$ con $(1,-\1_K^\top)\ne0$. Como
+$Z^\top Zv=0$ implica $\|Zv\|^2=v^\top Z^\top Zv=0$, el núcleo de
+$Z^\top Z$ coincide con el de $Z$, que contiene un vector no nulo.
+\end{proof}
+
+Las salidas son omitir un nivel (codificación de referencia), omitir el
+intercepto o penalizar: con penalización \emph{ridge}, la matriz $Z^\top
+Z+\lambda I$ con $\lambda>0$ es definida positiva ($v^\top(Z^\top
+Z+\lambda I)v=\|Zv\|^2+\lambda\|v\|^2>0$ si $v\ne0$) y la solución es única.
+
+\begin{proposicion}[Interpretación]\label{prop:onehot}
+Supóngase que todos los niveles aparecen en la muestra. En la regresión por
+mínimos cuadrados de $y$ sobre el intercepto y la codificación de
+referencia (referencia $c_K$), el valor ajustado de toda observación del
+nivel $c_i$ es la media $\bar y_i$ de las respuestas de ese nivel; los
+coeficientes son $\hat\beta_0=\bar y_K$ y $\hat\beta_i=\bar y_i-\bar y_K$.
+\end{proposicion}
+
+\begin{proof}
+El espacio columna de $[\1\;D_{\cdot1}\cdots D_{\cdot,K-1}]$ contiene a
+$D_{\cdot K}=\1-\sum_{i<K}D_{\cdot i}$, así que coincide con $\col(D)$, el
+conjunto de vectores que son constantes sobre las observaciones de cada
+nivel. Por el Lema~\ref{lem:proy}, los valores ajustados minimizan
+$\sum_i\sum_{k:x_k=c_i}(y_k-a_i)^2$ sobre las constantes $(a_i)$, y cada
+sumando se minimiza por separado con $a_i=\bar y_i$. Las columnas del
+diseño de referencia son linealmente independientes (si
+$\beta_0\1+\sum_{i<K}\beta_iD_{\cdot i}=0$, evaluando en una observación de
+$c_K$ se obtiene $\beta_0=0$ y luego, en una de cada $c_i$, $\beta_i=0$),
+así que los coeficientes son únicos, y de $\hat\beta_0=\bar y_K$ y
+$\hat\beta_0+\hat\beta_i=\bar y_i$ se obtienen los valores del enunciado.
+\end{proof}
+
+El rango de $[\1\;\Phi]$ es $K$ (las filas $(1,e_i^\top)$ son linealmente
+independientes), de modo que la codificación es \emph{saturada}: no impone
+restricción alguna (Proposición~\ref{prop:repr}). Su geometría es la
+opuesta a la ordinal: $\|e_i-e_j\|=\sqrt2$ y $\langle e_i,e_j\rangle=0$
+para $i\ne j$, así que no introduce orden ni similitudes artificiales,
+pero tampoco puede expresar similitudes reales. Su costo es la dimensión y
+la varianza: bajo el modelo $y_k=\theta_{x_k}+\varepsilon_k$ con errores
+independientes de varianza $\sigma^2$, el valor ajustado del nivel $c_i$
+es $\bar y_i$, con varianza $\sigma^2/n_i$, que es grande para niveles
+raros. Un nivel no visto en entrenamiento recibe el vector nulo
+(\texttt{handle\_unknown="ignore"}), es decir, la predicción del nivel de
+referencia o del intercepto. La Proposición~\ref{prop:ridge-te} muestra que
+la penalización \emph{ridge} sobre \emph{one-hot} reduce esa varianza con
+el mismo mecanismo que el \emph{target encoding}.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Encode categorical} $\to$ \emph{One-hot
+encode}, con la opción \emph{Drop last category} (codificación de
+referencia, Proposición~\ref{prop:trampa}), manejo de niveles no vistos y
+salida como vector disperso o columnas; el paso \emph{Replace rare}
+(grupo \emph{Handle outliers}) agrupa antes los niveles poco frecuentes en
+uno solo. \textbf{Glue DataBrew}, \texttt{ONE\_HOT\_ENCODING} con
+\texttt{sourceColumn}, que admite como máximo 10 valores distintos.
+\textbf{SageMaker Processing}: \texttt{OneHotEncoder(handle\_unknown="ignore",
+drop="first", min\_frequency=...)}. Los algoritmos integrados
+\emph{Linear Learner} y \emph{Factorization Machines} aceptan entrada
+dispersa en formato \texttt{recordIO-protobuf}.
+\end{aws}
+
+\subsection{Codificación binaria}
+
+\begin{definicion}
+Dada una numeración $\sigma:\mathcal C\to\{1,\dots,K\}$, sea $d$ el menor
+entero con $2^d-1\ge K$. La \emph{codificación binaria} asigna a $c$ el
+vector $\phi(c)\in\{0,1\}^d$ de los dígitos de $\sigma(c)$ en base $2$.
+\end{definicion}
+
+Con $d$ dígitos binarios se escriben los enteros de $0$ a $2^d-1$; como
+la numeración empieza en $1$ (convención de \texttt{category\_encoders}),
+se necesita $2^d-1\ge K$, es decir, $d=\lceil\log_2(K+1)\rceil$. Con los
+8 colores del capítulo, $d=4$; con $K=1000$, $d=10$. La codificación es
+inyectiva, porque la expansión binaria de un entero es única: no pierde
+información.
+
+\begin{proposicion}\label{prop:binaria}
+Si $K\ge5$, $\rango[\1\;\Phi]\le d+1<K$: un predictor lineal sobre la
+codificación binaria no representa todos los vectores de efectos.
+\end{proposicion}
+
+\begin{proof}
+$[\1\;\Phi]$ tiene $d+1$ columnas. Como
+$d=\lceil\log_2(K+1)\rceil<\log_2(K+1)+1$, basta ver que
+$\log_2(K+1)+2\le K$ para $K\ge5$: vale en $K=5$ ($\log_26+2\approx4.58$) y
+la función $K-\log_2(K+1)$ es creciente para $K\ge1$ (su derivada es
+$1-1/((K+1)\ln 2)>0$). La conclusión se sigue de la
+Proposición~\ref{prop:repr}.
+\end{proof}
+
+La geometría inducida depende de la numeración. Con la numeración por
+orden de aparición del capítulo (White $=1$, \dots, Brown $=8$), Red
+($0011$) y Pink ($0111$) difieren en un bit y White ($0001$) y Brown
+($1000$) en dos; con otra numeración, las distancias serían otras. En
+árboles, un corte sobre un bit separa los niveles según ese dígito, otra
+partición fijada por la numeración. La codificación binaria reduce la
+dimensión de \emph{one-hot} de $K$ a $\approx\log_2K$ a cambio de una
+estructura que no proviene de los datos.
+
+\begin{aws}
+No hay paso integrado en Data Wrangler ni en DataBrew. En \textbf{Data
+Wrangler}, \emph{Ordinal encode} seguido de una \emph{Custom formula} de
+Spark SQL por bit, \texttt{shiftright(color\_idx, j) \& 1},
+$j=0,\dots,d-1$. En \textbf{SageMaker Processing},
+\texttt{category\_encoders.BinaryEncoder}, instalado en el contenedor.
+\end{aws}
+
+\subsection{\emph{Hashing} de características}\label{sec:hashing}
+
+\paragraph{Qué se representa.} El \emph{hashing} se aplica a vectores
+indexados por \emph{símbolos}. Sea $\mathcal T$ el conjunto de símbolos
+posibles, que puede ser infinito o desconocido de antemano: todas las
+cadenas de caracteres que podrían aparecer como nivel de una categórica, o
+todos los tokens que podrían aparecer en un texto (\S\ref{sec:texto}). Sea
+$\R^{(\mathcal T)}$ el espacio de vectores $x=(x_t)_{t\in\mathcal T}$ con
+solo un número finito de coordenadas no nulas, con producto interno
+$\langle x,x'\rangle=\sum_tx_tx'_t$ (suma finita). Los dos casos del
+capítulo son:
+\begin{enumerate}[label=(\alph*)]
+\item una característica categórica: la observación con nivel $c$ se
+representa por $x=e_c$, con $x_c=1$ y $x_t=0$ para $t\ne c$ (la
+codificación \emph{one-hot} indexada por todos los niveles posibles);
+\item un documento: tras tokenizarlo, $x_t$ es el número de veces que el
+token $t$ aparece en él (la bolsa de palabras de \S\ref{sec:tfidf}).
+\end{enumerate}
+
+\paragraph{El problema.} Usar $x$ directamente requiere un diccionario que
+asigne a cada símbolo observado en entrenamiento una columna. Su memoria
+crece con el número de símbolos distintos (millones en filtros de
+\emph{spam} o en identificadores de usuario), y un símbolo que aparece por
+primera vez en producción no tiene columna. Weinberger et al.\ (2009)
+propusieron fijar de antemano el número de columnas.
+
+\begin{definicion}[\emph{Hashing} de características]
+Sean $m\in\N$, $h:\mathcal T\to\{1,\dots,m\}$ y
+$\xi:\mathcal T\to\{-1,+1\}$ dos funciones. La representación con
+\emph{hashing} de $x\in\R^{(\mathcal T)}$ es $\phi(x)\in\R^m$ con
+\[
+\phi_j(x)=\sum_{t:\,h(t)=j}\xi(t)\,x_t,\qquad j=1,\dots,m,
+\]
+suma finita porque $x$ tiene finitas coordenadas no nulas. En el caso (a),
+$\phi(e_c)=\xi(c)\,e_{h(c)}$: un vector con un solo $\pm1$ en la
+posición $h(c)$. En el caso (b), la coordenada $j$ suma, con signo, los
+conteos de los tokens que $h$ envía a $j$.
+\end{definicion}
+
+Dos símbolos $t\ne u$ \emph{colisionan} si $h(t)=h(u)$. En la práctica,
+$h$ y $\xi$ se calculan con una función hash de cadenas: scikit-learn
+aplica MurmurHash3 con semilla fija a la cadena del símbolo, toma
+$h(t)$ como el valor absoluto del resultado módulo $m$ y $\xi(t)$ como su
+signo. Son funciones deterministas: el mismo símbolo produce siempre la
+misma columna y el mismo signo, sin necesidad de guardar nada. Para
+analizarlas se usa el modelo siguiente, que describe una elección
+aleatoria de la función (por ejemplo, de su semilla), con $x$ fijo.
+
+\paragraph{Modelo de análisis.} (H1) Para símbolos distintos, los valores
+$h(t)$ son independientes y uniformes en $\{1,\dots,m\}$. (H2) Los
+valores $\xi(t)$ son independientes y uniformes en $\{-1,+1\}$. (H3) $h$ y
+$\xi$ son independientes. (En scikit-learn $h$ y $\xi$ provienen del mismo
+valor hash, así que (H3) es una idealización.)
+
+\begin{proposicion}[Insesgadez del producto interno]\label{prop:hash}
+Bajo (H2) y (H3), para todo par $x,x'\in\R^{(\mathcal T)}$,
+$\E\bigl[\langle\phi(x),\phi(x')\rangle\bigr]=\langle x,x'\rangle$.
+\end{proposicion}
+
+\begin{proof}
+Sea $S$ el conjunto finito de símbolos con $x_t\ne0$ o $x'_t\ne0$.
+Entonces
+$\langle\phi(x),\phi(x')\rangle=\sum_{j=1}^m\sum_{t,u\in S}\ind{h(t)=j}\ind{h(u)=j}\xi(t)\xi(u)x_tx'_u
+=\sum_{t,u\in S}\ind{h(t)=h(u)}\xi(t)\xi(u)x_tx'_u$. Por (H3), la
+esperanza de cada sumando es $\Prob(h(t)=h(u))\,\E[\xi(t)\xi(u)]\,x_tx'_u$.
+Si $t\ne u$, por (H2) $\E[\xi(t)\xi(u)]=\E[\xi(t)]\E[\xi(u)]=0$; si $t=u$,
+$\xi(t)^2=1$ y $\Prob(h(t)=h(t))=1$. Queda $\sum_{t\in S}x_tx'_t$.
+\end{proof}
+
+En el caso (a) con $c\ne c'$, $\langle e_c,e_{c'}\rangle=0$: en promedio
+sobre la elección de la función, los niveles distintos siguen siendo
+ortogonales, como en \emph{one-hot}. El signo es la causa: si
+$\xi\equiv1$, el sumando de un par $t\ne u$ tiene esperanza
+$\Prob(h(t)=h(u))x_tx'_u=x_tx'_u/m$ bajo (H1), y el producto interno queda
+sesgado en $\sum_{t\ne u}x_tx'_u/m$, positivo para conteos: las colisiones
+siempre sumarían. Con signo, se cancelan en promedio; por eso
+\texttt{FeatureHasher} usa \texttt{alternate\_sign=True} y en la salida
+del capítulo aparecen valores $\pm1$.
+
+\begin{proposicion}[Número de colisiones]\label{prop:colis}
+Bajo (H1), entre $K$ símbolos distintos el número esperado de pares que
+colisionan es $\binom K2/m$, y la probabilidad de que no haya ninguna
+colisión es $\prod_{i=1}^{K-1}(1-i/m)\le\exp\bigl(-K(K-1)/(2m)\bigr)$.
+Un símbolo dado colisiona con algún otro con probabilidad
+$1-(1-1/m)^{K-1}$.
+\end{proposicion}
+
+\begin{proof}
+Para un par, $\Prob(h(t)=h(u))=\sum_{j=1}^m\Prob(h(t)=j)\Prob(h(u)=j)=m\cdot
+m^{-2}=1/m$; la esperanza del número de pares en colisión es la suma sobre
+los $\binom K2$ pares de sus indicadoras. Para la segunda afirmación, se
+asignan los símbolos en orden: dado que los $i$ primeros ocupan $i$
+valores distintos, el siguiente evita esos valores con probabilidad
+$1-i/m$ por la independencia de (H1); el producto de estas probabilidades
+condicionales es la probabilidad de no colisión, y la cota usa $1-v\le
+e^{-v}$ y $\sum_{i=1}^{K-1}i=K(K-1)/2$. La tercera: el símbolo evita el
+valor de cada uno de los otros $K-1$ independientemente con probabilidad
+$1-1/m$.
+\end{proof}
+
+\begin{ejemplo}
+En el ejemplo del capítulo hay $K=8$ colores y $m=3$. El número esperado
+de pares en colisión es $28/3\approx9.3$. En la salida real, la columna
+\texttt{feature\_1} recibe White, Black y Blue (3 pares), la columna
+\texttt{feature\_2} recibe Green, Yellow, Pink y Brown (6 pares) y Red
+queda sola en \texttt{feature\_0}: 9 pares. El signo distingue a
+Black ($+1$) de White y Blue ($-1$), y a Yellow ($+1$) de Green, Pink y
+Brown ($-1$); pero White y Blue quedan con el mismo vector, y también
+Green, Pink y Brown. Por el principio del palomar, con $m=3$ columnas y
+dos signos hay a lo sumo $6$ vectores distintos para $8$ colores, así que
+alguna coincidencia era inevitable.
+\end{ejemplo}
+
+Si $K$ es del orden de $m$, la tercera fórmula da
+$1-(1-1/m)^{K-1}\approx1-e^{-1}\approx0.63$: la mayoría de los símbolos
+comparte columna. Por eso se usan valores de $m$ del orden de $2^{18}$ a
+$2^{20}$ y se acepta que colisionen sobre todo los símbolos raros.
+
+\paragraph{Contraste.} Frente a \emph{one-hot}, el \emph{hashing} fija la
+dimensión, no guarda diccionario y procesa símbolos nuevos sin
+reentrenar; a cambio no es inyectivo ni invertible (una columna no indica
+qué símbolos la forman) y $m$ es un hiperparámetro. Frente a la
+codificación binaria, ambas reducen dimensión, pero la binaria es inyectiva
+y el \emph{hashing} no; el \emph{hashing} conserva en promedio los
+productos internos de \emph{one-hot} (Proposición~\ref{prop:hash}) y la
+binaria introduce similitudes fijadas por la numeración. Como no tiene
+parámetros que ajustar, el \emph{hashing} no puede producir fuga, siempre
+que $h$, $\xi$ y $m$ sean los mismos en entrenamiento y en producción.
+
+\subsubsection*{Variante: codificación por similitud con \emph{min-hash}}
+
+Cuando los niveles son cadenas con variantes de escritura («juan perez»,
+«juan peres»), \emph{one-hot} y \emph{hashing} las tratan como símbolos
+ajenos. La codificación por similitud (Cerda y Varoquaux, 2022) representa
+cada nivel por sus fragmentos de tres caracteres.
+
+\begin{definicion}
+Sea $\mathcal A$ un alfabeto finito y $U=\mathcal A^3$ el conjunto de
+cadenas de longitud 3. Para una cadena $c$ de longitud $\ge3$, sea
+$S(c)\subset U$ el conjunto de sus subcadenas de tres caracteres
+consecutivos (sus \emph{3-gramas}). La \emph{similitud de Jaccard} de dos
+conjuntos no vacíos es $J(A,B)=|A\cap B|/|A\cup B|$. Para una biyección
+$\pi:U\to\{1,\dots,|U|\}$ (una permutación de $U$), el \emph{min-hash} de
+$S\subset U$ no vacío es $h_\pi(S)=\min_{g\in S}\pi(g)$.
+\end{definicion}
+
+Por ejemplo, «juan perez» y «juan peres» tienen 7 3-gramas en común de 9
+distintos en total, $J=7/9\approx0.78$; «juan perez» y «maria lopez» no
+comparten ninguno, $J=0$.
+
+\begin{proposicion}[Broder, 1997]\label{prop:minhash}
+Si $\pi$ es una permutación aleatoria uniforme de $U$, entonces
+$\Prob\bigl(h_\pi(A)=h_\pi(B)\bigr)=J(A,B)$ para $A,B\subset U$ no vacíos.
+\end{proposicion}
+
+\begin{proof}
+Sea $g^*$ el elemento de $A\cup B$ con menor valor de $\pi$. Como $\pi$ es
+uniforme, todos los elementos de $A\cup B$ tienen la misma probabilidad de
+ser $g^*$, así que $\Prob(g^*\in A\cap B)=|A\cap B|/|A\cup B|$. Si $g^*\in
+A\cap B$, es el mínimo de ambos conjuntos y $h_\pi(A)=h_\pi(B)=\pi(g^*)$.
+Si $g^*\in A\setminus B$, entonces $h_\pi(A)=\pi(g^*)$, mientras que
+$h_\pi(B)>\pi(g^*)$ porque todo elemento de $B$ está en $A\cup B$ y es
+distinto de $g^*$; análogamente si $g^*\in B\setminus A$. Luego
+$h_\pi(A)=h_\pi(B)$ si y solo si $g^*\in A\cap B$.
+\end{proof}
+
+La codificación con $d$ permutaciones independientes
+$\pi_1,\dots,\pi_d$ es
+\[
+\phi(c)=\bigl(h_{\pi_1}(S(c)),\dots,h_{\pi_d}(S(c))\bigr).
+\]
+La fracción
+de coordenadas en que coinciden $\phi(c)$ y $\phi(c')$ es un promedio de
+$d$ indicadoras independientes de media $J(S(c),S(c'))$, luego estima esa
+similitud sin sesgo y con varianza $J(1-J)/d$. Niveles con muchos 3-gramas
+comunes reciben vectores que coinciden en muchas coordenadas: la geometría
+refleja similitud de escritura, lo contrario de las colisiones arbitrarias
+del \emph{hashing}. Las implementaciones sustituyen las permutaciones
+aleatorias por funciones hash, que las aproximan.
+
+\begin{aws}
+\textbf{Data Wrangler}: \emph{Encode categorical} $\to$ \emph{Similarity
+encode} implementa la codificación por similitud (3-gramas y
+\emph{min-hash}, dimensión $d=30$ por defecto, salida como vector o
+columnas). El \emph{hashing} está en \emph{Featurize text} $\to$
+\emph{Vectorize} con el vectorizador \emph{Hashing} (número de columnas
+$m$ configurable), pensado para el caso (b); para una categórica (caso
+(a)) se usa \emph{Custom transform} con \texttt{FeatureHasher} de PySpark o
+de scikit-learn. \textbf{SageMaker Processing}:
+\texttt{FeatureHasher(n\_features=2**20, input\_type="string")}.
+\end{aws}
+
+% =====================================================================
+\section{Características categóricas: codificaciones supervisadas}
+% =====================================================================
+
+Con cardinalidad alta, las codificaciones anteriores fallan de algún modo:
+\emph{one-hot} estima un efecto por nivel con varianza $\sigma^2/n_i$; la
+ordinal impone un orden arbitrario; la binaria y el \emph{hashing}
+introducen estructura ajena a los datos. Para pérdida cuadrática, la
+función del nivel que mejor predice $Y$ es $\E[Y\mid X=c_i]$ (por el
+argumento de la demostración de la Proposición~\ref{prop:ar}, con la
+historia reemplazada por $X$), de modo que codificar cada nivel por una
+estimación de esa cantidad resume en un número lo que el nivel dice sobre
+$Y$. Es la idea del \emph{target encoding}; el \emph{weight of evidence}
+es su versión en la escala de log-momios.
+
+\subsection{\emph{Target encoding}}\label{sec:target}
+
+\paragraph{Notación.} En la muestra de entrenamiento, para el nivel $c_i$:
+$n_i$ es su número de observaciones, $L_i=\{k:x_k=c_i\}$ su conjunto de
+índices y $\bar y_i=n_i^{-1}\sum_{k\in L_i}y_k$ su media de la respuesta;
+$\bar y$ es la media global e $i(k)$ el índice del nivel de la
+observación $k$. Si $y\in\{0,1\}$, $\bar y_i$ es la proporción de eventos
+del nivel.
+
+\begin{definicion}[\emph{Target encoding}]
+Para $m\ge0$, la codificación del nivel $c_i$ es
+\[
+S_i=\lambda_i\bar y_i+(1-\lambda_i)\bar y,\qquad\lambda_i=\frac{n_i}{n_i+m}.
+\]
+Con $m=0$ es la media del nivel sin suavizar. A un nivel no visto en
+entrenamiento ($n_i=0$, $\lambda_i=0$) le corresponde $\bar y$. Si la
+respuesta tiene $C$ clases, se calcula una columna por clase $j$ con $y$
+reemplazada por $\ind{y=j}$.
+\end{definicion}
+
+El suavizado responde al problema señalado por Micci-Barreca (2001): un
+nivel observado una vez con $y=1$ tendría $\bar y_i=1$, una estimación
+basada en un solo dato. El peso $\lambda_i$ interpola entre la media del
+nivel, fiable si $n_i$ es grande, y la global, preferible si $n_i$ es
+pequeño; $m$ es el número de observaciones con el que ambas pesan lo
+mismo. Los dos resultados siguientes muestran que esta forma es la media
+posterior de modelos jerárquicos estándar.
+
+\begin{proposicion}[Respuesta binaria]\label{prop:betabin}
+Supóngase que, dado $\theta_i$, las respuestas del nivel $c_i$ son
+Bernoulli$(\theta_i)$ independientes, y que a priori
+$\theta_i\sim\text{Beta}(a,b)$ con $a,b>0$. Entonces
+\[
+\E[\theta_i\mid(y_k)_{k\in L_i}]=\frac{a+n_i\bar y_i}{a+b+n_i}
+=\lambda_i\bar y_i+(1-\lambda_i)\frac a{a+b},\qquad
+\lambda_i=\frac{n_i}{n_i+a+b}.
+\]
+\end{proposicion}
+
+\begin{proof}
+Con $s=n_i\bar y_i$ eventos, la verosimilitud es
+$\theta_i^s(1-\theta_i)^{n_i-s}$ y la densidad a priori es proporcional a
+$\theta_i^{a-1}(1-\theta_i)^{b-1}$; la posterior es proporcional a su
+producto, $\theta_i^{a+s-1}(1-\theta_i)^{b+n_i-s-1}$, que es la densidad
+Beta$(a+s,b+n_i-s)$, de media $(a+s)/(a+b+n_i)$. Escribiendo
+$a+s=(a+b)\frac a{a+b}+n_i\bar y_i$ y dividiendo por $a+b+n_i$ se obtiene
+la segunda forma.
+\end{proof}
+
+La codificación es la media posterior con media a priori $a/(a+b)$
+(estimada por $\bar y$) y $m=a+b$, que actúa como un número de
+observaciones previas.
+
+\begin{proposicion}[Respuesta continua]\label{prop:normnorm}
+Supóngase que, dado $\theta_i$, las respuestas del nivel son
+$N(\theta_i,\sigma^2)$ independientes, y que $\theta_i\sim N(\mu,\tau^2)$,
+con $\mu$, $\sigma^2>0$ y $\tau^2>0$ conocidos. Entonces la distribución
+de $\theta_i$ dada la muestra del nivel es $N(S_i,v_i)$ con
+\[
+S_i=\lambda_i\bar y_i+(1-\lambda_i)\mu,\qquad
+\lambda_i=\frac{n_i}{n_i+\sigma^2/\tau^2},\qquad
+v_i=\Bigl(\frac1{\tau^2}+\frac{n_i}{\sigma^2}\Bigr)^{-1}.
+\]
+Además $\E[(S_i-\theta_i)^2]=v_i<\sigma^2/n_i=\E[(\bar y_i-\theta_i)^2]$.
+\end{proposicion}
+
+\begin{proof}
+La verosimilitud de $\theta_i$ depende de los datos solo a través de
+$\bar y_i$, que dado $\theta_i$ es $N(\theta_i,\sigma^2/n_i)$. El
+logaritmo de la densidad posterior es, salvo constantes,
+$-\frac{n_i}{2\sigma^2}(\bar y_i-\theta_i)^2-\frac1{2\tau^2}(\theta_i-\mu)^2$,
+un polinomio de grado 2 en $\theta_i$ con coeficiente cuadrático
+$-\frac12\bigl(\frac{n_i}{\sigma^2}+\frac1{\tau^2}\bigr)=-\frac1{2v_i}$ y
+coeficiente lineal $\frac{n_i\bar y_i}{\sigma^2}+\frac\mu{\tau^2}$.
+Completando el cuadrado, la posterior es normal con varianza $v_i$ y media
+$v_i\bigl(\frac{n_i\bar y_i}{\sigma^2}+\frac\mu{\tau^2}\bigr)
+=\frac{n_i\tau^2\bar y_i+\sigma^2\mu}{n_i\tau^2+\sigma^2}=\lambda_i\bar
+y_i+(1-\lambda_i)\mu$. Para los errores: condicionando en los datos,
+$\E[(S_i-\theta_i)^2\mid\text{datos}]=v_i$ (la varianza posterior), que
+no depende de los datos; condicionando en $\theta_i$,
+$\E[(\bar y_i-\theta_i)^2\mid\theta_i]=\sigma^2/n_i$. La desigualdad
+$v_i<\sigma^2/n_i$ equivale a $\frac1{\tau^2}+\frac{n_i}{\sigma^2}>\frac{n_i}{\sigma^2}$.
+\end{proof}
+
+La proposición identifica $m=\sigma^2/\tau^2$: la dispersión dentro de los
+niveles frente a la dispersión entre sus medias. En la práctica $\mu$,
+$\sigma^2$ y $\tau^2$ se estiman con los datos (Bayes empírico).
+\texttt{TargetEncoder(smooth="auto")} de scikit-learn usa, según su
+documentación, $m_i=\sigma_i^2/\tau^2$, con $\sigma_i^2$ la varianza de
+$y$ dentro del nivel y $\tau^2$ la varianza de $y$ en toda la muestra; en
+el modelo, $\tau^2$ es la varianza entre medias de nivel, y por la ley de
+la varianza total la de $y$ es $\sigma^2+\tau^2>\tau^2$, de modo que esa
+elección suaviza menos que la regla del modelo.
+
+\begin{proposicion}[\emph{Ridge} sobre \emph{one-hot} es un suavizado]\label{prop:ridge-te}
+Supóngase que todos los niveles aparecen y sea $\lambda>0$. La función
+$F(\beta_0,\beta)=\sum_k(y_k-\beta_0-\beta_{i(k)})^2+\lambda\sum_{i=1}^K\beta_i^2$
+tiene un único minimizador, y en él el valor ajustado para el nivel $c_i$
+es $\hat\beta_0+\lambda_i(\bar y_i-\hat\beta_0)$ con
+$\lambda_i=n_i/(n_i+\lambda)$.
+\end{proposicion}
+
+\begin{proof}
+$F$ es cuadrática con hessiana $2(Z^\top Z+\operatorname{diag}(0,\lambda
+I_K))$, con $Z=[\1\;D]$. Si $v=(v_0,v_1,\dots,v_K)$ anula la forma
+cuadrática, $\|Zv\|^2+\lambda\sum_{i\ge1}v_i^2=0$, así que $v_i=0$ para
+$i\ge1$ y $Zv=v_0\1=0$, es decir, $v=0$: la hessiana es definida positiva,
+$F$ es estrictamente convexa y su único minimizador es el punto donde se
+anula el gradiente. La derivada respecto de $\beta_i$ es
+$-2\sum_{k\in L_i}(y_k-\beta_0-\beta_i)+2\lambda\beta_i$; igualada a cero,
+$(n_i+\lambda)\beta_i=n_i(\bar y_i-\beta_0)$, de donde
+$\hat\beta_i=\lambda_i(\bar y_i-\hat\beta_0)$, y el valor ajustado del
+nivel es $\hat\beta_0+\hat\beta_i$.
+\end{proof}
+
+La penalización \emph{ridge} sobre $K$ columnas \emph{one-hot} y el
+\emph{target encoding} en una columna producen la misma contracción, con
+$m=\lambda$ y $\hat\beta_0$ en el papel de la media a priori. La
+diferencia práctica es que el \emph{target encoding} reduce la dimensión a
+$1$ antes de modelar, y la columna resultante puede usarse con cualquier
+algoritmo.
+
+\subsubsection{Fuga de información dentro del entrenamiento}
+
+La Proposición~\ref{prop:test} exige no usar la muestra de prueba para
+ajustar; el resultado siguiente muestra que, además, usar la propia
+observación en su codificación distorsiona el entrenamiento.
+
+\begin{proposicion}[Codificación dentro de la muestra]\label{prop:te-fuga}
+Supóngase que $y_k=\theta_{i(k)}+\varepsilon_k$, con constantes
+$\theta_1,\dots,\theta_K$ y errores $\varepsilon_1,\dots,\varepsilon_n$
+independientes, de media $0$ y varianza $\sigma^2$, y considérense fijos
+los niveles de las observaciones. Si $S_{i(k)}$ se calcula con toda la
+muestra de entrenamiento, entonces, con $i=i(k)$,
+\[
+\Cov\bigl(S_{i},\varepsilon_k\bigr)=\lambda_i\frac{\sigma^2}{n_i}+(1-\lambda_i)\frac{\sigma^2}{n}>0,
+\]
+mientras que para una observación nueva, cuyo error es independiente de
+los de entrenamiento, la covarianza correspondiente es $0$.
+\end{proposicion}
+
+\begin{proof}
+$\bar y_i=\theta_i+n_i^{-1}\sum_{l\in L_i}\varepsilon_l$ y
+$\bar y=n^{-1}\sum_l\theta_{i(l)}+n^{-1}\sum_l\varepsilon_l$. Por la
+independencia de los errores, $\Cov(\varepsilon_l,\varepsilon_k)$ vale
+$\sigma^2$ si $l=k$ y $0$ si no, de modo que
+$\Cov(\bar y_i,\varepsilon_k)=\sigma^2/n_i$ (pues $k\in L_i$) y
+$\Cov(\bar y,\varepsilon_k)=\sigma^2/n$; $S_i$ es la combinación lineal
+de $\bar y_i$ y $\bar y$ con coeficientes $\lambda_i$ y $1-\lambda_i$. Para
+una observación nueva, su error no aparece en $\bar y_i$ ni en $\bar y$ y
+es independiente de todos los que aparecen.
+\end{proof}
+
+En entrenamiento, la característica contiene parte del error de la propia
+observación y el modelo aprende a apoyarse en ella; en producción esa parte
+no existe. Con $n_i=1$ y $m=0$, $S_{i(k)}=y_k$: la característica es la
+respuesta.
+
+\begin{contraejemplo}[\emph{Leave-one-out}]
+Codificar cada observación con la media de las demás de su nivel,
+$S_{-k}=(T_i-y_k)/(n_i-1)$ con $T_i=\sum_{l\in L_i}y_l$ y $n_i\ge2$,
+elimina la covarianza anterior, porque $\varepsilon_k$ ya no interviene.
+Pero dentro del nivel $S_{-k}$ es una función afín estrictamente
+decreciente de $y_k$, con los mismos $T_i$ y $n_i$ para todas las
+observaciones del nivel. En un nivel con respuestas $(1,1,0,0)$, las
+observaciones con $y=1$ reciben $S_{-k}=1/3$ y las de $y=0$, $S_{-k}=2/3$:
+el corte $S_{-k}\le1/2$ las clasifica todas correctamente en
+entrenamiento, mientras que en producción toda observación del nivel
+recibe la media del nivel, $1/2$, y el corte no aporta nada.
+\end{contraejemplo}
+
+\begin{proposicion}[Codificación cruzada]\label{prop:crossfit}
+Particiónese el conjunto de índices de entrenamiento en $V$ pliegues
+$F_1,\dots,F_V$ y, para $k\in F_v$, sea $S^{\mathrm{cf}}_k$ la codificación
+del nivel de $k$ calculada, con la fórmula de la definición, usando solo las
+observaciones fuera de $F_v$. Bajo el modelo de la
+Proposición~\ref{prop:te-fuga} y con los pliegues fijos:
+(a) $S^{\mathrm{cf}}_k$ es independiente de $\varepsilon_k$; (b) dos
+observaciones del mismo pliegue y el mismo nivel reciben el mismo valor.
+\end{proposicion}
+
+\begin{proof}
+(a) $S^{\mathrm{cf}}_k$ es función de las constantes $\theta_i$ y de los
+errores $\{\varepsilon_l:l\notin F_v\}$, independientes de
+$\varepsilon_k$ porque $k\in F_v$. (b) Si $k,k'\in F_v$ tienen el mismo
+nivel, ambas codificaciones se calculan con las mismas observaciones y la
+misma fórmula.
+\end{proof}
+
+La parte (b) es la que falla en \emph{leave-one-out}: dentro de un pliegue
+la codificación de un nivel es constante y no puede ordenar las respuestas
+de ese nivel. Este esquema es el de \texttt{TargetEncoder.fit\_transform}
+de scikit-learn ($V=5$ por defecto); por eso \texttt{fit(X,y).transform(X)}
+no coincide con \texttt{fit\_transform(X,y)}. En validación, prueba y
+producción se usa \texttt{transform}, con la codificación calculada sobre
+todo el entrenamiento, independiente del error de la observación nueva
+(Proposición~\ref{prop:te-fuga}).
+
+\begin{observacion}[Estadísticos ordenados de CatBoost]
+Prokhorenkova et al.\ (2018) toman una permutación aleatoria
+$\varsigma$ de los índices de entrenamiento, una constante $\mu_0$ fijada
+de antemano, y codifican la observación $k$ con
+\[
+S^{\mathrm{ord}}_k=\frac{\sum_{l:\,\varsigma(l)<\varsigma(k),\,i(l)=i(k)}y_l+m\,\mu_0}{\#\{l:\varsigma(l)<\varsigma(k),\,i(l)=i(k)\}+m}.
+\]
+$S^{\mathrm{ord}}_k$ solo depende de respuestas de observaciones
+anteriores a $k$ en la permutación, y el argumento de la
+Proposición~\ref{prop:crossfit}(a) da su independencia de $\varepsilon_k$.
+A cambio, las primeras observaciones de la permutación se codifican con
+pocos datos; CatBoost usa varias permutaciones para reducir esa varianza.
+\end{observacion}
+
+\subsubsection{El orden de las medias y los árboles}
+
+El resultado siguiente, de Fisher (1958) para regresión y de Breiman et
+al.\ (1984) para clasificación binaria, explica por qué el \emph{target
+encoding} es adecuado para árboles.
+
+\begin{lema}[Descomposición de la suma de cuadrados]\label{lem:anova}
+Sea $N$ un conjunto de índices particionado en $N_A$ y $N_B$ no vacíos,
+de tamaños $n_A,n_B$ y medias $\bar y_A,\bar y_B$, y sea $\bar y_N$ la
+media en $N$. Entonces
+$\SC(N)=\SC(N_A)+\SC(N_B)+n_A(\bar y_A-\bar y_N)^2+n_B(\bar y_B-\bar y_N)^2$.
+\end{lema}
+
+\begin{proof}
+Para $k\in N_A$, $y_k-\bar y_N=(y_k-\bar y_A)+(\bar y_A-\bar y_N)$; al
+elevar al cuadrado y sumar sobre $N_A$, el término cruzado es
+$2(\bar y_A-\bar y_N)\sum_{k\in N_A}(y_k-\bar y_A)=0$. Se obtiene
+$\SC(N_A)+n_A(\bar y_A-\bar y_N)^2$; lo mismo para $N_B$, y se suma.
+\end{proof}
+
+Así, la reducción $\Delta$ de la Definición~\ref{def:cart} para una
+partición de $N$ en $N_A$ y $N_B$ es
+$\mathcal B=n_A(\bar y_A-\bar y_N)^2+n_B(\bar y_B-\bar y_N)^2$.
+
+\begin{teorema}\label{teo:fisher}
+Sea $N$ un nodo en el que aparecen los niveles $c_1,\dots,c_K$, con
+$n_i>0$ observaciones y medias $\bar y_i$ en $N$. Para $A\subset\{1,\dots,K\}$
+no vacío y distinto del total, sea $N_A$ el conjunto de observaciones de
+$N$ con nivel en $A$, $N_B=N\setminus N_A$, y $\mathcal B(A)$ la cantidad
+anterior. Existe un maximizador de $\mathcal B$ formado por los primeros
+niveles de una ordenación por $\bar y_i$ no decreciente. En consecuencia,
+examinando los $K-1$ cortes de la codificación $\bar y_i$ (calculada en
+el nodo) se encuentra la mejor de las $2^{K-1}-1$ particiones.
+\end{teorema}
+
+\begin{proof}
+Si todas las $\bar y_i$ son iguales, $\bar y_A=\bar y_B=\bar y_N$ para
+todo $A$ y todo $A$ es maximizador. En otro caso, sea $A$ un maximizador.
+El conjunto $A_0$ de niveles con media mínima cumple
+$\bar y_{A_0}<\bar y_N$, luego $\mathcal B(A_0)>0$; por tanto
+$\mathcal B(A)>0$ y $\bar y_A\ne\bar y_B$ (si fueran iguales, ambas
+coincidirían con $\bar y_N$ y $\mathcal B(A)=0$). Intercambiando los
+nombres si hace falta, $\bar y_A<\bar y_B$. Sean $\delta_i=\bar y_i-\bar y_N$,
+$\alpha=\bar y_A-\bar y_N$, $\beta=\bar y_B-\bar y_N$ (luego
+$\alpha<\beta$), $s_A=n_A\alpha$, $s_B=n_B\beta$ y $G(s,w)=s^2/w$ para
+$w>0$, de modo que $\mathcal B(A)=G(s_A,n_A)+G(s_B,n_B)$.
+
+\emph{Convexidad de $G$.} Su hessiana es
+$\begin{psmallmatrix}2/w&-2s/w^2\\-2s/w^2&2s^2/w^3\end{psmallmatrix}$, de
+traza positiva y determinante $4s^2/w^4-4s^2/w^4=0$; sus autovalores son
+$0$ y un número positivo, y $G$ es convexa en $\{w>0\}$.
+
+\emph{Traslado parcial de un nivel.} Para $i\in A$ y $t\in[0,1]$, sea
+$\Psi(t)=G(s_A-tn_i\delta_i,\,n_A-tn_i)+G(s_B+tn_i\delta_i,\,n_B+tn_i)$. Como el nivel
+$i$ aporta $n_i$ observaciones y $n_i\delta_i$ a la suma
+$s_A=\sum_{k\in N_A}(y_k-\bar y_N)$, $\Psi(1)$ es el valor de $\mathcal
+B$ con el nivel $i$ trasladado a $B$, es decir, $\mathcal B(A\setminus\{i\})$
+(o $0$ si $A=\{i\}$, por la continuidad que se ve enseguida), y
+$\Psi(0)=\mathcal B(A)$. Cada sumando es $G$ compuesta con una función
+afín de $t$, así que $\Psi$ es convexa en $[0,1)$; si $A=\{i\}$, el primer
+sumando vale $(1-t)n_i\delta_i^2$ para $t<1$ y tiende a $0$, y definiendo
+$\Psi(1)$ por continuidad la convexidad se conserva en $[0,1]$. La
+maximalidad de $A$ da $\Psi(1)\le\Psi(0)$, y por convexidad la derivada
+por la derecha en $0$ cumple $\Psi'(0^+)\le\Psi(1)-\Psi(0)\le0$.
+
+\emph{Cálculo.} $\partial_sG=2s/w$ y $\partial_wG=-s^2/w^2$ valen $2\alpha$ y
+$-\alpha^2$ en $(s_A,n_A)$, y $2\beta$ y $-\beta^2$ en $(s_B,n_B)$. Por la
+regla de la cadena,
+\[
+\Psi'(0^+)=n_i\bigl(-2\alpha \delta_i+\alpha^2+2\beta \delta_i-\beta^2\bigr)=n_i(\beta-\alpha)(2\delta_i-\alpha-\beta).
+\]
+Como $\beta>\alpha$, $\Psi'(0^+)\le0$ equivale a $\bar y_i\le\tau$, con
+$\tau=\bar y_N+\frac{\alpha+\beta}2=\frac{\bar y_A+\bar y_B}2$. El mismo
+cálculo trasladando un nivel $j\in B$ hacia $A$ da
+$n_j(\beta-\alpha)(\alpha+\beta-2\delta_j)\le0$, es decir, $\bar y_j\ge\tau$.
+
+\emph{Conclusión.} Los niveles de $A$ tienen media $\le\tau$ y los de $B$,
+media $\ge\tau$. Ordenando por $\bar y_i$ y colocando, entre los empatados
+en $\tau$, primero los de $A$, el conjunto $A$ ocupa las primeras
+posiciones. Si $y\in\{0,1\}$, $\SC(N)=|N|\hat p(1-\hat p)$ con $\hat p$ la
+proporción de unos en $N$, que es $|N|/2$ veces el índice de Gini
+$2\hat p(1-\hat p)$; el criterio de Gini es entonces proporcional al de
+suma de cuadrados, y el resultado vale igual.
+\end{proof}
+
+Con una codificación ordinal en un orden arbitrario, un corte examina
+$K-1$ de las $2^{K-1}-1$ particiones y en general no la mejor; con el
+orden de las medias, esas $K-1$ contienen a la mejor. LightGBM usa esta
+idea para sus cortes categóricos. El teorema se refiere a las medias
+\emph{del nodo}; una columna codificada una vez con toda la muestra las
+da exactamente solo en la raíz.
+
+\paragraph{Ventajas y desventajas.} A favor: dimensión $1$ para cualquier
+$K$; contracción óptima bajo los modelos jerárquicos
+(Proposiciones~\ref{prop:betabin} y~\ref{prop:normnorm}); valor definido
+para niveles nuevos; orden óptimo para cortes de árboles
+(Teorema~\ref{teo:fisher}). En contra: usa la respuesta, así que requiere
+codificación cruzada en entrenamiento y ajuste sin la muestra de prueba
+(Proposiciones~\ref{prop:test} y~\ref{prop:te-fuga}); un predictor lineal
+sobre $S$ solo representa efectos $\beta_0+\beta S_i$
+(Proposición~\ref{prop:repr} con $d=1$); no capta interacciones del nivel
+con otras variables; y la tabla de codificación es un artefacto que debe
+versionarse y aplicarse igual en producción.
+
+\begin{aws}
+Ni Data Wrangler (Canvas) ni Glue DataBrew incluyen \emph{target encoding}
+entre sus transformaciones (documentación revisada el 24 de septiembre de
+2026). Un \emph{custom transform} de Data Wrangler que calcule medias por
+nivel lo haría con todos los datos del flujo, sin pliegues, en la situación
+de la Proposición~\ref{prop:te-fuga}. Tres vías respetan los resultados
+anteriores.
+\begin{enumerate}[leftmargin=*]
+\item \textbf{SageMaker Processing} con un script que use
+\texttt{TargetEncoder} (scikit-learn $\ge1.3$; se verifica la versión del
+contenedor o se instala):
+\begin{lstlisting}[language=Python]
+from sklearn.preprocessing import TargetEncoder
+import joblib, pandas as pd
+tr = pd.read_parquet("/opt/ml/processing/train/")
+te = pd.read_parquet("/opt/ml/processing/test/")
+enc = TargetEncoder(smooth="auto", cv=5, target_type="binary")
+# entrenamiento: codificación cruzada
+tr["cp_te"] = enc.fit_transform(tr[["codigo_postal"]], tr["y"]).ravel()
+# prueba: tabla calculada con todo el entrenamiento
+te["cp_te"] = enc.transform(te[["codigo_postal"]]).ravel()
+joblib.dump(enc, "/opt/ml/processing/model/target_encoder.joblib")
+\end{lstlisting}
+El codificador guardado en S3 se carga en el contenedor de inferencia (por
+ejemplo, el primero de un \emph{inference pipeline}).
+\item \textbf{Algoritmo integrado CatBoost} de SageMaker, que aplica
+internamente los estadísticos ordenados. Las columnas categóricas se
+declaran en \texttt{categorical\_index.json}, junto a los datos de
+entrenamiento (CSV sin encabezado con la respuesta en la primera columna;
+el canal de entrenamiento debe apuntar a un prefijo de S3):
+\begin{lstlisting}
+{"cat_index_list": [1, 3, 5]}
+\end{lstlisting}
+\item \textbf{AWS Glue} (PySpark) para volúmenes grandes: se asigna un
+pliegue a cada fila, se calculan con \texttt{groupBy} los conteos y sumas
+por nivel y pliegue, y cada fila se codifica con las sumas de los demás
+pliegues. La tabla final (nivel, $n_i$, $S_i$) puede publicarse en un
+\emph{feature group} de \textbf{Feature Store} con el nivel como
+identificador, para consultarla desde el \emph{online store} en inferencia.
+\end{enumerate}
+\end{aws}
+
+\subsection{\emph{Weight of evidence} e \emph{information value}}\label{sec:woe}
+
+Turing y Good (1950) llamaron peso de la evidencia al logaritmo del
+cociente de verosimilitudes que una observación aporta a favor de una
+hipótesis frente a otra. La banca lo adoptó para construir
+\emph{scorecards} de crédito, que debían ser modelos aditivos, con una
+contribución por variable legible por un analista; la forma que sigue es la
+de Siddiqi (2006).
+
+\paragraph{Notación.} La respuesta es binaria: $Y=1$ denota el evento
+(«malo») e $Y=0$ su ausencia («bueno»). $X$ es categórica o una variable
+continua discretizada (\S\ref{sec:discretizacion}). En entrenamiento,
+$n_i^{(0)}$ y $n_i^{(1)}$ son los números de buenos y de malos con nivel
+$c_i$, y $N^{(0)}=\sum_in_i^{(0)}$, $N^{(1)}=\sum_in_i^{(1)}$.
+
+\begin{definicion}
+Supóngase $n_i^{(0)}>0$ y $n_i^{(1)}>0$ para todo $i$. Con
+$g_i=n_i^{(0)}/N^{(0)}$ y $b_i=n_i^{(1)}/N^{(1)}$ (las distribuciones de
+$X$ entre buenos y entre malos),
+\[
+\WoE_i=\log\frac{g_i}{b_i},\qquad\IV=\sum_{i=1}^K(g_i-b_i)\WoE_i .
+\]
+\end{definicion}
+
+Algunos textos usan el cociente inverso, lo que cambia el signo del WoE y
+no el IV. La hipótesis de conteos positivos es necesaria: un nivel sin
+malos tendría $\WoE=+\infty$. Las soluciones habituales son sumar $0.5$ a
+cada conteo o fusionar el nivel con otro; ambas son formas de suavizado,
+comparables con $m$ en el \emph{target encoding}.
+
+\begin{proposicion}[WoE y log-momios]\label{prop:woe-bayes}
+En la población, sean $\pi=\Prob(Y=1)\in(0,1)$, $G_i=\Prob(X=c_i\mid Y=0)>0$,
+$B_i=\Prob(X=c_i\mid Y=1)>0$ y $W_i=\log(G_i/B_i)$. Entonces
+$\logit\Prob(Y=1\mid X=c_i)=\logit\pi-W_i$, donde $\logit
+u=\log(u/(1-u))$. En la muestra, con $\hat\pi=N^{(1)}/(N^{(0)}+N^{(1)})$ y
+$\bar y_i=n_i^{(1)}/(n_i^{(0)}+n_i^{(1)})$,
+$\WoE_i=\logit\hat\pi-\logit\bar y_i$.
+\end{proposicion}
+
+\begin{proof}
+Por la regla de Bayes,
+$\frac{\Prob(Y=1\mid X=c_i)}{\Prob(Y=0\mid X=c_i)}=\frac{\pi B_i}{(1-\pi)G_i}$;
+tomando logaritmos, $\logit\Prob(Y=1\mid X=c_i)=\logit\pi-\log(G_i/B_i)$.
+En la muestra,
+$\frac{\bar y_i}{1-\bar y_i}=\frac{n_i^{(1)}}{n_i^{(0)}}=\frac{b_iN^{(1)}}{g_iN^{(0)}}
+=\frac{b_i}{g_i}\cdot\frac{\hat\pi}{1-\hat\pi}$, y se toman logaritmos.
+\end{proof}
+
+\begin{corolario}\label{cor:woe-te}
+$\WoE_i$ es una función estrictamente decreciente de $\bar y_i$, el
+\emph{target encoding} sin suavizar. Ambas codificaciones ordenan los
+niveles de la misma manera (en sentido inverso), el
+Teorema~\ref{teo:fisher} se aplica igual a las dos, y un árbol produce las
+mismas hojas con cualquiera de ellas.
+\end{corolario}
+
+\begin{proof}
+$\logit$ es estrictamente creciente en $(0,1)$ y
+$\WoE_i=\logit\hat\pi-\logit\bar y_i$, luego $-\WoE_i$ es una función
+estrictamente creciente de $\bar y_i$ y la Proposición~\ref{prop:arbol} da
+las mismas hojas con $\bar y$ y con $-\WoE$. Falta ver que $\WoE$ y
+$-\WoE$ dan las mismas hojas. Si $v_1<\dots<v_r$ son los valores distintos
+de una columna en un nodo, sus cortes producen las particiones
+$\{\{k:v\le v_i\},\{k:v>v_i\}\}$, $i<r$ (Lema~\ref{lem:cortes}); los
+de la columna opuesta producen $\{\{k:v\ge v_{i+1}\},\{k:v<v_{i+1}\}\}$,
+que como particiones no ordenadas son las mismas. Como el criterio y el
+desempate de la Definición~\ref{def:cart} solo dependen de la partición no
+ordenada, el argumento de la Proposición~\ref{prop:arbol} se aplica
+sin cambios.
+\end{proof}
+
+La diferencia está en la escala: el \emph{target encoding} está en la
+escala de probabilidad y el WoE en la de log-momios, que es la escala
+lineal de la regresión logística.
+
+\begin{proposicion}[Regresión logística sobre el WoE]\label{prop:woe-logit}
+Supóngase $0<\bar y_i<1$ para todo $i$. En la regresión logística de $y$
+sobre la columna $\WoE_{i(k)}$, los coeficientes
+$(\hat\beta_0,\hat\beta_1)=(\logit\hat\pi,-1)$ maximizan la verosimilitud,
+y las probabilidades ajustadas son las proporciones $\bar y_i$.
+\end{proposicion}
+
+\begin{proof}
+Todo modelo que asigne a las observaciones del nivel $c_i$ una misma
+probabilidad $p_i$ tiene log-verosimilitud
+$\sum_in_i\bigl(\bar y_i\log p_i+(1-\bar y_i)\log(1-p_i)\bigr)$, con
+$n_i=n_i^{(0)}+n_i^{(1)}$. Cada sumando es una función estrictamente cóncava
+de $p_i\in(0,1)$ con derivada nula en $p_i=\bar y_i$, así que el máximo
+sobre todos esos modelos se alcanza en $p_i=\bar y_i$. La regresión
+logística sobre la columna WoE asigna a cada nivel una probabilidad común,
+luego su verosimilitud no supera ese máximo; con
+$(\logit\hat\pi,-1)$ da $\logit p_i=\logit\hat\pi-\WoE_i=\logit\bar y_i$
+(Proposición~\ref{prop:woe-bayes}) y lo alcanza.
+\end{proof}
+
+\begin{proposicion}[WoE y clasificador bayesiano ingenuo]\label{prop:woe-nb}
+Sean $X_1,\dots,X_p$ categóricas condicionalmente independientes dado
+$Y$, con $\Prob(X_j=x_j\mid Y=y)>0$, y
+$W_j(x_j)=\log\frac{\Prob(X_j=x_j\mid Y=0)}{\Prob(X_j=x_j\mid Y=1)}$.
+Entonces
+\[
+\logit\Prob(Y=1\mid X_1=x_1,\dots,X_p=x_p)=\logit\pi-\sum_{j=1}^pW_j(x_j).
+\]
+\end{proposicion}
+
+\begin{proof}
+Por la independencia condicional,
+$\Prob(X_1=x_1,\dots,X_p=x_p\mid Y=y)=\prod_j\Prob(X_j=x_j\mid Y=y)$. Por
+la regla de Bayes, el cociente $\Prob(Y=1\mid x)/\Prob(Y=0\mid x)$ es
+$\frac{\pi}{1-\pi}\prod_j\frac{\Prob(X_j=x_j\mid Y=1)}{\Prob(X_j=x_j\mid Y=0)}$,
+cuyo logaritmo es $\logit\pi-\sum_jW_j(x_j)$.
+\end{proof}
+
+Una regresión logística sobre las columnas $\WoE_j$ con coeficientes
+libres $\beta_j$ contiene como caso particular ($\beta_j=-1$ para todo $j$)
+al clasificador bayesiano ingenuo; coeficientes alejados de $-1$ corrigen
+la dependencia entre variables. Esa aditividad, un término por variable en
+la escala de log-momios, es la que permite traducir el modelo a una tabla
+de puntos.
+
+\begin{proposicion}[El IV es una divergencia simétrica]\label{prop:iv}
+$\IV=\mathrm{KL}(g\|b)+\mathrm{KL}(b\|g)$, donde
+$\mathrm{KL}(g\|b)=\sum_ig_i\log(g_i/b_i)$ es la divergencia de
+Kullback--Leibler. En consecuencia $\IV\ge0$, con igualdad si y solo si
+$g_i=b_i$ para todo $i$. Además, cada sumando $(g_i-b_i)\WoE_i$ es $\ge0$.
+\end{proposicion}
+
+\begin{proof}
+La primera igualdad es separar $\sum_i(g_i-b_i)\log(g_i/b_i)$ en
+$\sum_ig_i\log(g_i/b_i)+\sum_ib_i\log(b_i/g_i)$. Por la desigualdad de
+Jensen para la función cóncava $\log$ y la distribución $(g_i)$,
+$-\mathrm{KL}(g\|b)=\sum_ig_i\log(b_i/g_i)\le\log\sum_ig_i(b_i/g_i)=\log\sum_ib_i=0$,
+con igualdad si y solo si $b_i/g_i$ es constante, y la constante es $1$
+porque $\sum_ig_i=\sum_ib_i=1$; lo mismo para $\mathrm{KL}(b\|g)$. En
+cuanto al signo, $g_i-b_i$ y $\log(g_i/b_i)$ son ambos positivos, ambos
+negativos o ambos nulos.
+\end{proof}
+
+La condición $g_i=b_i$ para todo $i$ significa que en la muestra la
+distribución de $X$ es la misma entre buenos y malos: independencia
+empírica. De aquí sale un sesgo del IV estimado. Supóngase que en la
+población $X$ e $Y$ son independientes, de modo que el IV poblacional es
+$0$, que $K\ge2$ y que todas las combinaciones (nivel, clase) tienen
+probabilidad positiva. El IV muestral es $\ge0$, y hay configuraciones de
+probabilidad positiva en que no vale $0$ (por ejemplo, todos los buenos en
+$c_1$ y todos los malos en $c_2$), así que su esperanza es estrictamente
+positiva. Como cada nivel aporta un sumando no negativo, más niveles dan
+más ocasiones de sumar ruido positivo. Los umbrales usados en la industria
+(Siddiqi: $<0.02$ inútil, $0.02$--$0.1$ débil, $0.1$--$0.3$ medio, $>0.3$
+fuerte) son convenciones empíricas.
+
+\begin{ejemplo}\label{ej:woe}
+Mil solicitudes con 100 malos ($\hat\pi=0.1$) y una variable con tres
+niveles:
+\begin{center}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+Nivel & $n_i$ & malos & $\bar y_i$ & $g_i$ & $b_i$ & $\WoE_i$ & $(g_i-b_i)\WoE_i$\\
+\midrule
+A & 500 & 30 & 0.060 & 0.5222 & 0.30 & $0.554$ & 0.123\\
+B & 400 & 50 & 0.125 & 0.3889 & 0.50 & $-0.251$ & 0.028\\
+C & 100 & 20 & 0.200 & 0.0889 & 0.20 & $-0.811$ & 0.090\\
+\midrule
+&&&&&&$\IV$&0.241\\
+\bottomrule
+\end{tabular}
+\end{center}
+Para A, $g=470/900$ y $b=30/100$. Se verifica la
+Proposición~\ref{prop:woe-bayes}:
+$\logit0.1-\logit0.06=-2.197-(-2.752)=0.554$. El \emph{target encoding}
+con $m=10$ da $(0.0608,\,0.1244,\,0.1909)$: el mismo orden, con el nivel
+pequeño C más contraído hacia $0.1$; con $m=100$, $(0.0667,\,0.12,\,0.15)$.
+\end{ejemplo}
+
+\paragraph{Contraste entre \emph{target encoding} y WoE.}
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lYY@{}}
+\toprule
+& \emph{Target encoding} & WoE\\
+\midrule
+Respuesta & binaria, multiclase o continua & binaria\\
+Escala & probabilidad o media & log-momios\\
+Suavizado & media posterior; $m$ estimable (Prop.~\ref{prop:normnorm}) & $+0.5$ en los conteos o fusión de niveles\\
+Modelo natural & árboles (Teor.~\ref{teo:fisher}) y cualquier otro & regresión logística (Prop.~\ref{prop:woe-logit} y~\ref{prop:woe-nb})\\
+Variables continuas & no se aplica & tras discretizar\\
+Diagnóstico asociado & --- & IV por variable\\
+Fuga & sí; requiere codificación cruzada & sí; el mismo tratamiento\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Ambas inducen el mismo orden de niveles (Corolario~\ref{cor:woe-te}).
+
+\begin{aws}
+No hay transformación de WoE ni de IV en Data Wrangler, DataBrew ni
+Canvas, y scikit-learn tampoco la incluye. Una implementación consta de:
+(i) discretizar las continuas con \texttt{BUCKETIZATION} de DataBrew o
+\texttt{KBinsDiscretizer}; (ii) un trabajo de \textbf{SageMaker
+Processing} (o de \textbf{AWS Glue} en PySpark para volúmenes grandes) que
+calcule con entrenamiento la tabla de conteos y el WoE, con $0.5$ sumado a
+cada conteo, y la guarde en S3 o en Feature Store:
+\begin{lstlisting}[language=Python]
+import numpy as np, pandas as pd
+def tabla_woe(x, y, eps=0.5):
+    t = pd.crosstab(x, y)                  # columnas: 0 (buenos), 1 (malos)
+    g = (t[0] + eps) / (t[0] + eps).sum()
+    b = (t[1] + eps) / (t[1] + eps).sum()
+    woe = np.log(g / b)
+    return woe, ((g - b) * woe).sum()     # (WoE por nivel, IV)
+woe, iv = tabla_woe(train["nivel"], train["malo"])
+train["nivel_woe"] = train["nivel"].map(woe)
+test["nivel_woe"]  = test["nivel"].map(woe).fillna(0.0)
+\end{lstlisting}
+A un nivel no visto se le asigna $0$: por la
+Proposición~\ref{prop:woe-bayes}, $\WoE=0$ deja la probabilidad en su
+valor a priori, es decir, no aporta evidencia. (iii) La regresión
+logística, con el algoritmo integrado \textbf{Linear Learner}
+(\texttt{predictor\_type="binary\_classifier"}) o con scikit-learn. Con
+alta cardinalidad se usa la codificación cruzada de la
+Proposición~\ref{prop:crossfit}.
+\end{aws}
+
+\subsection{Resumen de codificaciones categóricas}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}lcccY@{}}
+\toprule
+Codificación & $d$ & $\rango[\1\;\Phi]$ & Usa $y$ & Observaciones\\
+\midrule
+Ordinal & 1 & 2 & no & efectos lineales en el orden elegido\\
+\emph{One-hot} & $K$ ($K-1$) & $K$ & no & saturada; niveles equidistantes; varianza $\sigma^2/n_i$\\
+Binaria & $\lceil\log_2(K+1)\rceil$ & $\le d+1$ & no & inyectiva; similitudes fijadas por la numeración\\
+\emph{Hashing} & $m$ & $\le m+1$ & no & colisiones; sin diccionario; símbolos nuevos sin costo\\
+Similitud & $d$ fijo & --- & no & coincidencias según 3-gramas comunes\\
+\emph{Target encoding} & 1 (o $C$) & 2 & sí & orden óptimo para árboles; codificación cruzada\\
+WoE & 1 & 2 & sí & escala logit; respuesta binaria\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% =====================================================================
+\section{Series de tiempo}
+% =====================================================================
+
+Sea $(y_t)_{t\in\Z}$ un proceso real observado en instantes
+equiespaciados $t=1,\dots,T$, y sea $\mathcal H_t=(y_s)_{s<t}$ su
+\emph{historia} antes de $t$. Para predecir $y_t$ solo pueden usarse
+funciones de $\mathcal H_t$ y funciones conocidas de $t$ (el calendario).
+Una característica que dependa de $y_t$ o de valores posteriores es fuga de
+información: en producción no existe cuando hay que predecir.
+
+\subsection{Descomposición de la marca de tiempo}
+
+De la marca de tiempo de $t$ se extraen componentes de calendario: mes,
+día del mes, día de la semana, hora, trimestre. Cada una es una variable
+\emph{cíclica}: toma valores $u\in\{0,1,\dots,P-1\}$ y después de $P-1$
+vuelve a $0$ (mes: $P=12$; hora: $P=24$). La codificación ordinal
+$\phi(u)=u$ coloca a los valores $P-1$ y $0$ (diciembre y enero) a la
+máxima distancia, aunque son consecutivos.
+
+\begin{definicion}[Codificación cíclica]
+$e(u)=\bigl(\sin(2\pi u/P),\cos(2\pi u/P)\bigr)\in\R^2$. La
+\emph{distancia circular} entre $u$ y $v$ es
+$\delta(u,v)=\min(|u-v|,\,P-|u-v|)$.
+\end{definicion}
+
+\begin{proposicion}\label{prop:ciclica}
+$\|e(u)-e(v)\|=2\sin\bigl(\pi\,\delta(u,v)/P\bigr)$; en particular, la
+distancia euclídea entre codificaciones es una función estrictamente
+creciente de la distancia circular.
+\end{proposicion}
+
+\begin{proof}
+Con $a=2\pi u/P$ y $b=2\pi v/P$,
+$\|e(u)-e(v)\|^2=2-2(\sin a\sin b+\cos a\cos b)=2-2\cos(a-b)=4\sin^2\bigl(\tfrac{a-b}2\bigr)$,
+de modo que $\|e(u)-e(v)\|=2|\sin(\pi(u-v)/P)|$. Sea $\Delta=|u-v|\in[0,P)$.
+Como $\sin(\pi-x)=\sin x$, $\sin(\pi\Delta/P)=\sin(\pi(P-\Delta)/P)$, así que
+el valor coincide en $\Delta$ y en $P-\Delta$, y por tanto en
+$\delta(u,v)\in[0,P/2]$; en $[0,P/2]$, $\delta\mapsto\sin(\pi\delta/P)$ es
+no negativa y estrictamente creciente.
+\end{proof}
+
+Con meses, diciembre y enero quedan a distancia $2\sin(\pi/12)\approx0.52$;
+enero y junio, a $2\sin(5\pi/12)\approx1.93$. Un predictor lineal sobre
+$e(u)$ es $\beta_0+\beta_1\sin a+\beta_2\cos a$ con $a=2\pi u/P$; con
+$R=\sqrt{\beta_1^2+\beta_2^2}$ y $\varphi$ tal que $\cos\varphi=\beta_2/R$ y
+$\sin\varphi=\beta_1/R$ (si $R>0$), es igual a $\beta_0+R\cos(a-\varphi)$
+por la fórmula del coseno de una diferencia: una sola sinusoide de período
+$P$. Perfiles estacionales más generales requieren más armónicos,
+$(\sin(2\pi hu/P),\cos(2\pi hu/P))$ con $h=2,3,\dots$, o \emph{one-hot} de
+$u$, saturado con $P-1$ columnas (Proposición~\ref{prop:repr}).
+
+Para árboles la codificación cíclica es incómoda. Como
+$\sin(2\pi(P/2-u)/P)=\sin(\pi-2\pi u/P)=\sin(2\pi u/P)$, los valores $u$ y
+$P/2-u$ (módulo $P$) tienen el mismo seno, y ningún corte sobre esa
+coordenada los separa; análogamente, $u$ y $P-u$ tienen el mismo coseno.
+Con $P=12$, los cortes sobre el seno no separan enero ($u=1$) de mayo
+($u=5$), y los cortes sobre el coseno no separan enero de noviembre
+($u=11$): aislar enero exige cortar en las dos coordenadas. Con la
+codificación ordinal bastan dos cortes sobre una. La documentación de
+Data Wrangler recomienda el modo cíclico para modelos lineales y redes, y
+el ordinal para árboles, en coherencia con este análisis.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Featurize datetime}: acepta cadenas de fecha
+o marcas Unix, infiere o recibe el formato (\texttt{strftime}) y produce
+los componentes en modo \emph{Cyclic} u \emph{Ordinal}, como vector o en
+columnas. Para tratar un componente como categórico se encadena
+\emph{Encode categorical} $\to$ \emph{One-hot encode} (por ejemplo, el
+trimestre en cuatro columnas). En \textbf{SageMaker Processing}, con
+\texttt{pandas.Series.dt} y las fórmulas anteriores.
+\end{aws}
+
+\subsection{Características de rezago}
+
+\begin{definicion}
+El \emph{rezago} de orden $h\ge1$ en el instante $t$ es $y_{t-h}$; las
+características de rezago de orden $1$ a $p$ son
+$(y_{t-1},\dots,y_{t-p})$, y los rezagos estacionales son
+$y_{t-P},y_{t-2P},\dots$
+\end{definicion}
+
+Su justificación proviene de los modelos autorregresivos.
+
+\begin{proposicion}\label{prop:ar}
+Supóngase $\E[y_t^2]<\infty$ y
+$y_t=\phi_0+\sum_{h=1}^p\phi_hy_{t-h}+\varepsilon_t$, con $\varepsilon_t$
+de media $0$ e independiente de $\mathcal H_t$. Entre todas las funciones
+$f$ de la historia con $\E[f^2]<\infty$, la que minimiza
+$\E[(y_t-f)^2]$ es $f^*=\phi_0+\sum_{h=1}^p\phi_hy_{t-h}$.
+\end{proposicion}
+
+\begin{proof}
+Sea $m_t=\E[y_t\mid\mathcal H_t]$. Para cualquier $f$ función de la
+historia,
+$\E[(y_t-f)^2]=\E[(y_t-m_t)^2]+\E[(m_t-f)^2]+2\E[(y_t-m_t)(m_t-f)]$, y el
+último término es nulo: condicionando en $\mathcal H_t$, el factor
+$m_t-f$ es conocido y $\E[y_t-m_t\mid\mathcal H_t]=0$. Luego
+$\E[(y_t-f)^2]\ge\E[(y_t-m_t)^2]$, con igualdad si $f=m_t$. Como los
+$y_{t-h}$ son funciones de la historia y $\varepsilon_t$ es independiente
+de ella,
+$m_t=\phi_0+\sum_h\phi_hy_{t-h}+\E[\varepsilon_t]=f^*$.
+\end{proof}
+
+Bajo el modelo, los rezagos $1,\dots,p$ contienen toda la información de
+la historia útil para predecir en error cuadrático, y los de orden mayor
+no la mejoran. Esto justifica elegir $p$ con la \emph{autocorrelación
+parcial}: si el proceso es estacionario (medias y covarianzas invariantes
+en el tiempo) con matrices de covarianza no singulares, la autocorrelación
+parcial de orden $k$ es el coeficiente de $y_{t-k}$ en el mejor predictor
+lineal de $y_t$ a partir de $(1,y_{t-1},\dots,y_{t-k})$. Si $k\ge p+1$,
+$f^*$ es lineal en esas variables y óptimo entre todas las funciones de la
+historia, así que también es el mejor predictor lineal a partir de ellas;
+por la unicidad de este (consecuencia de la no singularidad), el
+coeficiente de $y_{t-k}$ es $0$. Las primeras $p$ observaciones de la
+serie no tienen historia completa: se descartan o se imputan sus rezagos.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Lag features}: genera los rezagos hasta una
+duración dada respecto de una columna de tiempo (por serie, si antes se
+aplica \emph{Group by}), con opciones para incluir la ventana completa,
+aplanarla en columnas y descartar las filas sin historia. Antes conviene
+\emph{Validate timestamps} y \emph{Resample}, para que un rezago
+corresponda a un intervalo fijo. En pandas,
+\texttt{groupby(...).shift(h)}.
+\end{aws}
+
+\subsection{Características de ventana móvil}
+
+\begin{definicion}
+Para una ventana de tamaño $w$ que termina en $t-1$, la media móvil es
+$\bar y^{(w)}_t=w^{-1}\sum_{h=1}^wy_{t-h}$; análogamente se definen el
+mínimo, el máximo y la desviación estándar de $(y_{t-w},\dots,y_{t-1})$.
+\end{definicion}
+
+Que la ventana termine en $t-1$ es la condición de admisibilidad del
+principio de la sección. El tamaño $w$ resuelve un compromiso entre sesgo
+y varianza.
+
+\begin{proposicion}\label{prop:ventana}
+Sea $y_t=a+bt+\varepsilon_t$ con $\varepsilon_t$ independientes de media
+$0$ y varianza $\sigma^2$. Entonces
+\[
+\E\bigl[(y_t-\bar y^{(w)}_t)^2\bigr]=\frac{b^2(w+1)^2}{4}+\frac{\sigma^2}w+\sigma^2 .
+\]
+\end{proposicion}
+
+\begin{proof}
+Como $\sum_{h=1}^wh=w(w+1)/2$,
+$\bar y^{(w)}_t=a+b\bigl(t-\frac{w+1}2\bigr)+\bar\varepsilon$ con
+$\bar\varepsilon=w^{-1}\sum_{h=1}^w\varepsilon_{t-h}$. Entonces
+$y_t-\bar y^{(w)}_t=\frac{b(w+1)}2+\varepsilon_t-\bar\varepsilon$, donde
+$\varepsilon_t$ y $\bar\varepsilon$ son independientes (involucran
+errores de instantes distintos), de media $0$, con varianzas $\sigma^2$ y
+$\sigma^2/w$. El error cuadrático medio es el cuadrado de la constante más
+la suma de las varianzas.
+\end{proof}
+
+Sin tendencia ($b=0$) el error decrece con $w$; con tendencia, el término
+de sesgo crece como $w^2$. Derivando respecto de $w$ la parte que depende
+de $w$, el mínimo cumple $b^2(w+1)/2=\sigma^2/w^2$, y para $w$ grande
+$w^*\approx(2\sigma^2/b^2)^{1/3}$: la ventana debe acortarse cuando la
+tendencia crece respecto del ruido. El mínimo, el máximo y la desviación
+estándar móviles describen el rango y la volatilidad recientes, que la
+media no refleja. La extracción automática de muchos estadísticos de
+ventana multiplica las columnas y conviene seguirla de selección
+(\S\ref{sec:seleccion}).
+
+\paragraph{Contraste.} Los rezagos representan exactamente la dinámica de
+un modelo autorregresivo y permiten ponderar cada retardo; su número
+crece con la memoria que se quiera capturar. Las ventanas resumen muchos
+retardos en pocos números, con menos varianza y pérdida de detalle. Las
+componentes de fecha no dependen de $y$, así que no producen fuga y existen
+para cualquier horizonte; un rezago de orden $h$ solo está disponible
+para predecir hasta $h$ pasos adelante sin usar predicciones intermedias.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Rolling window features}: tamaño de ventana,
+columna de tiempo y conjunto de estadísticos (mínimo, eficiente, completo
+o elegido a mano), con opción de aplanar; \emph{Extract features} calcula
+estadísticos de la serie completa. \emph{Split data} en modo
+\emph{Ordered} deja la prueba después del entrenamiento. En pandas,
+\texttt{y.shift(1).rolling(w).mean()}: el \texttt{shift(1)} hace que la
+ventana termine en $t-1$.
+\end{aws}
+
+% =====================================================================
+\section{Imágenes}
+% =====================================================================
+
+Una imagen digital de $H\times W$ píxeles y $C$ canales (tres en color:
+rojo, verde, azul) es un arreglo $I\in\{0,\dots,255\}^{H\times W\times C}$;
+como vector, está en $\R^{HWC}$, y con $224\times224$ píxeles en color
+tiene $150\,528$ coordenadas. Usar esas coordenadas como columnas tiene dos
+problemas: la dimensión (\S\ref{sec:pca}) y la sensibilidad a
+desplazamientos, porque mover un objeto un píxel cambia casi todas las
+coordenadas. Las técnicas de esta sección atacan uno u otro.
+
+\subsection{Normalización de píxeles}
+
+Dividir por $255$ es un escalado MinMax (Definición~\ref{def:escala}) con
+los límites posibles $0$ y $255$ en lugar de los observados: no se estima
+nada, no hay fuga y un píxel extremo no comprime a los demás (a
+diferencia de la Proposición~\ref{prop:minmax}). La estandarización por
+canal, $(I_c/255-\mu_c)/\sigma_c$, usa medias y desviaciones fijas de un
+corpus de referencia. Con una red preentrenada deben usarse las del
+preentrenamiento (en ImageNet, $\mu=(0.485,0.456,0.406)$ y
+$\sigma=(0.229,0.224,0.225)$): la red se ajustó sobre entradas con esa
+escala, y otra escala en inferencia es un caso de \emph{training-serving
+skew}.
+
+\subsection{Extracción clásica: convolución y gradientes}
+
+Para enunciar las propiedades sin efectos de borde, se considera una
+imagen de un canal como una función $I:\Z^2\to\R$ nula fuera de un
+conjunto finito (la imagen real, extendida con ceros).
+
+\begin{definicion}
+Sea $K:\Z^2\to\R$ nula fuera de un conjunto finito (el \emph{núcleo}). La
+convolución, en la convención usada en redes neuronales, es
+$(I*K)(p)=\sum_{q\in\Z^2}I(p+q)K(q)$. El núcleo de Sobel horizontal es
+$K_x(q_1,q_2)=q_1w(q_2)$ para $q_1,q_2\in\{-1,0,1\}$, con $w(\pm1)=1$ y
+$w(0)=2$, y $0$ en otro caso; en forma de matriz,
+$\begin{psmallmatrix}-1&0&1\\-2&0&2\\-1&0&1\end{psmallmatrix}$.
+\end{definicion}
+
+$K_x$ combina una diferencia centrada en la primera coordenada con un
+promedio ponderado $(1,2,1)$ en la segunda. En un borde vertical,
+$I(p)=\ind{p_1\ge0}$, se obtiene
+$(I*K_x)(p)=\sum_{q_2}w(q_2)\sum_{q_1}q_1\ind{p_1+q_1\ge0}
+=4\bigl(\ind{p_1\ge-1}-\ind{p_1\ge1}\bigr)=4\cdot\ind{-1\le p_1\le0}$: la
+respuesta es $4$ en las dos columnas contiguas al borde y $0$ en el resto.
+
+\begin{proposicion}[Equivariancia a traslaciones]\label{prop:equiv}
+Para $a\in\Z^2$, sea $(\tau_aI)(p)=I(p-a)$. Entonces
+$(\tau_aI)*K=\tau_a(I*K)$. Si $\rho:\R\to\R$ cumple $\rho(0)=0$, la
+cantidad $F(I)=\sum_{p\in\Z^2}\rho\bigl((I*K)(p)\bigr)$ es una suma finita
+y $F(\tau_aI)=F(I)$.
+\end{proposicion}
+
+\begin{proof}
+$((\tau_aI)*K)(p)=\sum_qI(p+q-a)K(q)=(I*K)(p-a)=(\tau_a(I*K))(p)$. La
+función $I*K$ es nula fuera de un conjunto finito (el soporte de $I$ más
+el de $K$), y $\rho(0)=0$, así que la suma que define $F$ tiene finitos
+términos no nulos. Por la primera parte,
+$F(\tau_aI)=\sum_p\rho((I*K)(p-a))$, que es la misma suma reindexada con
+$p'=p-a$.
+\end{proof}
+
+Un detector de bordes responde igual a un borde en cualquier posición y
+se desplaza con él; agregando sus respuestas se obtienen características
+que no cambian al desplazar el contenido. En una imagen recortada a
+$H\times W$ la igualdad vale mientras el desplazamiento no saque contenido
+del recuadro. Los histogramas son el caso extremo de agregación:
+
+\begin{ejemplo}[Histograma y su límite]
+El histograma $h_I(v)=\#\{p:I(p)=v\}$, $v\in\{0,\dots,255\}$, de una imagen
+de $H\times W$ píxeles no cambia si los píxeles se permutan, porque solo
+cuenta valores; en particular, no cambia con traslaciones cíclicas ni con
+rotaciones de $90^\circ$. Por la misma razón pierde toda la disposición
+espacial: un tablero de $8\times8$ casillas blancas y negras y una imagen
+con la mitad izquierda negra y la derecha blanca, del mismo tamaño, tienen
+el mismo histograma.
+\end{ejemplo}
+
+\subsection{Vectores de características de una red preentrenada}
+
+Una red convolucional (CNN) compone capas de convolución con núcleos
+aprendidos (equivariantes por la Proposición~\ref{prop:equiv}), funciones
+no lineales y agregaciones espaciales, y termina en una capa lineal
+seguida de \emph{softmax}. Si $\psi:\R^{H\times W\times C}\to\R^D$ denota
+la salida de la penúltima capa, la red calcula probabilidades de clase
+$\operatorname{softmax}(A\psi(I)+c)$ con $A\in\R^{C'\times D}$ y
+$c\in\R^{C'}$, que es un modelo logístico multinomial con características
+$\psi(I)$; al entrenar la red se ajustan conjuntamente $\psi$ y $(A,c)$.
+La \emph{transferencia} consiste en tomar $\psi$ de una red entrenada en un
+corpus grande, calcular $\psi(I)$ ($D$ del orden de $10^3$) para las
+imágenes de un problema nuevo y entrenar sobre esas columnas un modelo
+sencillo. Que la $\psi$ aprendida para unas clases sirva para otras no es
+un teorema, sino una observación empírica: Yosinski et al.\ (2014) midieron
+que las capas iniciales aprenden detectores genéricos (bordes, texturas) y
+que la transferibilidad disminuye en las capas finales y cuanto más
+difieren las tareas.
+
+\paragraph{Contraste.} Las características clásicas (gradientes,
+histogramas) son interpretables, baratas y sin parámetros aprendidos,
+pero no representan objetos. Los vectores de una CNN sí, a costa de
+interpretabilidad, cómputo y dependencia del preprocesamiento del
+preentrenamiento. Las etiquetas de un servicio de visión son pocas
+columnas legibles, limitadas al vocabulario del servicio.
+
+\begin{aws}
+\textbf{SageMaker JumpStart} ofrece modelos de \emph{image embedding} (por
+ejemplo, la familia \emph{Image Embedding -- TensorFlow}) que devuelven
+$\psi(I)$ para cada imagen, desplegables como \emph{endpoint} o en
+\emph{batch transform}. \textbf{Amazon Bedrock} ofrece modelos de
+\emph{embeddings} multimodales. \textbf{Amazon Rekognition}
+(\texttt{DetectLabels}) devuelve etiquetas con su confianza y, para
+objetos, \emph{bounding boxes} con \texttt{Left}, \texttt{Top},
+\texttt{Width} y \texttt{Height} expresados como fracciones del tamaño de
+la imagen; con ellas se construyen columnas como la indicadora de una
+etiqueta con confianza mayor que un umbral, el número de instancias o la
+fracción de área $\texttt{Width}\cdot\texttt{Height}$. (Las funciones de
+\emph{Streaming Events} y de moderación de contenido por lotes de
+Rekognition dejaron de aceptar clientes nuevos el 30 de abril de 2026; la
+detección de etiquetas no está afectada.) \textbf{Data Wrangler} incluye
+transformaciones de imagen (cambio de tamaño, mejora, escala de grises,
+rotación, eliminación de imágenes corruptas o duplicadas) y, sobre las
+características ya tabulares, normalización y PCA.
+\end{aws}
+
+\subsection{Análisis de componentes principales}\label{sec:pca}
+
+El capítulo propone PCA para reducir la dimensión de las características
+de imagen y la de \emph{one-hot}. Sea $X\in\R^{n\times p}$ con columnas de
+media cero y $S=X^\top X/n$ su matriz de covarianzas muestrales. Por el
+teorema espectral, $S=\sum_{i=1}^p\lambda_iu_iu_i^\top$ con
+$\lambda_1\ge\dots\ge\lambda_p\ge0$ y $\{u_1,\dots,u_p\}$ una base
+ortonormal de autovectores; los autovalores son no negativos porque
+$u^\top Su=\|Xu\|^2/n\ge0$.
+
+\begin{teorema}[PCA como máxima varianza]\label{teo:pca}
+Para $1\le d\le p$, el máximo de $\tr(V^\top SV)$ sobre las matrices
+$V\in\R^{p\times d}$ con $V^\top V=I_d$ es $\lambda_1+\dots+\lambda_d$ y
+se alcanza en $V=[u_1\cdots u_d]$. La cantidad $\tr(V^\top SV)$ es la suma
+de las varianzas muestrales de las columnas de $XV$, las proyecciones de
+los datos sobre las columnas de $V$.
+\end{teorema}
+
+\begin{proof}
+$\tr(V^\top SV)=\sum_i\lambda_i\tr(V^\top u_iu_i^\top V)=\sum_i\lambda_iw_i$
+con $w_i=\|V^\top u_i\|^2$. Por un lado, $VV^\top$ es la proyección
+ortogonal sobre el espacio columna de $V$ (porque $V^\top V=I$), así que
+$w_i=u_i^\top VV^\top u_i=\|VV^\top u_i\|^2\le\|u_i\|^2=1$. Por otro,
+$\sum_iw_i=\tr\bigl(V^\top(\sum_iu_iu_i^\top)V\bigr)=\tr(V^\top V)=d$.
+Como $w_i-1\le0$ y $\lambda_i\ge\lambda_d$ para $i\le d$, y $w_i\ge0$ y
+$\lambda_i\le\lambda_d$ para $i>d$,
+\[
+\sum_i\lambda_iw_i-\sum_{i\le d}\lambda_i=\sum_{i\le
+d}\lambda_i(w_i-1)+\sum_{i>d}\lambda_iw_i\le\lambda_d\Bigl(\sum_{i\le
+d}(w_i-1)+\sum_{i>d}w_i\Bigr)=\lambda_d\Bigl(\sum_iw_i-d\Bigr)=0 .
+\]
+Con $V=[u_1\cdots u_d]$ se tiene $w_i=1$ para $i\le d$ y $w_i=0$ para
+$i>d$, y se alcanza el valor. Finalmente, las columnas de $XV$ tienen
+media cero (porque las de $X$ la tienen), su matriz de covarianzas es
+$V^\top X^\top XV/n=V^\top SV$, y la traza es la suma de sus varianzas.
+\end{proof}
+
+\begin{proposicion}[Error de reconstrucción]\label{prop:reconst}
+Con $V=[u_1\cdots u_d]$, el error cuadrático medio de reconstruir cada fila
+$x_l$ por su proyección $VV^\top x_l$ es
+$n^{-1}\sum_l\|x_l-VV^\top x_l\|^2=\sum_{i>d}\lambda_i$.
+\end{proposicion}
+
+\begin{proof}
+Como $VV^\top$ es una proyección ortogonal, $x-VV^\top x$ es ortogonal a
+$VV^\top x$ y, por el teorema de Pitágoras,
+$\|x-VV^\top x\|^2=\|x\|^2-\|VV^\top x\|^2=\|x\|^2-\|V^\top x\|^2$ (la última
+igualdad porque $\|Vv\|=\|v\|$ cuando $V^\top V=I$). Promediando sobre las filas,
+$n^{-1}\sum_l\|x_l\|^2=\tr(S)=\sum_i\lambda_i$ y
+$n^{-1}\sum_l\|V^\top x_l\|^2=\tr(V^\top SV)=\sum_{i\le d}\lambda_i$.
+\end{proof}
+
+La \emph{fracción de varianza explicada} por $d$ componentes es
+$\sum_{i\le d}\lambda_i/\sum_{i\le p}\lambda_i$, y lo que falta es, por la
+proposición, el error relativo de reconstrucción. En la práctica se usa la
+descomposición en valores singulares $X=U\Sigma W^\top$ ($U$ y $W$ con
+columnas ortonormales, $\Sigma$ diagonal con valores singulares
+$\sigma_i\ge0$): entonces $S=W(\Sigma^2/n)W^\top$, de modo que las
+columnas de $W$ son autovectores de $S$ con autovalores $\sigma_i^2/n$, y
+no hace falta formar $S$.
+
+\begin{ejemplo}
+Si $S=\begin{psmallmatrix}2&1\\1&2\end{psmallmatrix}$, los autovalores son
+$3$ y $1$, con autovectores $(1,1)/\sqrt2$ y $(1,-1)/\sqrt2$; la primera
+componente, la suma normalizada de las dos variables, explica $3/4$ de la
+varianza total.
+\end{ejemplo}
+
+\begin{observacion}[PCA depende de las unidades]
+Si una columna se multiplica por $c$, sus entradas en $S$ se multiplican
+por $c$ (covarianzas) o $c^2$ (varianza); medir una longitud en centímetros
+en lugar de metros multiplica su varianza por $10^4$ y la primera
+componente tiende a alinearse con ella. Estandarizar antes equivale a
+hacer PCA sobre la matriz de correlaciones. Tras \emph{one-hot}, la
+indicadora de un nivel de frecuencia relativa $f_i$ tiene varianza
+$f_i(1-f_i)$ (varianza de una Bernoulli), pequeña para niveles raros; PCA,
+que maximiza varianza y no usa $y$, tiende a descartarlos aunque sean
+predictivos.
+\end{observacion}
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Reduce dimensionality} (PCA): número de
+componentes fijo o umbral de fracción de varianza explicada (95\,\% por
+defecto), opciones de centrar y de escalar a desviación $1$ (la
+observación anterior indica cuándo usarlas), salida como vector o columnas
+y opción de conservar las columnas originales. \textbf{Algoritmo
+integrado PCA} de SageMaker: modo \emph{regular} (datos dispersos, tamaño
+moderado) o \emph{randomized} (muchas filas y columnas, con un algoritmo
+aproximado); calcula la matriz de covarianzas, o una aproximación
+distribuida, y su descomposición en valores singulares; acepta
+\texttt{recordIO-protobuf} y CSV.
+\end{aws}
+
+% =====================================================================
+\section{Texto}\label{sec:texto}
+% =====================================================================
+
+Un \emph{corpus} es una colección de documentos $d_1,\dots,d_N$, cada uno
+una cadena de caracteres. El objetivo es representar cada documento (o
+cada palabra) por un vector. La secuencia habitual es: tokenizar,
+normalizar (palabras vacías, \emph{stemming} o lematización) y representar
+(bolsa de palabras, $n$-gramas, TF-IDF o \emph{embeddings}).
+
+\subsection{Tokenización}
+
+\begin{definicion}
+Un \emph{tokenizador} es una función que asigna a cada cadena de
+caracteres una sucesión finita $(t_1,\dots,t_L)$ de elementos de un
+conjunto $\mathcal V$, el \emph{vocabulario}; los $t_\ell$ son los
+\emph{tokens} y $L$ la longitud del documento en tokens. En la
+tokenización por palabras, los tokens son las subcadenas delimitadas por
+espacios y signos de puntuación, y $\mathcal V$ es el conjunto de palabras
+vistas en entrenamiento.
+\end{definicion}
+
+Por ejemplo, «Machine learning is fascinating» da
+(Machine, learning, is, fascinating). Con tokenización por palabras, una
+palabra ausente de $\mathcal V$ no tiene representación y se sustituye por
+un símbolo genérico, con lo que su información se pierde. Los modelos
+fundacionales usan tokenización por subpalabras, que elimina ese problema.
+
+\begin{definicion}[\emph{Byte-pair encoding}, Sennrich et al., 2016]
+Sea $\mathcal V_0$ el conjunto de caracteres (o de bytes). Se segmenta cada
+palabra del corpus de entrenamiento en caracteres y se repite $M$ veces:
+contar, en la segmentación actual, la frecuencia de cada par de símbolos
+adyacentes; agregar al vocabulario el símbolo formado por la concatenación
+del par más frecuente (con una regla fija de desempate); reemplazar en la
+segmentación todas sus apariciones. El vocabulario final tiene
+$|\mathcal V_0|+M$ elementos, y la lista ordenada de fusiones define el
+tokenizador: una cadena nueva se segmenta en caracteres y se le aplican
+las fusiones en el mismo orden.
+\end{definicion}
+
+\begin{proposicion}
+Si $\mathcal V_0$ contiene todos los bytes, toda cadena se tokeniza con
+símbolos de $\mathcal V$.
+\end{proposicion}
+
+\begin{proof}
+La segmentación inicial usa solo elementos de $\mathcal V_0\subset\mathcal
+V$, y cada fusión reemplaza dos símbolos consecutivos por su
+concatenación, que es un elemento de $\mathcal V$ por construcción; por
+inducción sobre el número de fusiones aplicadas, todos los símbolos de la
+segmentación están en $\mathcal V$.
+\end{proof}
+
+Las palabras frecuentes terminan como un solo token y las raras se
+dividen en fragmentos. El número de tokens por palabra depende del idioma
+y del tokenizador, y determina el costo en servicios de modelos
+fundacionales de texto facturados por uso: $p_{\mathrm{in}}T_{\mathrm{in}}+p_{\mathrm{out}}T_{\mathrm{out}}$,
+con $T_{\mathrm{in}},T_{\mathrm{out}}$ los números de tokens de entrada y
+salida y $p_{\mathrm{in}},p_{\mathrm{out}}$ sus precios unitarios.
+
+\begin{aws}
+\textbf{Glue DataBrew}, acción \texttt{TOKENIZATION}, que en un paso
+tokeniza con un delimitador, expande contracciones, aplica
+\emph{stemming} y elimina palabras vacías:
+\begin{lstlisting}
+{"Action": {"Operation": "TOKENIZATION",
+  "Parameters": {"sourceColumn": "resena", "targetColumn": "resena_tok",
+                 "delimiter": " ", "expandContractions": "ENABLED",
+                 "stemmingMode": "PORTER", "stopWordRemovalMode": "DEFAULT",
+                 "customStopWords": "[]"}}}
+\end{lstlisting}
+\textbf{Data Wrangler}, \emph{Featurize text} $\to$ \emph{Vectorize}, con
+tokenizador \emph{Standard} (separación por espacios) o \emph{Custom}
+(expresión regular). En \textbf{Amazon Bedrock} la tokenización por
+subpalabras es interna a cada modelo y es la unidad de facturación de los
+modelos de texto bajo demanda.
+\end{aws}
+
+\subsection{Palabras vacías}
+
+La \emph{ley de Zipf} es una regularidad empírica: en muchos corpus, la
+frecuencia de la palabra que ocupa el lugar $r$ en orden de frecuencia es
+aproximadamente proporcional a $r^{-s}$, con $s$ cercano a $1$. Bajo este
+modelo con $s=1$ y $V$ palabras distintas, la fracción de los tokens que
+corresponde a las $k$ más frecuentes es $H_k/H_V$, con
+$H_k=\sum_{r=1}^k1/r$: la frecuencia de la palabra $r$ es $r^{-1}/H_V$ del
+total. Con $V=50\,000$ y $k=100$, $H_{100}/H_{50\,000}\approx5.19/11.40\approx0.46$.
+Las palabras más frecuentes son en su mayoría funcionales (artículos,
+preposiciones, conjunciones), y se llaman \emph{palabras vacías}.
+Eliminarlas reduce casi a la mitad el volumen de tokens y el peso de términos
+que aparecen en todos los documentos, pero no es neutral: las listas
+estándar incluyen negaciones, y eliminar «no» convierte «no bueno» en
+«bueno». La ponderación TF-IDF (\S\ref{sec:tfidf}) hace una atenuación
+basada en los datos.
+
+\begin{aws}
+\textbf{DataBrew}: \texttt{stopWordRemovalMode} (lista por defecto) y
+\texttt{customStopWords} dentro de \texttt{TOKENIZATION}.
+\textbf{Data Wrangler}: el \emph{Count vectorizer} admite una frecuencia
+documental máxima, que elimina los términos presentes en demasiados
+documentos: una lista de palabras vacías construida con los datos.
+\end{aws}
+
+\subsection{\emph{Stemming} y lematización}
+
+\begin{definicion}
+Una \emph{normalización} es una función $\psi:\mathcal V\to\mathcal V'$ que
+asigna a cada palabra una forma representativa; las palabras con la misma
+imagen se consideran la misma. El \emph{stemming} define $\psi$ con reglas
+de supresión de sufijos (algoritmos de Porter, 1980, y de Lancaster); la
+lematización, con un diccionario morfológico que usa la categoría
+gramatical de la palabra.
+\end{definicion}
+
+\begin{proposicion}[Normalizar es restringir coeficientes]\label{prop:stem}
+Sea $x\in\R^{\mathcal V}$ el vector de conteos de un documento ($x_v$ es el
+número de apariciones de la palabra $v$) y $x'=Mx\in\R^{\mathcal V'}$ el
+vector tras normalizar, con $M_{v'v}=\ind{\psi(v)=v'}$. Los predictores
+lineales $\gamma^\top x'$ son exactamente los predictores lineales
+$\beta^\top x$ cuyos coeficientes son iguales dentro de cada clase
+$\psi^{-1}(v')$.
+\end{proposicion}
+
+\begin{proof}
+$\gamma^\top x'=\gamma^\top Mx=(M^\top\gamma)^\top x$ y
+$(M^\top\gamma)_v=\sum_{v'}M_{v'v}\gamma_{v'}=\gamma_{\psi(v)}$, constante en
+cada clase. Recíprocamente, si $\beta_u=\beta_v$ siempre que
+$\psi(u)=\psi(v)$, se toma $\gamma_{v'}$ igual al valor común de $\beta$
+en $\psi^{-1}(v')$ (cualquiera si la clase es vacía) y se tiene
+$\beta=M^\top\gamma$.
+\end{proof}
+
+Normalizar reduce el número de parámetros y agrega los conteos de formas
+de la misma palabra (menos varianza), a cambio de sesgo cuando se fusionan
+palabras con efectos distintos. Ejemplos reales (implementaciones de
+NLTK): Porter lleva «studies» y «studying» a «studi», pero también
+«university» y «universe» a «univers» y «organization» y «organ» a
+«organ»; Lancaster, más agresivo, lleva «generous» y «generation» a
+«gen» y «better» a «bet». La lematización lleva «studies» a «study» y,
+sabiendo que es un adjetivo, «better» a «good», lo que ninguna regla de
+supresión de sufijos logra. Porter y Lancaster son algoritmos para inglés;
+para español se usa el \emph{stemmer} Snowball de español o un
+lematizador.
+
+\begin{aws}
+\textbf{DataBrew}: \texttt{stemmingMode} igual a \texttt{PORTER} o
+\texttt{LANCASTER} en \texttt{TOKENIZATION}. No hay lematización integrada
+en DataBrew ni en Data Wrangler; se implementa en \textbf{SageMaker
+Processing} con spaCy o NLTK instalados en el contenedor. \textbf{Amazon
+Comprehend} (\texttt{DetectSyntax}) devuelve los tokens con su categoría
+gramatical, que es el dato que necesita un lematizador.
+\end{aws}
+
+\subsection{Bolsa de palabras, $n$-gramas y TF-IDF}\label{sec:tfidf}
+
+\begin{definicion}
+Fijado un vocabulario $\mathcal V$ de \emph{términos}, la \emph{matriz
+documento-término} $X\in\R^{N\times|\mathcal V|}$ tiene entradas
+$X_{dt}=\tf_{t,d}$, el número de apariciones del término $t$ en el
+documento $d$; la fila $d$ es la \emph{bolsa de palabras} del documento.
+Un $n$-grama es una sucesión de $n$ tokens consecutivos; en la
+representación por $n$-gramas, los términos son los $n$-gramas observados
+en entrenamiento. Sea $\df_t$ el número de documentos de entrenamiento que
+contienen $t$. Las ponderaciones TF-IDF de Spark ML y de scikit-learn
+(con \texttt{smooth\_idf=True}) son $\tf_{t,d}\cdot\idf_t$ con
+\[
+\idf_t^{\text{Spark}}=\log\frac{N+1}{\df_t+1},\qquad
+\idf_t^{\text{sklearn}}=\log\frac{N+1}{\df_t+1}+1,
+\]
+habitualmente seguidas de normalización euclídea de cada fila.
+\end{definicion}
+
+La bolsa de palabras solo cuenta, así que no cambia si se permutan los
+tokens de un documento: «el perro muerde al hombre» y «el hombre muerde al
+perro» tienen la misma fila. Con bigramas difieren («perro muerde» frente
+a «hombre muerde»), y «no bueno» queda como un término. El costo es
+combinatorio: hay $|\mathcal V|^n$ $n$-gramas posibles y un documento de
+$L$ tokens contiene a lo sumo $L-n+1$, así que la matriz es más dispersa
+al crecer $n$.
+
+La ponderación IDF (Spärck Jones, 1972) responde a que un término presente
+en muchos documentos discrimina poco entre ellos: $\log(N/\df_t)$ es la
+cantidad de información, $-\log p$, del suceso «el término aparece en un
+documento elegido al azar», cuya frecuencia es $p=\df_t/N$. Los $+1$
+evitan divisiones por cero; el $+1$ final de scikit-learn impide que un
+término presente en todos los documentos reciba peso nulo.
+
+\begin{ejemplo}
+Documentos «el gato come», «el perro come carne» y «el gato duerme»
+($N=3$). Con la fórmula de Spark: $\idf(\text{el})=\log(4/4)=0$,
+$\idf(\text{gato})=\idf(\text{come})=\log(4/3)\approx0.288$ y
+$\idf(\text{perro})=\idf(\text{carne})=\idf(\text{duerme})=\log2\approx0.693$.
+Con la de scikit-learn, los mismos valores más $1$: «el» conserva peso $1$.
+\end{ejemplo}
+
+\begin{proposicion}\label{prop:coseno}
+Si las filas TF-IDF se normalizan a norma euclídea $1$, el producto
+interno de dos filas normalizadas es el coseno del ángulo entre las filas
+sin normalizar. Si todos los conteos de un documento se multiplican por
+$c>0$, su fila normalizada no cambia.
+\end{proposicion}
+
+\begin{proof}
+$\langle u/\|u\|,v/\|v\|\rangle=\langle u,v\rangle/(\|u\|\|v\|)$, que es
+la definición del coseno. Si $\tf_{t,d}\mapsto c\,\tf_{t,d}$, la fila
+TF-IDF se multiplica por $c$ (los $\idf$ son los de entrenamiento y no
+cambian), y su normalización es la misma.
+\end{proof}
+
+Por ejemplo, un documento y su concatenación consigo mismo quedan
+representados igual: la normalización elimina el efecto de la longitud.
+
+\begin{aws}
+\textbf{Data Wrangler}, \emph{Featurize text} $\to$ \emph{Vectorize}:
+tokenizador; vectorizador \emph{Count vectorizer} (frecuencias mínima y
+máxima de término y de documento, tamaño máximo de vocabulario, salida
+binaria) o \emph{Hashing} (\S\ref{sec:hashing}, caso (b)); opción
+\emph{Apply IDF} con frecuencia documental mínima ($5$ por defecto); salida
+como vector disperso o aplanada. \emph{Character statistics} añade el
+número de palabras y de caracteres y las proporciones de mayúsculas,
+minúsculas, dígitos y otros símbolos. Es un paso con parámetros
+ajustados (vocabulario, IDF), con \emph{refit}. \textbf{SageMaker
+Processing}: \texttt{TfidfVectorizer(ngram\_range=(1,2), min\_df=...,
+max\_df=...)}; si después se escala, \texttt{MaxAbsScaler} conserva la
+dispersión (Proposición~\ref{prop:sparse}).
+\end{aws}
+
+\subsection{\emph{Word embeddings}}
+
+En la bolsa de palabras cada término es una coordenada, lo que equivale a
+representar la palabra $v$ por $e_v$; para $u\ne v$,
+$\cos(e_u,e_v)=0$. «Gato» y «felino» son tan distintos como «gato» e
+«hipoteca», y lo aprendido sobre una palabra no se transfiere a otra. La
+hipótesis distribucional (Harris, 1954), según la cual palabras que
+aparecen en contextos parecidos tienen significados parecidos, sugiere
+representar cada palabra por un vector denso de dimensión $D$ (del orden de
+$100$ a $300$) aprendido de las coocurrencias.
+
+\paragraph{Pares palabra--contexto.} Se ve el corpus tokenizado como una
+sucesión $w_1,\dots,w_{N_T}$ de tokens. Con un radio $L\ge1$, el
+multiconjunto de pares es $\mathcal P=\{(w_a,w_b):1\le a,b\le N_T,\
+0<|a-b|\le L\}$: cada token $w_a$ (la \emph{palabra}) con cada token a
+distancia a lo sumo $L$ (su \emph{contexto}). Sean $\#(w,c)$ el número de
+veces que el par $(w,c)$ aparece en $\mathcal P$, $\#(w)=\sum_c\#(w,c)$,
+$\#(c)=\sum_w\#(w,c)$ y $|\mathcal P|$ el total de pares; las frecuencias
+relativas $\hat P(w,c)=\#(w,c)/|\mathcal P|$,
+$\hat P(w)=\#(w)/|\mathcal P|$ y $\hat P(c)=\#(c)/|\mathcal P|$ definen la
+\emph{información mutua puntual}
+$\PMI(w,c)=\log\frac{\hat P(w,c)}{\hat P(w)\hat P(c)}$.
+
+\begin{definicion}[\emph{Skip-gram} con muestreo negativo, Mikolov et al., 2013]
+Se asigna a cada palabra un vector $v_w\in\R^D$ y a cada contexto un
+vector $u_c\in\R^D$. Con $\sigma(x)=1/(1+e^{-x})$, un entero $k\ge1$ y una
+distribución $P_n$ sobre contextos (la distribución de ruido), se maximiza
+\[
+\ell=\sum_{w,c}\#(w,c)\log\sigma(u_c^\top v_w)+k\sum_w\#(w)\sum_cP_n(c)\log\sigma(-u_c^\top v_w).
+\]
+\end{definicion}
+
+El primer término premia que los pares observados tengan producto interno
+grande; el segundo es la esperanza, para cada aparición de $w$, de $k$
+contextos falsos sorteados con $P_n$, y premia que tengan producto interno
+pequeño. El problema que resolvió esta formulación es de cómputo: el
+modelo original,
+$p(c\mid w)=\exp(u_c^\top v_w)/\sum_{c'}\exp(u_{c'}^\top v_w)$, suma sobre
+todo el vocabulario en cada evaluación, y $\ell$ solo evalúa $k+1$
+términos por par. Lo que se aprende queda caracterizado así:
+
+\begin{teorema}[Levy y Goldberg, 2014]\label{teo:sgns}
+Supóngase que los números $x_{wc}=u_c^\top v_w$ pueden elegirse
+libremente (lo que requiere $D$ suficientemente grande) y que
+$\#(w,c)>0$ y $P_n(c)>0$ para todos los pares $(w,c)$ que intervienen en
+$\ell$. Entonces el máximo de $\ell$ se alcanza en
+\[
+u_c^\top v_w=\log\frac{\#(w,c)}{\#(w)\,P_n(c)}-\log k .
+\]
+Si $P_n(c)=\hat P(c)$, el valor es $\PMI(w,c)-\log k$.
+\end{teorema}
+
+\begin{proof}
+Con los $x_{wc}$ libres, $\ell=\sum_{w,c}\ell_{wc}(x_{wc})$ con
+$\ell_{wc}(x)=\#(w,c)\log\sigma(x)+k\#(w)P_n(c)\log\sigma(-x)$, y se
+maximiza cada sumando por separado. Como $\frac{d}{dx}\log\sigma(x)=\sigma(-x)$
+y $\frac{d}{dx}\log\sigma(-x)=-\sigma(x)$, se tiene
+$\ell_{wc}'(x)=\#(w,c)\sigma(-x)-k\#(w)P_n(c)\sigma(x)$ y
+$\ell_{wc}''(x)=-\bigl(\#(w,c)+k\#(w)P_n(c)\bigr)\sigma(x)\sigma(-x)<0$;
+$\ell_{wc}$ es estrictamente cóncava y su máximo es su único punto
+crítico. Usando $\sigma(-x)/\sigma(x)=e^{-x}$, la condición $\ell_{wc}'(x)=0$
+es $\#(w,c)e^{-x}=k\#(w)P_n(c)$, es decir,
+$x=\log\frac{\#(w,c)}{\#(w)P_n(c)}-\log k$. Con $P_n(c)=\#(c)/|\mathcal
+P|$, $\frac{\#(w,c)}{\#(w)\#(c)/|\mathcal P|}=\frac{\hat P(w,c)}{\hat
+P(w)\hat P(c)}$.
+\end{proof}
+
+Con $D$ finito, los productos internos no pueden elegirse libremente y el
+método ajusta una aproximación de rango $D$ a la matriz de PMI desplazada;
+las palabras con filas de PMI parecidas reciben vectores parecidos, que es
+el sentido en que el método generaliza. En la práctica $P_n$ es la
+distribución unigrama elevada a $3/4$ y renormalizada, y el teorema vale
+con esa $P_n$.
+
+\begin{definicion}[GloVe, Pennington et al., 2014]
+Con $X_{ij}$ el número de coocurrencias de las palabras $i$ y $j$ en
+ventanas del corpus, se minimiza
+$J=\sum_{i,j:X_{ij}>0}f(X_{ij})\bigl(v_i^\top\tilde v_j+b_i+\tilde
+b_j-\log X_{ij}\bigr)^2$ sobre vectores $v_i,\tilde v_j\in\R^D$ y sesgos
+$b_i,\tilde b_j\in\R$, con $f(x)=(x/x_{\max})^{3/4}$ si $x<x_{\max}$ y
+$f(x)=1$ si no ($x_{\max}=100$).
+\end{definicion}
+
+GloVe hace explícita una factorización del mismo tipo. Si existen
+vectores con $v_i^\top\tilde v_j=\PMI(i,j)$ para todos los pares con
+$X_{ij}>0$ (con $\PMI$ calculada a partir de $X$), entonces con
+$b_i=\log X_i$ y $\tilde b_j=\log X_j-\log X_{\cdot\cdot}$, donde
+$X_i=\sum_jX_{ij}$ y $X_{\cdot\cdot}=\sum_{ij}X_{ij}$, cada término vale
+$\PMI(i,j)+\log X_i+\log X_j-\log X_{\cdot\cdot}-\log X_{ij}=0$ por la
+definición de PMI, y $J=0$ es el mínimo: los sesgos absorben las
+frecuencias marginales y los productos internos representan la PMI. La
+función $f$ reduce el peso de los pares rarísimos, cuyos conteos son
+ruidosos, y acota el de los frecuentísimos.
+
+\begin{proposicion}[Promedio de \emph{embeddings}]\label{prop:promedio}
+Sea $E\in\R^{|\mathcal V|\times D}$ la matriz cuyas filas son los vectores
+$v_w$ y $x$ la bolsa de palabras de un documento con $L$ tokens. El
+promedio de los vectores de sus tokens es $L^{-1}E^\top x$.
+\end{proposicion}
+
+\begin{proof}
+$\sum_{\ell=1}^Lv_{t_\ell}=\sum_wx_wv_w=E^\top x$, agrupando los tokens
+iguales, pues $x_w$ cuenta las apariciones de $w$.
+\end{proof}
+
+Representar un documento por el promedio de sus \emph{embeddings} es, por
+tanto, proyectar su bolsa de palabras (dividida por $L$) con una matriz
+fija aprendida en otro corpus, y hereda la invariancia al orden de la
+bolsa de palabras. El análisis semántico latente (LSA), en cambio,
+proyecta sobre las primeras componentes principales de la matriz TF-IDF del
+propio corpus (Teorema~\ref{teo:pca}). Los \emph{embeddings} contextuales
+de los modelos basados en transformadores asignan a cada aparición de una
+palabra un vector que depende de toda la oración, y pueden distinguir
+sentidos de una misma palabra («banco» para sentarse y «banco» que presta
+dinero), lo que un vector por palabra no puede hacer por definición.
+
+\paragraph{Contraste.} Bolsa de palabras y TF-IDF: interpretables, sin
+preentrenamiento, dispersas y de alta dimensión, sin similitud entre
+palabras ni orden. $n$-gramas: orden local, a costa de dispersión.
+Word2Vec y GloVe: densos, con similitud entre palabras y transferibles; un
+vector por palabra, y sin representación para palabras nuevas salvo que se
+modelen subpalabras. \emph{Embeddings} contextuales: resuelven la
+polisemia; son costosos de calcular y opacos.
+
+\begin{aws}
+\textbf{BlazingText}, algoritmo integrado de SageMaker, implementa
+Word2Vec en modos \texttt{cbow}, \texttt{skipgram} (una CPU o una GPU) y
+\texttt{batch\_skipgram} (varias CPU), con vectores de subpalabras
+(\emph{character $n$-grams}) que dan vectores a palabras fuera del
+vocabulario. Espera un archivo de texto con una oración por línea y tokens
+separados por espacios, y produce \texttt{vectors.txt} (compatible con
+Gensim y spaCy) y \texttt{vectors.bin}. \textbf{Amazon Bedrock},
+\emph{Titan Text Embeddings V2} (\texttt{amazon.titan-embed-text-v2:0}):
+\emph{embeddings} contextuales de documento, con dimensión configurable
+($1024$, $512$ o $256$) y normalización opcional, para entradas de hasta
+unos $8000$ tokens. \textbf{Amazon Comprehend}: características de alto
+nivel por API (sentimiento con puntuaciones por clase, entidades, frases
+clave, idioma, sintaxis) que se agregan como columnas; su modelado de
+tópicos dejó de aceptar clientes nuevos el 30 de abril de 2026, y para
+tópicos quedan los algoritmos integrados \textbf{LDA} y \textbf{NTM} de
+SageMaker. \textbf{Amazon Textract} convierte documentos escaneados en
+texto antes de todo lo anterior.
+\end{aws}
+
+% =====================================================================
+\section{Selección de características por filtros}\label{sec:seleccion}
+% =====================================================================
+
+Un \emph{método de filtro} ordena las características según una medida de
+asociación con $y$, calculada en entrenamiento, y conserva las primeras.
+Las medidas difieren en qué dependencia detectan.
+
+\begin{contraejemplo}[Correlación nula no es independencia]
+Si $X\sim N(0,1)$ e $Y=X^2$, entonces $\Cov(X,Y)=\E[X^3]-\E[X]\E[X^2]=0$
+porque $X$ es simétrica, y $\Corr(X,Y)=0$, aunque $Y$ es función de $X$.
+Un filtro por correlación de Pearson descartaría $X$.
+\end{contraejemplo}
+
+\begin{definicion}
+Para $X,Y$ discretas con distribución conjunta $P_{XY}$ y marginales
+$P_X,P_Y$, la \emph{información mutua} es
+$I(X;Y)=\sum_{x,y:P_{XY}(x,y)>0}P_{XY}(x,y)\log\frac{P_{XY}(x,y)}{P_X(x)P_Y(y)}$,
+es decir, $\mathrm{KL}(P_{XY}\|P_XP_Y)$.
+\end{definicion}
+
+\begin{proposicion}
+$I(X;Y)\ge0$, con igualdad si y solo si $X$ e $Y$ son independientes.
+\end{proposicion}
+
+\begin{proof}
+Por la desigualdad de Jensen para $\log$ (cóncava) y la distribución
+$P_{XY}$,
+$-I(X;Y)=\sum P_{XY}\log\frac{P_XP_Y}{P_{XY}}\le\log\sum_{P_{XY}>0}P_XP_Y\le\log1=0$,
+con igualdad en la primera desigualdad si y solo si
+$P_XP_Y/P_{XY}$ es constante donde $P_{XY}>0$, y en la segunda si y solo
+si $P_XP_Y$ se anula donde $P_{XY}$ se anula; ambas juntas equivalen a
+$P_{XY}=P_XP_Y$.
+\end{proof}
+
+La información mutua detecta cualquier dependencia, incluida la del
+contraejemplo tras discretizar (para variables continuas, scikit-learn la
+estima con vecinos más cercanos). Para dos categóricas está ligada a la
+prueba de independencia:
+
+\begin{proposicion}
+En una tabla de contingencia con conteos $O_{ij}$, total $N$ y conteos
+esperados bajo independencia $E_{ij}=O_{i\cdot}O_{\cdot j}/N$ (con
+$O_{i\cdot},O_{\cdot j}$ los totales de fila y columna), el estadístico de
+razón de verosimilitudes $G=2\sum_{ij:O_{ij}>0}O_{ij}\log(O_{ij}/E_{ij})$
+vale $2N\hat I$, donde $\hat I$ es la información mutua de la distribución
+empírica $\hat p_{ij}=O_{ij}/N$.
+\end{proposicion}
+
+\begin{proof}
+$O_{ij}/E_{ij}=\hat p_{ij}/(\hat p_{i\cdot}\hat p_{\cdot j})$ con
+$\hat p_{i\cdot}=O_{i\cdot}/N$ y $\hat p_{\cdot j}=O_{\cdot j}/N$; entonces
+\[
+\sum_{ij}O_{ij}\log\frac{O_{ij}}{E_{ij}}=N\sum_{ij}\hat p_{ij}\log\frac{\hat
+p_{ij}}{\hat p_{i\cdot}\hat p_{\cdot j}}=N\hat I .
+\]
+\end{proof}
+
+El estadístico de Pearson $\chi^2=\sum_{ij}(O_{ij}-E_{ij})^2/E_{ij}$
+aproxima a $G$ cuando los $O_{ij}$ son cercanos a los $E_{ij}$: con
+$u=(O_{ij}-E_{ij})/E_{ij}$, el desarrollo
+$(1+u)\log(1+u)=u+u^2/2+O(u^3)$ da
+$O_{ij}\log(O_{ij}/E_{ij})=(O_{ij}-E_{ij})+\frac{(O_{ij}-E_{ij})^2}{2E_{ij}}+O\bigl(|O_{ij}-E_{ij}|^3/E_{ij}^2\bigr)$,
+y al sumar, como $\sum_{ij}(O_{ij}-E_{ij})=0$, queda
+$G=\chi^2+\sum_{ij}O\bigl(|O_{ij}-E_{ij}|^3/E_{ij}^2\bigr)$.
+
+\begin{definicion}[Factor de inflación de la varianza]
+En una matriz de diseño con intercepto, sea $R_j^2$ el coeficiente de
+determinación de la regresión de la columna $j$ sobre las demás columnas.
+$\mathrm{VIF}_j=1/(1-R_j^2)$.
+\end{definicion}
+
+\begin{proposicion}
+En el modelo $y=Z\beta+\varepsilon$ con $Z$ de rango completo por
+columnas, que incluye la columna $\1$, y $\Var\varepsilon=\sigma^2I$, el
+estimador de mínimos cuadrados cumple
+$\Var(\hat\beta_j)=\sigma^2\,\mathrm{VIF}_j/\mathrm{SCT}_j$, con
+$\mathrm{SCT}_j=\sum_k(z_{kj}-\bar z_j)^2$, para cada columna $j$ distinta
+del intercepto.
+\end{proposicion}
+
+\begin{proof}
+Por el teorema de Frisch--Waugh--Lovell (que requiere solo que $Z$ tenga
+rango completo, lo que se supone), $\hat\beta_j=r_j^\top y/r_j^\top r_j$,
+donde $r_j$ es el vector de residuos de la regresión de la columna $j$
+sobre las demás. Como $r_j$ no depende de $y$,
+$\Var(\hat\beta_j)=r_j^\top(\sigma^2I)r_j/(r_j^\top r_j)^2=\sigma^2/(r_j^\top
+r_j)$. Como las demás columnas incluyen $\1$, la definición del
+coeficiente de determinación da $r_j^\top r_j=(1-R_j^2)\mathrm{SCT}_j$.
+\end{proof}
+
+El VIF mide redundancia, no relevancia: una característica con VIF alto
+puede ser muy predictiva, pero su coeficiente es inestable. Es la
+formalización del ejemplo del capítulo de ingresos y ventas que «se mueven
+en paralelo».
+
+\begin{aws}
+\textbf{Data Wrangler} ofrece análisis (no transformaciones) para
+seleccionar: \emph{Quick Model} (bosque aleatorio con importancias de
+Gini y partición 70/30); \emph{Target Leakage} (para cada columna, AUC o
+$R^2$ de un modelo con esa sola columna por validación cruzada sobre una
+muestra; valores cercanos a $1$ indican posible fuga, como la de los
+ingresos del mismo día que señala el capítulo); \emph{Multicollinearity}
+(VIF recortado a 50, valores singulares de PCA tras estandarizar y
+coeficientes de lasso); y el \emph{Data Quality and Insights Report}, con
+el poder predictivo de cada característica. \textbf{SageMaker Processing}:
+\texttt{SelectKBest} con \texttt{mutual\_info\_classif}, \texttt{chi2} o
+\texttt{f\_classif}, ajustado solo con entrenamiento.
+\end{aws}
+
+% =====================================================================
+\section{Resumen: técnica y servicio}
+% =====================================================================
+
+\begin{center}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.9cm}YYY@{}}
+\toprule
+Técnica & Data Wrangler (Canvas) & Glue DataBrew & Otra vía en AWS\\
+\midrule
+Imputación, indicadora & \emph{Handle missing} & \texttt{FILL\_WITH\_*} & Processing (\texttt{SimpleImputer})\\
+Atípicos ($z$, IQR, MAD) & \emph{Handle outliers} & \texttt{FLAG\_OUTLIERS}, \texttt{REMOVE\_OUTLIERS}, etc. & ---\\
+Escalado lineal & \emph{Process numeric} & \texttt{SCALE} & Processing\\
+$\log$, raíces & \emph{Custom formula} & \texttt{SKEWNESS} & Processing\\
+Box--Cox, Yeo--Johnson, cuantil & \emph{Custom transform} & --- & Processing (\texttt{PowerTransformer}, \texttt{QuantileTransformer})\\
+Discretización & \emph{Custom formula}/\emph{transform} & \texttt{BUCKETIZATION}, \texttt{BINARIZATION} & Processing (\texttt{KBinsDiscretizer})\\
+Ordinal & \emph{Ordinal encode} & \texttt{CATEGORICAL\_MAPPING} & Processing\\
+\emph{One-hot} & \emph{One-hot encode} & \texttt{ONE\_HOT\_ENCODING} ($\le10$ niveles) & Processing\\
+Binaria & \emph{Custom formula} (bits) & --- & Processing (\texttt{category\_encoders})\\
+\emph{Hashing} & \emph{Vectorize}/\emph{Custom transform} & --- & Processing (\texttt{FeatureHasher})\\
+Similitud (\emph{min-hash}) & \emph{Similarity encode} & --- & ---\\
+\emph{Target encoding} & --- & --- & Processing, CatBoost integrado, Glue + Feature Store\\
+WoE / IV & --- & (\texttt{BUCKETIZATION} previa) & Processing o Glue; Linear Learner\\
+Fecha cíclica & \emph{Featurize datetime} & --- & Processing\\
+Rezagos, ventanas & \emph{Lag}/\emph{Rolling window features} & --- & Processing\\
+Imagen: vectores CNN & transformaciones de imagen & --- & JumpStart, Bedrock, Rekognition\\
+PCA & \emph{Reduce dimensionality} & --- & PCA integrado\\
+Tokenización, \emph{stemming} & \emph{Vectorize} (tokenizador) & \texttt{TOKENIZATION} & Processing (spaCy, NLTK)\\
+TF-IDF, $n$-gramas & \emph{Vectorize} + IDF & --- & Processing (\texttt{TfidfVectorizer})\\
+\emph{Word embeddings} & --- & --- & BlazingText, Bedrock (Titan), Comprehend\\
+Selección & análisis \emph{Quick Model}, \emph{Target Leakage}, \emph{Multicollinearity} & --- & Processing (\texttt{SelectKBest})\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+En todos los casos, los parámetros ajustados se estiman con entrenamiento
+(Proposición~\ref{prop:test}), se guardan como artefacto versionado y se
+aplican sin cambios en validación, prueba e inferencia; Feature Store
+ofrece el almacén común que evita que la definición de una característica
+difiera entre entrenamiento y servicio.
+
+\begin{thebibliography}{99}\small
+\bibitem{bc} G.~E.~P. Box y D.~R. Cox (1964). An analysis of transformations. \emph{JRSS B} 26, 211--252.
+\bibitem{breiman} L.~Breiman, J.~Friedman, R.~Olshen y C.~Stone (1984). \emph{Classification and Regression Trees}. Wadsworth.
+\bibitem{broder} A.~Broder (1997). On the resemblance and containment of documents. \emph{Compression and Complexity of Sequences}.
+\bibitem{cerda} P.~Cerda y G.~Varoquaux (2022). Encoding high-cardinality string categorical variables. \emph{IEEE TKDE} 34, 1164--1176.
+\bibitem{dh} D.~L. Donoho y P.~J. Huber (1983). The notion of breakdown point. En \emph{A Festschrift for Erich L.\ Lehmann}. Wadsworth.
+\bibitem{fisher} W.~D. Fisher (1958). On grouping for maximum homogeneity. \emph{JASA} 53, 789--798.
+\bibitem{good} I.~J. Good (1950). \emph{Probability and the Weighing of Evidence}. Griffin.
+\bibitem{esl} T.~Hastie, R.~Tibshirani y J.~Friedman (2009). \emph{The Elements of Statistical Learning}, 2.ª ed. Springer.
+\bibitem{ih} B.~Iglewicz y D.~Hoaglin (1993). \emph{How to Detect and Handle Outliers}. ASQC.
+\bibitem{jolliffe} I.~T. Jolliffe (2002). \emph{Principal Component Analysis}, 2.ª ed. Springer.
+\bibitem{lg} O.~Levy e Y.~Goldberg (2014). Neural word embedding as implicit matrix factorization. \emph{NeurIPS}.
+\bibitem{lr} R.~J.~A. Little y D.~B. Rubin (2019). \emph{Statistical Analysis with Missing Data}, 3.ª ed. Wiley.
+\bibitem{mb} D.~Micci-Barreca (2001). A preprocessing scheme for high-cardinality categorical attributes. \emph{SIGKDD Explorations} 3, 27--32.
+\bibitem{mikolov} T.~Mikolov et al.\ (2013). Distributed representations of words and phrases and their compositionality. \emph{NeurIPS}.
+\bibitem{glove} J.~Pennington, R.~Socher y C.~Manning (2014). GloVe: Global vectors for word representation. \emph{EMNLP}.
+\bibitem{porter} M.~F. Porter (1980). An algorithm for suffix stripping. \emph{Program} 14, 130--137.
+\bibitem{catboost} L.~Prokhorenkova et al.\ (2018). CatBoost: unbiased boosting with categorical features. \emph{NeurIPS}.
+\bibitem{rubin} D.~B. Rubin (1976). Inference and missing data. \emph{Biometrika} 63, 581--592.
+\bibitem{bpe} R.~Sennrich, B.~Haddow y A.~Birch (2016). Neural machine translation of rare words with subword units. \emph{ACL}.
+\bibitem{shiffler} R.~E. Shiffler (1988). Maximum Z scores and outliers. \emph{The American Statistician} 42, 79--80.
+\bibitem{siddiqi} N.~Siddiqi (2006). \emph{Credit Risk Scorecards}. Wiley.
+\bibitem{sj} K.~Spärck Jones (1972). A statistical interpretation of term specificity. \emph{Journal of Documentation} 28, 11--21.
+\bibitem{tukey} J.~W. Tukey (1977). \emph{Exploratory Data Analysis}. Addison-Wesley.
+\bibitem{hash} K.~Weinberger et al.\ (2009). Feature hashing for large scale multitask learning. \emph{ICML}.
+\bibitem{yj} I.-K. Yeo y R.~A. Johnson (2000). A new family of power transformations. \emph{Biometrika} 87, 954--959.
+\bibitem{yos} J.~Yosinski et al.\ (2014). How transferable are features in deep neural networks? \emph{NeurIPS}.
+\end{thebibliography}
+
+\end{document}

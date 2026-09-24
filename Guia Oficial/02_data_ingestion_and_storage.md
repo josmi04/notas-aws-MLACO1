@@ -1,1294 +1,362 @@
 ---
-tema: "Chapter 2 — Data Ingestion and Storage, con implementaciones en código"
+tema: "Capítulo 2 — Ingesta y almacenamiento de datos (versión explicada)"
 fuente: Guia Oficial/02_data_ingestion_and_storage.txt
 guia-mla-c01: [Dominio 1, 1.1 Ingest and store data]
-prerrequisitos:
-  [
-    Chapter 1,
-    credenciales y perfiles de CLI/boto3,
-    IAM (roles de servicio y políticas),
-    anatomía de un training job de SageMaker,
-    S3 (buckets,
-    claves y prefijos),
-    SQL básico,
-    Python y pandas,
-  ]
-no-se-usa-aqui:
-  [
-    feature engineering (Chapter 3),
-    algoritmos en detalle (Chapter 4),
-    hiperparámetros y evaluación (Chapter 5),
-    endpoints e inferencia (Chapter 6),
-    KMS y diseño de red más allá de pasar identificadores (Chapter 8; red como caja negra declarada en la sección de MSK),
-  ]
-region: us-east-1
-versiones:
-  python: "3.12.6"
-  boto3: "1.43.99"
-  aws-cli: "2.26.0"
-  sagemaker-python-sdk: "3.22.1"
-  pandas: "2.2.2"
-  pyarrow: "20.0.0"
-  fastavro: "1.12.2"
-  kafka-python: "3.0.11"
-  aws-msk-iam-sasl-signer-python: "1.0.2"
-verificado: 2026-09-22
-tags:
-  [
-    aws,
-    mla-c01,
-    ingesta,
-    almacenamiento,
-    firehose,
-    kinesis,
-    msk,
-    flink,
-    datasync,
-    glue,
-    s3,
-    athena,
-    efs,
-    fsx,
-    ebs,
-    rds,
-    dynamodb,
-    boto3,
-  ]
+perfil-lector: profesional de datos/estadística sin experiencia administrando infraestructura
+verificado: 2026-09-23
+tags: [aws, mla-c01, ingesta, almacenamiento, formatos-de-datos, firehose, kinesis, msk, flink, datasync, glue, s3, athena, efs, fsx, lustre, ontap, openzfs, ebs, rds, dynamodb]
 ---
 
-> [!info] Cómo leer esta nota
-> El texto en inglés es el capítulo original, sin cambios en ninguna palabra: solo
-> se le dio formato Markdown (encabezados, listas y tablas). Todo lo que está en
-> español es añadido: bloques de código con su explicación, colocados justo después
-> del pasaje que implementan.
+> [!info] Cómo leer esta versión
+> - **Qué es.** Traducción íntegra al español del capítulo 2 de la guía oficial de estudio, con los mismos encabezados, tablas, casos de uso y afirmaciones. No se eliminó nada. Los encabezados conservan entre paréntesis el título original en inglés, porque el examen se presenta en inglés.
+> - **Qué se añadió.** Explicaciones de la terminología de infraestructura (almacenamiento, redes, protocolos, métricas de rendimiento) integradas en el texto la primera vez que aparece cada término; aclaraciones de razonamientos que el libro da por sentados; escalas concretas para las cifras abstractas; **notas de precisión** (recuadros amarillos) cuando el original es impreciso o está desactualizado; la sección «Escenarios donde este servicio es la opción obligada» y un glosario al final.
+> - **Figuras.** El `.txt` no incluye las imágenes, así que solo quedan los pies de figura.
+> - **Comparaciones con hardware de consumo.** Para dar escala a las cifras de rendimiento se comparan con discos típicos de laptop. Esas cifras de referencia son órdenes de magnitud aproximados de hardware de consumo, no especificaciones de AWS.
+> - **Cifras y estado de los servicios.** Se verificaron en la documentación de AWS el 23 de septiembre de 2026. Cambian con frecuencia, así que confírmalos en la documentación oficial vigente antes de usarlos en una decisión real.
+
+> [!warning] Cambios en AWS posteriores a la edición del libro (verificado el 23-09-2026)
+> - **Amazon SageMaker** pasó a llamarse **Amazon SageMaker AI**. En este texto se usa el nombre del libro.
+> - **Amazon Kinesis Data Analytics for SQL**, el servicio que permitía consultar flujos de datos con SQL y que ofrecía la función `RANDOM_CUT_FOREST` que aparece en las preguntas de repaso, **dejó de funcionar el 27 de enero de 2026**. AWS recomienda Amazon Managed Service for Apache Flink, que también admite SQL.
+> - **AWS DataSync Discovery**, la función de descubrimiento que el libro describe en la sección de DataSync, **llegó al fin de su soporte el 20 de mayo de 2025** y ya no se puede usar. El resto de DataSync sigue disponible.
+> - AWS descontinuó **AWS Snowcone** en noviembre de 2024, y **AWS Snowball Edge** solo está disponible para clientes existentes desde el **7 de noviembre de 2025**. Para clientes nuevos, AWS sugiere DataSync (transferencia por red) o AWS Data Transfer Terminal (transferencia física en instalaciones de AWS).
+> - **AWS Glue for Ray** no admite clientes nuevos desde el **30 de abril de 2026**. Los clientes existentes pueden seguir usándolo, y AWS recomienda ejecutar Ray en Amazon EKS como alternativa.
+> - **Apache MXNet**, el framework al que el libro asocia el formato RecordIO, se retiró en septiembre de 2023 y pasó al *Apache Attic* (el archivo de proyectos inactivos de la fundación Apache) en febrero de 2024. Los algoritmos integrados de SageMaker siguen aceptando RecordIO-protobuf.
+> - **Amazon AppStream 2.0** se llama ahora **Amazon WorkSpaces Applications**.
+> - El servicio independiente **Amazon Glacier** (el original, basado en «bóvedas») no admite clientes nuevos desde el 7 de noviembre de 2025. Esto **no** afecta a las clases de almacenamiento **S3 Glacier**, que son las que menciona este capítulo.
+
+**Capítulo 2**
+
+# Ingesta y almacenamiento de datos (*Data Ingestion and Storage*)
+
+> LOS OBJETIVOS DEL EXAMEN AWS CERTIFIED MACHINE LEARNING (ML) ENGINEER – ASSOCIATE QUE CUBRE ESTE CAPÍTULO PUEDEN INCLUIR, ENTRE OTROS, LOS SIGUIENTES:
 >
-> Todos los bloques usan el perfil `kanan-dev`, la región `us-east-1`, la cuenta
-> `111111111111` y los buckets del caso Kanan (`kanan-ml-dev-raw-us-east-1`,
-> `kanan-ml-dev-curated-us-east-1`, `kanan-ml-dev-artifacts-us-east-1`). Cada bloque
-> es autocontenido: importa lo que usa y define sus constantes. Los roles de
-> servicio que aparecen (`KananFirehoseDeliveryRole-dev`, `KananGlueJobRole-dev`,
-> etc.) se suponen creados; cómo se crea un rol de servicio está en las notas de IAM.
->
-> Los bloques de formatos (Parquet, Avro, RecordIO) y las funciones Lambda se
-> ejecutaron en local y muestran su salida real. Los bloques que llaman a AWS no se
-> ejecutaron contra una cuenta: sus operaciones y parámetros se validaron contra los
-> modelos de servicio de botocore 1.43.99.
+> ✔ Dominio 1: Preparación de datos para machine learning
+> - 1.1 Ingerir y almacenar datos
 
-**Chapter 2**
+## Introducción a la ingesta y el almacenamiento (*Introducing Ingestion and Storage*)
 
-# Data Ingestion and Storage
+La ingesta y el almacenamiento de datos son los dos elementos centrales de la fase *Collect Data* (recolectar datos) del ciclo de vida de machine learning (ML), como se muestra en la Figura 2.1.
 
-> THE AWS CERTIFIED MACHINE LEARNING (ML) ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT LIMITED TO, THE FOLLOWING:
+*Figura 2.1 El ciclo de vida de ML.*
 
-- ✔ Domain 1: Data Preparation for Machine Learning
-- 1.1 Ingest and store data
+Como aprendiste en el capítulo 1, tu solución de ML necesita datos para entrenar el modelo seleccionado y generar inferencias. En ML, *inferencia* significa usar el modelo ya entrenado para producir predicciones sobre datos nuevos; no es la inferencia estadística. Los datos pueden llegar en distintas formas (estructurados, semiestructurados o no estructurados), desde distintas fuentes y en distintos momentos.
 
-## Introducing Ingestion and Storage
+La **ingesta** es el proceso que recolecta los datos para tu solución de ML y los envía a AWS. Tú, como ingeniero de machine learning en AWS, tendrás que seleccionar el mejor servicio de ingesta de AWS para reunir los datos de distintas fuentes según su volumen, velocidad y variedad. El **volumen** es cuántos datos hay, la **velocidad** es el ritmo al que llegan (un archivo al día o miles de eventos por segundo) y la **variedad** es cuántos formatos y fuentes distintos hay que combinar. Son las «tres V» clásicas del big data, y cada una empuja hacia servicios distintos. Una velocidad alta, por ejemplo, exige los servicios de *streaming* que verás más adelante.
 
-Data ingestion and storage are the two core elements of the Collect Data phase of the machine learning (ML) lifecycle, as shown in Figure 2.1.
+Una vez recolectados, tendrás que guardar los datos ingeridos en una ubicación adecuada y segura que cumpla los requisitos de durabilidad y disponibilidad. Así, tu solución de ML tendrá acceso a los datos para entrenar tu modelo cuando se necesiten (**disponibilidad**) y durante todo el tiempo que se necesiten (**durabilidad**). Son dos propiedades distintas que a menudo se confunden. Un dato puede estar perfectamente a salvo (es durable) y, aun así, no poder leerse durante una hora porque el servicio está caído (no está disponible). La sección «Elegir servicios de almacenamiento de AWS» las cuantifica.
 
-_FIGURE 2.1 The ML lifecycle._
+## Ingerir y almacenar datos (*Ingesting and Storing Data*)
 
-As you learned in Chapter 1, your ML solution requires data to train the selected model and generate inference. Data may come in different forms (structured, semi-structured or unstructured), from different sources, and at different times.
+Antes de profundizar en la ingesta y el almacenamiento, demos un paso atrás para entender mejor todos los elementos de un problema de ML.
 
-Ingestion is the process responsible for collecting the data for your ML solution and pushing it into AWS. You—as an AWS machine learning engineer—will need to select the best AWS data ingestion service to gather the data from different sources based on volume, velocity, and variety.
+El machine learning forma parte de una disciplina más amplia conocida como **ingeniería de datos**. En este contexto, el ML es una de las tres formas en que se sirven los datos. El libro no dice cuáles son las otras dos. El ciclo que describe el texto coincide con el del libro *Fundamentals of Data Engineering* (Reis y Housley), aunque, como la figura no está en el `.txt`, esta atribución es una inferencia. En ese ciclo, la etapa final, *serving* (servir los datos), tiene tres destinos: la **analítica** (reportes y tableros), el **ML** y el ***reverse ETL***. El reverse ETL devuelve datos ya procesados a los sistemas operativos de la empresa, por ejemplo, un puntaje de propensión calculado en el data warehouse que se envía de vuelta al CRM para que lo vean los vendedores.
 
-Upon collection, you will need to store the ingested data in a suitable and secure location to ensure the durability and availability requirements are met. With this approach, your ML solution will have access to the data to train your ML model when it’s needed (availability) and as long as it’s needed (durability).
+La Figura 2.2 ilustra el ciclo de vida de la ingeniería de datos. El primer paso es la **generación**, que se centra en el origen de los datos. Los datos pueden generarse en distintos sistemas fuente, como una base de datos, un dispositivo de Internet de las cosas (IoT) o un sistema de streaming, entre otros. Un dispositivo **IoT** (*Internet of Things*) es un aparato físico con sensores y conexión a la red, como un medidor eléctrico inteligente o un sensor de temperatura de una planta industrial, que envía lecturas continuamente. Un **sistema de streaming** emite los datos como un flujo continuo de eventos pequeños, en lugar de hacerlo en archivos completos. Un ingeniero de datos diseña procesos para consumir datos de los sistemas fuente, pero puede que no los controle. En la práctica, el sistema fuente puede cambiar su esquema, caerse o enviar datos duplicados sin avisar, y la ingesta debe estar preparada para absorberlo.
 
-## Ingesting and Storing Data
+*Figura 2.2 El ciclo de vida de la ingeniería de datos.*
 
-Before delving into ingestion and storage, let’s take a step back to better understand all the elements of an ML problem.
+Tras su generación, los datos se ingieren en su formato o formatos crudos en un sistema de almacenamiento ubicado en AWS, donde se guardan y luego se procesan. Para el examen, necesitas saber elegir un almacén de datos adecuado, y la elección depende del caso de uso. Por ejemplo, podrías querer guardar tus datos crudos como **almacenamiento de objetos** en un **bucket** de S3 porque tus datos se producen por lotes y este tipo de almacenamiento es relativamente barato comparado con otros medios. En el almacenamiento de objetos, cada archivo se guarda entero como un *objeto*: los bytes del archivo, unos metadatos (tipo de contenido, fecha, etiquetas) y una clave única que lo identifica, como `ventas/2024/05/dia-01.csv`. Los objetos viven dentro de un **bucket**, un contenedor cuyo nombre es único en todo S3, y se leen y escriben mediante peticiones HTTP a una API. Es barato porque AWS lo implementa sobre enormes conjuntos de discos compartidos entre millones de clientes. Además, encaja con los datos por lotes, porque un lote suele ser justamente un archivo completo que se escribe una vez y se lee muchas.
 
-Machine learning is part of a broader discipline known as data engineering. In this context, ML is one of the three ways data is served.
+Por el contrario, si tus datos se produjeran y consumieran casi en tiempo real, podrías querer guardarlos en un **medio de almacenamiento de streaming**, como Amazon Kinesis Data Streams. *Casi en tiempo real* (*near real time*) significa que el dato puede consumirse segundos después de generarse, no horas. Un medio de almacenamiento de streaming guarda los eventos en el orden en que llegan, como un registro al que solo se le agregan líneas al final, y los conserva durante un periodo configurable para que uno o varios consumidores los lean a su propio ritmo. Se parece a una cola de mensajes, con una diferencia importante: leer un evento no lo borra, así que otro consumidor puede leerlo después.
 
-Figure 2.2 illustrates the data engineering lifecycle. The first step is generation, which is focused on where the data originates from. Data can be generated by a variety of different source system such as a database, an Internet of Things (IoT) device, a streaming system, and more. A data engineer designs processes to consume data from source systems but might not be able to control them.
+La Figura 2.3 muestra una vista jerárquica de las capas de almacenamiento en AWS. La capa superior ilustra el almacenamiento a nivel conceptual, con distintos tipos de abstracciones de almacenamiento. La capa intermedia describe el almacenamiento a nivel lógico, con algunos de los sistemas y tipos de almacenamiento más usados. La capa inferior enumera los componentes de infraestructura que hacen funcionar los sistemas de almacenamiento y sus abstracciones. Para cada sistema de almacenamiento suele haber varios servicios de AWS disponibles.
 
-_FIGURE 2.2 The data engineering lifecycle._
+*Figura 2.3 Sistemas de almacenamiento de AWS.*
 
-Upon generation, data is ingested in its raw format(s) into a storage system located in AWS, where it is stored and subsequently processed. For the exam, it is necessary to ensure an appropriate data store is chosen. The choice is based on the specific use case. For example, you may want to store your raw data as object storage in an S3 bucket because your data is produced in batches, and this type of storage is relatively cheap compared to other means. Conversely, if your data was produced and consumed in near real time, you may want to store it in a streaming storage medium, such as Amazon Kinesis Data Streams.
+Como la figura no está en el `.txt`, estos ejemplos de cada capa son ilustrativos y no la transcriben. Una **abstracción** es una forma de organizar los datos para un propósito, como un *data lake* (repositorio central de archivos crudos) o un *data warehouse* (base de datos analítica con esquema fijo). Un **sistema** es la tecnología que la implementa, como un almacén de objetos, una base de datos relacional o un almacenamiento de streaming. La **infraestructura** son los ingredientes físicos: discos, memoria, red y procesadores.
 
-Figure 2.3 shows a hierarchical view of storage layers in AWS. The top layer illustrates storage at a conceptual level by listing different types of storage abstractions. The middle layer describes storage at a logical level, with some of the most commonly used storage systems and types. The bottom layer lists the underlying infrastructure components that make the storage systems, and the corresponding storage abstractions, work. For each storage system, several AWS services are generally available.
+Casi todo este capítulo depende de distinguir tres tipos de almacenamiento, y los tres se apoyan en un concepto previo, el sistema de archivos:
 
-_FIGURE 2.3 AWS storage systems._
+- **Sistema de archivos (concepto base).** Un disco, por sí solo, es una larga fila de bloques numerados de tamaño fijo (por ejemplo, de 4 KB) sin noción de «archivo». El sistema de archivos es la capa de software del sistema operativo que organiza esos bloques en carpetas y archivos con nombre. Lleva la cuenta de qué bloques pertenecen a cada archivo, quién puede leerlo y quién lo está modificando en ese momento. NTFS en Windows, APFS en macOS y ext4 en Linux son sistemas de archivos. Cuando en pandas ejecutas `pd.read_csv("datos/ventas.csv")`, es el sistema de archivos el que traduce esa ruta a bloques del disco.
+- **Almacenamiento de bloques (*block storage*).** Entrega un disco «en crudo», es decir, bloques direccionables que una máquina conecta y formatea con su propio sistema de archivos. Es el equivalente del SSD que va dentro de tu laptop. Es el tipo más rápido y de más bajo nivel, pero normalmente lo usa una sola máquina a la vez. En AWS es Amazon EBS.
+- **Almacenamiento de archivos (*file storage*).** Es un sistema de archivos que vive en otra máquina, un servidor, y que varias computadoras usan a la vez por la red, con carpetas, permisos y bloqueos incluidos. Es la «unidad de red» compartida de una oficina. En AWS son Amazon EFS y la familia Amazon FSx.
+- **Almacenamiento de objetos (*object storage*).** No tiene carpetas reales ni disco que conectar: es un espacio plano de claves, cada una con su objeto completo, al que se accede por HTTP. Se parece a un diccionario de Python gigantesco (`{clave: (bytes, metadatos)}`) expuesto como servicio web. Un fragmento de un objeto no se puede modificar; hay que reemplazar el objeto entero. A cambio, escala prácticamente sin límite y es el más barato por gigabyte. En AWS es Amazon S3.
 
-For the exam it is also required that you understand how to extract the stored data and how to prepare it for your selected ML algorithm, which will be used to train your model and derive inferences. These tasks will be covered in the next chapters.
+Para ML, el tipo de almacenamiento decide cómo lo lee tu código. Con bloques o archivos, el código abre rutas como si el disco fuera local. Con objetos, usa una API o una biblioteca que la envuelve (`boto3`, `s3fs`), o un servicio que copia los datos a un disco local antes de entrenar.
 
-In the upcoming sections, you will learn how to choose the most appropriate data store to collect and host the data for your ML solution. The core AWS services to ingest data from different sources into AWS will be covered, as well as the main use cases that apply to them.
+Para el examen también necesitas entender cómo extraer los datos almacenados y cómo prepararlos para el algoritmo de ML seleccionado, que se usará para entrenar tu modelo y obtener inferencias. Estas tareas se cubren en los próximos capítulos.
 
-## Data Formats and Ingestion Techniques
+En las próximas secciones aprenderás a elegir el almacén de datos más adecuado para recolectar y alojar los datos de tu solución de ML. Se cubrirán los servicios principales de AWS para ingerir datos de distintas fuentes, junto con sus principales casos de uso.
 
-There are many different data formats to efficiently ingest and store data for your ML model. By using the right data format and algorithm, you—as a machine learning engineer—can optimize performance, improve scalability, and reduce processing time.
+## Formatos de datos y técnicas de ingesta (*Data Formats and Ingestion Techniques*)
 
-AWS supports a variety of data formats to cater to different use cases and services. These are some of the commonly used data formats to ingest and store data in AWS:
+Existen muchos formatos de datos para ingerir y almacenar eficientemente los datos de tu modelo de ML. Si usas el formato y el algoritmo adecuados, tú, como ingeniero de machine learning, puedes optimizar el rendimiento, mejorar la escalabilidad y reducir el tiempo de procesamiento.
 
-- Comma-separated values (CSV)
+AWS admite una variedad de formatos de datos para distintos casos de uso y servicios. Estos son algunos de los formatos más usados para ingerir y almacenar datos en AWS:
+
+- Valores separados por comas (CSV)
 - JavaScript Object Notation (JSON)
 - Apache Parquet
 - Apache Optimized Row Columnar (ORC)
 - Apache Avro
 - RecordIO
 
-CSV is widely used to store structured data in tabular format, whereas JSON is ideal for document-based, semi-structured data.
-
-Apache Parquet and Apache ORC are columnar data formats and are designed to optimize storage operations (read, writes) for large datasets. The values in each column are stored in contiguous memory locations, providing the following benefits:
-
-- Column-specific compression is efficient in storage space.
-- Column-specific encoding and compression techniques can be used.
-- Queries that fetch specific column values do not need to read the entire row, thus improving performance.
-
-#### El mismo millón de transacciones en cuatro formatos
-
-Este bloque corre en local, sin cuenta de AWS: genera un millón de transacciones
-sintéticas y las escribe en CSV, JSON Lines, Parquet y ORC, para ver con números
-los tres beneficios del formato columnar que acaba de enumerar el texto. Necesita
-`numpy`, `pandas` y `pyarrow` (probado con pandas 2.2.2 y pyarrow 20.0.0).
-
-```python
-import os
-
-import numpy as np
-import pandas as pd
-import pyarrow as pa
-import pyarrow.orc as orc
-import pyarrow.parquet as pq
-
-rng = np.random.default_rng(0)
-n = 1_000_000
-df = pd.DataFrame({
-    "customer_id": rng.integers(1, 50_000, n),
-    "amount": rng.gamma(2.0, 50.0, n).round(2),
-    "merchant": rng.choice(["grocery", "fuel", "online", "travel"], n),
-    "is_fraud": (rng.random(n) < 0.01).astype("int8"),
-})
-
-df.to_csv("tx.csv", index=False)
-df.to_json("tx.jsonl", orient="records", lines=True)
-df.to_parquet("tx.parquet", compression="snappy", index=False)
-orc.write_table(pa.Table.from_pandas(df, preserve_index=False), "tx.orc", compression="zstd")
-
-for f in ["tx.csv", "tx.jsonl", "tx.parquet", "tx.orc"]:
-    print(f"{f:11s} {os.path.getsize(f) / 1e6:6.1f} MB")
-
-solo_amount = pq.read_table("tx.parquet", columns=["amount"])
-print(solo_amount.num_columns, "columna,", solo_amount.num_rows, "filas")
-
-col = pq.ParquetFile("tx.parquet").metadata.row_group(0).column(2)
-print(col.path_in_schema, col.compression, col.encodings)
-print(col.statistics.min, col.statistics.max)
-```
-
-Salida:
-
-```text
-tx.csv        21.8 MB
-tx.jsonl      69.8 MB
-tx.parquet     4.7 MB
-tx.orc         6.9 MB
-1 columna, 1000000 filas
-merchant SNAPPY ('PLAIN', 'RLE', 'RLE_DICTIONARY')
-fuel travel
-```
-
-`df.to_json(..., orient="records", lines=True)` escribe _JSON Lines_: un objeto
-JSON por línea, sin corchete que envuelva el archivo. Es la variante que acepta
-DeepAR (Tabla 2.1) y la que usan los servicios de streaming de este capítulo,
-porque un archivo así se puede partir por saltos de línea sin parsearlo entero.
-Sin `lines=True`, pandas escribe un único arreglo JSON, que hay que leer completo
-antes de obtener el primer registro. Los 70 MB, tres veces el CSV, salen de
-repetir el nombre de cada columna en cada fila.
-
-`to_parquet(compression="snappy")` comprime **cada columna por separado**: es el
-primer beneficio de la lista. Snappy ya es el valor por defecto; lo escribo
-explícito para que se vea la elección. `"gzip"` y `"zstd"` comprimen más a cambio
-de más CPU al leer.
-
-`pa.Table.from_pandas(df, preserve_index=False)` convierte el `DataFrame` a la
-tabla de Arrow que pide el escritor de ORC. `preserve_index=False` evita que el
-índice de pandas acabe guardado como una columna más.
-
-`pq.read_table("tx.parquet", columns=["amount"])` es el tercer beneficio: del
-disco solo se leen los bloques de `amount`. En CSV no hay equivalente real:
-`pd.read_csv(usecols=["amount"])` tiene que recorrer cada fila completa para
-encontrar dónde empieza y dónde acaba la columna que quieres.
-
-`metadata.row_group(0).column(2)`: un archivo Parquet se divide en _row groups_
-(bloques de filas) y, dentro de cada uno, en _column chunks_ (el tramo de una
-columna dentro del bloque). La salida muestra el segundo beneficio: `merchant`,
-que solo tiene cuatro valores distintos, se codificó con diccionario
-(`RLE_DICTIONARY`), así que cada fila guarda un entero pequeño en vez de la
-cadena. Las estadísticas `min`/`max` de cada bloque son lo que permite a un motor
-de consultas saltarse bloques enteros que no pueden cumplir un `WHERE`.
-
-Unlike Apache Parquet and Apache ORC, Apache Avro is designed to store data in a row-based format. Avro data relies on schemas. When Avro data is read, the schema used when writing it is always present. This permits each data component to be written with no per-value overheads, making serialization both fast and small. This also facilitates use with dynamic scripting languages, because data, together with its schema, is fully self-describing. When Avro data is stored in a file, its schema is stored with it as well so that files may be processed later by any program. If the program reading the data expects a different schema, this can be easily resolved, because both schemas are present.
-
-#### Un archivo Avro que lleva su esquema dentro
-
-Corre en local con `fastavro` (`pip install fastavro`, probado con 1.12.2). Escribe
-dos transacciones con un esquema y las lee después con otro que tiene un campo
-más, que es exactamente el caso del último párrafo.
-
-```python
-from fastavro import parse_schema, reader, writer
-
-esquema_v1 = parse_schema({
-    "type": "record",
-    "name": "Transaccion",
-    "namespace": "kanan.fraude",
-    "fields": [
-        {"name": "customer_id", "type": "long"},
-        {"name": "amount", "type": "double"},
-    ],
-})
-
-registros = [
-    {"customer_id": 123, "amount": 45.9},
-    {"customer_id": 456, "amount": 12.0},
-]
-
-with open("tx.avro", "wb") as f:
-    writer(f, esquema_v1, registros, codec="deflate")
-
-with open("tx.avro", "rb") as f:
-    lector = reader(f)
-    print(lector.writer_schema["fields"])
-    print(list(lector))
-
-esquema_v2 = parse_schema({
-    "type": "record",
-    "name": "Transaccion",
-    "namespace": "kanan.fraude",
-    "fields": [
-        {"name": "customer_id", "type": "long"},
-        {"name": "amount", "type": "double"},
-        {"name": "channel", "type": "string", "default": "desconocido"},
-    ],
-})
-
-with open("tx.avro", "rb") as f:
-    print(list(reader(f, reader_schema=esquema_v2)))
-```
-
-Salida:
-
-```text
-[{'name': 'customer_id', 'type': 'long'}, {'name': 'amount', 'type': 'double'}]
-[{'customer_id': 123, 'amount': 45.9}, {'customer_id': 456, 'amount': 12.0}]
-[{'customer_id': 123, 'amount': 45.9, 'channel': 'desconocido'}, {'customer_id': 456, 'amount': 12.0, 'channel': 'desconocido'}]
-```
-
-El esquema es un documento JSON: un `record` con nombre, _namespace_ (espacio de
-nombres, para distinguir dos `Transaccion` de equipos distintos) y una lista de
-campos tipados. `parse_schema` lo valida antes de usarlo; un tipo mal escrito
-falla aquí y no a mitad de la escritura.
-
-`writer(f, esquema_v1, registros, codec="deflate")` guarda el esquema **una vez**,
-en la cabecera del archivo, y después cada registro en binario sin nombres de
-campo: 123 y 45.9, sin `"customer_id"` delante. Es el «no per-value overheads»
-del texto, y la diferencia con JSON Lines, que repite los nombres en cada línea.
-
-`lector.writer_schema` demuestra el «self-describing»: el lector no recibió
-ningún esquema y aun así sabe qué contiene el archivo.
-
-`reader(f, reader_schema=esquema_v2)` es la resolución de esquemas: el programa
-espera un campo `channel` que el archivo no tiene, y como ambos esquemas están
-presentes, Avro rellena el campo con su `default`. Si quitas `"default"` de
-`channel`, la lectura falla con
-`SchemaResolutionError: No default value for field channel in kanan.fraude.Transaccion`.
-
-Last, RecordIO is a data format used primarily by Apache MXNet, a deep learning framework. The basic idea is to divide the data into individual chunks, called records, and then prepend to every record its length in bytes, followed by the data. As a result, RecordIO implements a file format for a sequence of records.
-
-#### El formato RecordIO escrito a mano
-
-RecordIO es poco más que la idea del párrafo anterior: una cabecera fija con la
-longitud y, detrás, los bytes. Estas dos funciones escriben y leen el formato de
-MXNet con la biblioteca estándar, para ver byte por byte qué hay en el archivo.
-
-```python
-import struct
-
-MAGIC = 0xCED7230A
-
-
-def escribir_recordio(ruta, cargas):
-    with open(ruta, "wb") as f:
-        for datos in cargas:
-            f.write(struct.pack("<II", MAGIC, len(datos)))
-            f.write(datos)
-            f.write(b"\x00" * (-len(datos) % 4))
-
-
-def leer_recordio(ruta):
-    registros = []
-    with open(ruta, "rb") as f:
-        while True:
-            cabecera = f.read(8)
-            if not cabecera:
-                break
-            magic, longitud = struct.unpack("<II", cabecera)
-            if magic != MAGIC:
-                raise ValueError("cabecera inválida: archivo corrupto o desalineado")
-            registros.append(f.read(longitud))
-            f.read(-longitud % 4)
-    return registros
-
-
-escribir_recordio("tx.rec", [b"primer registro", b"otro", b"x" * 10])
-print(leer_recordio("tx.rec"))
-
-with open("tx.rec", "rb") as f:
-    print(f.read(24).hex(" "))
-```
-
-Salida:
-
-```text
-[b'primer registro', b'otro', b'xxxxxxxxxx']
-0a 23 d7 ce 0f 00 00 00 70 72 69 6d 65 72 20 72 65 67 69 73 74 72 6f 00
-```
-
-`struct.pack("<II", MAGIC, len(datos))` escribe dos enteros sin signo de 32 bits
-en orden _little-endian_ (`<`): el número mágico y la longitud. En la salida
-hexadecimal se ven así: `0a 23 d7 ce` es `0xCED7230A` con los bytes invertidos, y
-`0f 00 00 00` es 15, la longitud de `"primer registro"`. El número mágico no
-aporta datos: sirve para detectar que el lector perdió la alineación, y por eso
-`leer_recordio` falla si no lo encuentra.
-
-`b"\x00" * (-len(datos) % 4)` rellena con ceros hasta un múltiplo de 4 bytes; el
-`00` final de la salida es ese relleno (15 bytes + 1). Gracias a la longitud en
-la cabecera, un lector puede saltar registros sin leerlos y un trabajo
-distribuido puede repartir el archivo por registros.
-
-En MXNet los 3 bits altos de la longitud marcan si un registro se partió en
-varios trozos; con registros de menos de 512 MB valen cero y se pueden ignorar,
-como aquí. El **RecordIO-protobuf** de la Tabla 2.1 es este mismo contenedor
-cuando cada carga es un mensaje _protobuf_ `Record` con el vector de
-características y la etiqueta. El SDK de SageMaker v2 lo escribía con
-`sagemaker.amazon.common.write_numpy_to_dense_tensor`; en el SDK v3 (3.22.1) el
-módulo `sagemaker.amazon` ya no existe (`ModuleNotFoundError`), así que ese camino
-no está disponible con las versiones de este vault.
-
-A key driver in the decision of what data format to choose is the format supported by the ML algorithm you intend to use for your ML problem. This ML algorithm will be trained on your data, so ensuring compatibility between the data format and the algorithm’s requirements is crucial for optimal performance and efficiency. By aligning your data format with the algorithm’s capabilities, you can streamline the data ingestion process, reduce preprocessing overhead, and achieve more accurate and faster results in your ML workflow.
-
-Table 2.1 lists built-in Amazon SageMaker algorithms along with their accepted data formats. Chapter 4 will cover in detail each one of these algorithms.
-
-**TABLE 2.1 Data format support for built-in ML algorithms in Amazon SageMaker.**
-
-| Algorithm                  | Accepted data formats              |
-| -------------------------- | ---------------------------------- |
-| BlazingText                | Text file (one sentence per line)  |
-| DeepAR forecasting         | JSON Lines, Parquet                |
-| Factorization Machines     | RecordIO-protobuf, CSV             |
-| Image classification       | RecordIO, image files (.jpg, .png) |
-| IP Insights                | CSV                                |
-| K-means                    | RecordIO-protobuf, CSV             |
-| K-nearest neighbors (k-NN) | RecordIO-protobuf, CSV             |
-| Linear learner             | RecordIO-protobuf, CSV             |
-| LDA                        | RecordIO-protobuf, CSV             |
-| Neural topic model         | RecordIO-protobuf, CSV             |
-| Object detection           | RecordIO, image files (.jpg, .png) |
-| PCA                        | RecordIO-protobuf, CSV             |
-| Random cut forest          | RecordIO-protobuf, CSV             |
-| Semantic segmentation      | RecordIO, image files (.jpg, .png) |
-| Seq2Seq                    | RecordIO-protobuf, text file       |
-| XGBoost                    | CSV, LibSVM, Parquet               |
-
-#### Declarar el formato del canal de entrenamiento
-
-La Tabla 2.1 se vuelve concreta en un único campo: el `ContentType` de cada
-canal de un _training job_. SageMaker no convierte nada: copia los objetos tal
-como están en S3 y le pasa al algoritmo la cadena `ContentType` para que sepa
-cómo parsearlos. Este bloque lanza XGBoost con los datos en CSV.
-
-```python
-from datetime import datetime
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-sm = session.client("sagemaker")
-
-job_name = "kanan-fraude-xgb-" + datetime.now().strftime("%Y%m%d-%H%M%S")
-sm.create_training_job(
-    TrainingJobName=job_name,
-    RoleArn="arn:aws:iam::111111111111:role/KananSageMakerExecutionRole-dev",
-    AlgorithmSpecification={
-        "TrainingImage": "683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-xgboost:1.7-1",
-        "TrainingInputMode": "File",
-    },
-    HyperParameters={"objective": "binary:logistic", "num_round": "100"},
-    InputDataConfig=[{
-        "ChannelName": "train",
-        "ContentType": "text/csv",
-        "DataSource": {"S3DataSource": {
-            "S3DataType": "S3Prefix",
-            "S3Uri": "s3://kanan-ml-dev-curated-us-east-1/fraude/train-csv/",
-            "S3DataDistributionType": "FullyReplicated",
-        }},
-    }],
-    OutputDataConfig={"S3OutputPath": "s3://kanan-ml-dev-artifacts-us-east-1/fraude/modelos/"},
-    ResourceConfig={"InstanceType": "ml.m5.xlarge", "InstanceCount": 1, "VolumeSizeInGB": 30},
-    StoppingCondition={"MaxRuntimeInSeconds": 3600},
-)
-print(sm.describe_training_job(TrainingJobName=job_name)["TrainingJobStatus"])
-```
-
-`"TrainingImage"` es la imagen del algoritmo integrado; la cuenta `683313688378`
-es la que publica XGBoost en `us-east-1` y cambia por región. No hace falta
-memorizarla: `from sagemaker.core import image_uris` y
-`image_uris.retrieve("xgboost", region="us-east-1", version="1.7-1")` devuelve
-esa misma cadena (comprobado con el SDK 3.22.1).
-
-`"ContentType": "text/csv"` es la columna derecha de la Tabla 2.1 traducida a
-cadena. Con CSV, XGBoost espera la **etiqueta en la primera columna y ningún
-encabezado**; si el archivo trae encabezado, la primera fila se interpreta como
-datos y el job falla al convertir texto a número. Las cadenas que usan los
-algoritmos integrados:
-
-| Formato de la Tabla 2.1                            | `ContentType` del canal           |
-| -------------------------------------------------- | --------------------------------- |
-| CSV con etiqueta en la primera columna             | `text/csv`                        |
-| CSV sin etiqueta (k-means, PCA, Random Cut Forest) | `text/csv;label_size=0`           |
-| LibSVM                                             | `text/libsvm`                     |
-| Parquet                                            | `application/x-parquet`           |
-| RecordIO-protobuf                                  | `application/x-recordio-protobuf` |
-| Imágenes empaquetadas en RecordIO                  | `application/x-recordio`          |
-| Imágenes sueltas (.jpg, .png)                      | `application/x-image`             |
-
-`HyperParameters` va con los valores como **cadenas** (`"100"`, no `100`): la API
-solo acepta un mapa de texto a texto, y un entero produce un
-`ParamValidationError` antes de salir de tu máquina.
-
-Si cambias `"text/csv"` por `"application/x-parquet"` sin cambiar los archivos,
-nada lo impide al crear el job: el error aparece minutos después, cuando el
-algoritmo intenta leer un CSV como Parquet y el job termina en `Failed`.
-
-Another important driver to consider is your data access pattern. A data access pattern defines how producers and consumers interact with data to meet business needs. It involves understanding and documenting the ways data is queried, stored, and retrieved. The following are the main factors that define your data access pattern:
-
-- **Data size.** Knowing the volume of data helps in determining effective data partitioning.
-- **Data shape.** Organizing data to match query requirements can enhance speed and scalability.
-- **Data velocity.** Understanding peak query loads helps in optimizing data partitioning for better I/O capacity.
-
-Table 2.2 illustrates an example of what you should look for in a data access pattern.
-
-**TABLE 2.2 Example of a data access pattern.**
-
-| Field                                 | Example                                         |
-| ------------------------------------- | ----------------------------------------------- |
-| Data Access Pattern Name              | Find orders                                     |
-| Data Access Pattern Description       | Find orders by Customer ID and Time Interval    |
-| Priority                              | Medium                                          |
-| Operation (Read/Write)                | Read                                            |
-| Type (Single Item/Multiple Items/All) | Multiple                                        |
-| Filter                                | Customer ID = 123, Time Interval = 24 hours ago |
-| Sort                                  | Time descending                                 |
-
-In essence, data access patterns help in designing efficient and scalable data ingestion solutions by aligning your organization data with access requirements.
-
-Put differently, the way your raw data is consumed from different sources and is ingested and stored into AWS will help you determine the data format and the AWS service to use.
-
-Table 2.3 shows how AWS services are grouped based on whether your data is structured, semi-structured, or unstructured.
-
-**TABLE 2.3 AWS services for structured, semi-structured, and unstructured data**
-
-**Structured data**
-
-| Service         | Key characteristics                                                                                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Amazon RDS      | Managed relational database service supporting multiple engines (MySQL, PostgreSQL, MariaDB, Oracle, SQL Server); handles provisioning, patching, backups, and read replicas automatically. |
-| Amazon Aurora   | MySQL- and PostgreSQL-compatible relational database built for the cloud; offers higher throughput than standard MySQL/PostgreSQL, with storage that auto-scales up to 128 TB.              |
-| Amazon Redshift | Fully managed data warehouse for large-scale analytics; uses columnar storage and massively parallel processing (MPP) to run complex SQL queries over petabytes of data.                    |
-| Amazon S3       | Object storage that can hold structured files (e.g., CSV, Parquet); pairs with query engines like Athena or Redshift Spectrum for analysis without moving the data.                         |
-| Amazon Athena   | Serverless, interactive query service that runs standard SQL directly against data in S3; no infrastructure to manage, pay only per query.                                                  |
-
-**Semi-structured data**
-
-| Service           | Key characteristics                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Amazon DynamoDB   | Fully managed NoSQL key-value and document database; delivers single-digit millisecond latency at any scale, with built-in horizontal scaling. |
-| Amazon DocumentDB | Managed document database service, compatible with MongoDB APIs and drivers; designed for JSON-like document workloads.                        |
-| Amazon Athena     | Same serverless SQL engine as above; also supports querying semi-structured formats such as JSON and Avro directly from S3.                    |
-| Amazon S3         | Object storage commonly used to hold semi-structured files (JSON, XML, logs) before or alongside processing.                                   |
-
-**Unstructured data**
-
-| Service            | Key characteristics                                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Amazon S3          | Object storage for any file type (images, video, audio, text) at virtually unlimited scale; the common landing zone for unstructured data. |
-| Amazon Rekognition | Computer vision service that uses deep learning to detect objects, scenes, faces, and inappropriate content in images and video.           |
-| Amazon Transcribe  | Automatic speech recognition (ASR) service that converts audio into text, with support for speaker identification and custom vocabularies. |
-| Amazon Comprehend  | Natural language processing (NLP) service that extracts insights from text, such as sentiment, key phrases, entities, and language.        |
-
-As you may have noticed, Amazon S3 is the most flexible service because it can be used for all three data categories. Additionally, you can supplement Amazon S3 with Amazon Athena and query your data directly from S3 without formatting the data or managing the infrastructure.
-
-In the next sections, we will deep dive into these services as they relate to ingestion and storage.
-
-## Choosing AWS Ingestion Services
-
-When it comes to ingestion services, AWS offers a broad spectrum of options. What service best fits your use case is driven by a number of factors:
-
-- **Scalability.** Your ingestion solution must be able to support the velocity and volume of your data as it becomes available from all its data sources.
-- **Resilience.** Your ingestion solution must be able to recover from failures and be able to resume seamlessly from when the failure occurred.
-- **Security and compliance.** The data must be properly secured during the ingestion process so that no unauthorized actor is allowed to ever consume it while in transit or while it is stored. Moreover, the ingestion process must comply with industry-specific regulations, e.g., Payment Card Industry Data Security Standard (PCI DSS), Health Insurance Portability and Accountability Act (HIPAA), and so on. Additional considerations must be examined to ensure data is ingested and stored in accordance with data residency requirements.
-- **Cost.** With the cloud pay-as-you-go delivery model, you always want to make sure cost is under control. This is even more true when dealing with streaming data, which virtually never stops. As a result, costs incurred to ingest and store data to train your ML models can quickly grow. You, as an ML engineer, need to choose an AWS ingestion service that supports the most cost-effective pricing model for your use case.
-- **Flexibility.** Your ingestion solution must be able to adapt to changes. AWS services are highly customizable. Make sure you tailor your data ingestion pipelines to meet your business and technical requirements, but also consider change as an additional element to be addressed in the architecture of your solution.
-
-Let’s start our study with AWS data ingestion services for streaming data.
+CSV se usa mucho para guardar datos estructurados en formato tabular, mientras que JSON es ideal para datos semiestructurados basados en documentos.
+
+Apache Parquet y Apache ORC son formatos de datos **columnares**, diseñados para optimizar las operaciones de almacenamiento (lecturas y escrituras) con datasets grandes. Los valores de cada columna se guardan en posiciones de memoria contiguas. Dicho de otro modo, dentro del archivo se escriben primero todos los valores de la columna `edad`, luego todos los de `ciudad`, y así sucesivamente, en lugar de escribir fila por fila como un CSV. Esto da los siguientes beneficios:
+
+- La compresión específica por columna ahorra espacio de almacenamiento. Comprime mejor porque los valores de una misma columna son del mismo tipo y suelen repetirse, así que el compresor encuentra patrones con más facilidad que en una fila que mezcla fechas, textos y números.
+- Se pueden usar técnicas de codificación y compresión específicas para cada columna. Una **codificación** es una forma compacta de representar valores antes de comprimirlos. Con la *codificación por diccionario*, una columna `país` con millones de repeticiones de diez valores se guarda como enteros pequeños más un diccionario de diez entradas. Con la *codificación por longitud de corrida* (*run-length encoding*), una secuencia como `MX, MX, MX, MX` se guarda como «`MX` × 4».
+- Las consultas que piden valores de columnas específicas no necesitan leer la fila completa, lo que mejora el rendimiento. Si una tabla tiene 100 columnas y tu consulta usa 3, el motor lee aproximadamente el 3 % de los datos. Es lo mismo que hace `pd.read_parquet(ruta, columns=[...])`, y en servicios que cobran por datos leídos, como Amazon Athena (que verás más adelante), también reduce el costo.
+
+A diferencia de Apache Parquet y Apache ORC, **Apache Avro** está diseñado para guardar datos en formato **por filas**. Los datos Avro dependen de esquemas, y cuando se leen, el esquema con que se escribieron siempre está presente. Esto permite escribir cada componente de los datos sin sobrecarga por valor, lo que hace que la **serialización** sea rápida y compacta. Serializar es convertir un objeto que está en memoria (un registro, un diccionario) en una secuencia de bytes que se puede guardar en disco o enviar por la red. La «sobrecarga por valor» se entiende al compararlo con JSON, donde cada registro repite los nombres de los campos (`{"edad": 34, "ciudad": "Lima"}`). En Avro, el esquema indica el orden y el tipo de los campos, así que en el archivo solo se escriben los valores, en binario. Esto también facilita su uso con lenguajes de scripting dinámicos, como Python o JavaScript, porque los datos, junto con su esquema, se describen a sí mismos por completo: el programa no necesita conocer el esquema de antemano. Cuando los datos Avro se guardan en un archivo, su esquema se guarda con ellos, de modo que cualquier programa puede procesar los archivos más adelante. Si el programa que lee los datos espera un esquema distinto, el conflicto se resuelve fácilmente, porque ambos esquemas están presentes. Esto se conoce como **evolución de esquema**: si el lector espera un campo nuevo que no existía al escribir, Avro le asigna el valor por defecto que declara el esquema del lector; si el archivo trae un campo que el lector ya no usa, lo ignora.
+
+El libro no lo dice, pero es la razón de que convivan ambos tipos de formato. Los formatos por filas, como Avro, son eficientes para **escribir** registros completos uno a uno, que es lo que ocurre durante la ingesta de streaming (Avro es muy común con Apache Kafka, que verás más adelante). Los formatos columnares, como Parquet, son eficientes para **leer** pocas columnas de muchos registros, que es lo que hace el análisis y el entrenamiento.
+
+Por último, **RecordIO** es un formato de datos que usa principalmente Apache MXNet, un framework de deep learning. La idea básica es dividir los datos en fragmentos individuales llamados *registros* (*records*) y anteponer a cada registro su longitud en bytes, seguida de los datos. Como resultado, RecordIO implementa un formato de archivo para una secuencia de registros. Saber de antemano cuántos bytes ocupa cada registro permite leer el archivo como un flujo continuo y repartirlo entre varios lectores en paralelo sin tener que interpretar su contenido. En SageMaker lo verás casi siempre como **RecordIO-protobuf**: cada registro contiene datos serializados con **Protocol Buffers** (*protobuf*), el formato binario, compacto y con tipos definidos que creó Google. (Recuerda que MXNet ya está retirado; ver el recuadro del inicio.)
+
+Un factor clave para elegir el formato es cuáles admite el algoritmo de ML que piensas usar. Ese algoritmo se entrenará con tus datos, así que la compatibilidad entre el formato de los datos y los requisitos del algoritmo es crucial para el rendimiento y la eficiencia. Si alineas el formato de tus datos con las capacidades del algoritmo, puedes simplificar la ingesta, reducir el preprocesamiento y obtener resultados más precisos y rápidos en tu flujo de trabajo de ML.
+
+La Tabla 2.1 enumera los algoritmos integrados (*built-in*) de Amazon SageMaker junto con los formatos de datos que aceptan. En el capítulo 4 se cubre en detalle cada uno de ellos. Un **algoritmo integrado** es una implementación que AWS ya empaqueta y mantiene: solo le pasas los datos y los hiperparámetros, sin escribir el código de entrenamiento.
+
+**Tabla 2.1** Formatos de datos admitidos por los algoritmos integrados de ML en Amazon SageMaker.
+
+| Algoritmo | Formatos de datos aceptados |
+| --- | --- |
+| BlazingText | Archivo de texto (una oración por línea) |
+| DeepAR forecasting | JSON Lines, Parquet |
+| Factorization Machines | RecordIO-protobuf, CSV |
+| Image classification | RecordIO, archivos de imagen (.jpg, .png) |
+| IP Insights | CSV |
+| K-means | RecordIO-protobuf, CSV |
+| K-nearest neighbors (k-NN) | RecordIO-protobuf, CSV |
+| Linear learner | RecordIO-protobuf, CSV |
+| LDA | RecordIO-protobuf, CSV |
+| Neural topic model | RecordIO-protobuf, CSV |
+| Object detection | RecordIO, archivos de imagen (.jpg, .png) |
+| PCA | RecordIO-protobuf, CSV |
+| Random cut forest | RecordIO-protobuf, CSV |
+| Semantic segmentation | RecordIO, archivos de imagen (.jpg, .png) |
+| Seq2Seq | RecordIO-protobuf, archivo de texto |
+| XGBoost | CSV, LibSVM, Parquet |
+
+Dos formatos de la tabla no aparecieron antes. **JSON Lines** es un archivo de texto con un objeto JSON completo por línea, lo que permite procesarlo línea a línea sin cargar todo el archivo. **LibSVM** es un formato de texto para datos dispersos (*sparse*), es decir, con la mayoría de los valores en cero. Cada línea es `etiqueta índice:valor índice:valor ...` y solo lista las características distintas de cero.
+
+> [!warning] Nota de precisión: la tabla no es exhaustiva
+> - La tabla no incluye todos los algoritmos integrados actuales de SageMaker. Consulta la lista vigente en la documentación.
+> - La documentación vigente de XGBoost en SageMaker menciona también el formato protobuf (RecordIO-protobuf) entre sus entradas posibles, y aclara que el entrenamiento distribuido con Dask solo admite CSV y Parquet. Confirma la lista completa de formatos en la página del algoritmo antes de decidir.
+
+Otro factor importante es tu **patrón de acceso a los datos** (*data access pattern*). Un patrón de acceso a los datos define cómo interactúan los productores y los consumidores con los datos para satisfacer las necesidades del negocio. Implica entender y documentar cómo se consultan, se guardan y se recuperan los datos. Estos son los principales factores que definen tu patrón de acceso:
+
+- **Tamaño de los datos.** Conocer el volumen de datos ayuda a determinar un particionamiento eficaz. **Particionar** es dividir los datos en trozos según una clave para que cada consulta lea solo el trozo que necesita. En S3, lo habitual es organizar los archivos por prefijos como `anio=2024/mes=05/`, de modo que una consulta de mayo lea solo esa «carpeta».
+- **Forma de los datos.** Organizar los datos según los requisitos de las consultas puede mejorar la velocidad y la escalabilidad.
+- **Velocidad de los datos.** Entender las cargas pico de consultas ayuda a optimizar el particionamiento para lograr una mejor capacidad de E/S. **E/S** (entrada/salida, en inglés *I/O*) son las operaciones de lectura y escritura sobre el almacenamiento. La *capacidad de E/S* es cuántas de esas operaciones puede atender el sistema por segundo, y si todas las consultas del pico caen en la misma partición, esa partición se satura aunque el resto esté ociosa.
+
+La Tabla 2.2 ilustra un ejemplo de lo que debes buscar en un patrón de acceso a los datos.
+
+**Tabla 2.2** Ejemplo de un patrón de acceso a los datos.
+
+| Campo | Ejemplo |
+| --- | --- |
+| Nombre del patrón de acceso | *Find orders* (buscar pedidos) |
+| Descripción del patrón de acceso | Buscar pedidos por ID de cliente e intervalo de tiempo |
+| Prioridad | Media |
+| Operación (lectura/escritura) | Lectura |
+| Tipo (un elemento / varios elementos / todos) | Varios |
+| Filtro | ID de cliente = 123, intervalo de tiempo = últimas 24 horas |
+| Orden | Por tiempo, descendente |
+
+En esencia, los patrones de acceso a los datos ayudan a diseñar soluciones de ingesta eficientes y escalables, porque alinean la organización de los datos con los requisitos de acceso.
+
+Dicho de otro modo, la forma en que tus datos crudos se consumen desde distintas fuentes y se ingieren y guardan en AWS te ayudará a determinar el formato de datos y el servicio de AWS que debes usar.
+
+La Tabla 2.3 muestra cómo se agrupan los servicios de AWS según si tus datos son estructurados, semiestructurados o no estructurados.
+
+**Tabla 2.3** Servicios de AWS para datos estructurados, semiestructurados y no estructurados.
+
+| Estructurados | Semiestructurados | No estructurados |
+| --- | --- | --- |
+| Amazon RDS | Amazon DynamoDB | Amazon S3 |
+| Amazon Aurora | Amazon DocumentDB | Amazon Rekognition |
+| Amazon Redshift | Amazon Athena | Amazon Transcribe |
+| Amazon S3 | Amazon S3 | Amazon Comprehend |
+| Amazon Athena | | |
+
+La mayoría de estos servicios aparecen aquí por primera vez; RDS, DynamoDB, S3 y Athena se desarrollan más adelante en el capítulo:
+
+- **Amazon RDS** y **Amazon Aurora** son bases de datos relacionales (SQL) administradas por AWS. Aurora es el motor propio de AWS, compatible con MySQL y PostgreSQL.
+- **Amazon Redshift** es el *data warehouse* de AWS, una base de datos relacional optimizada para consultas analíticas sobre volúmenes grandes.
+- **Amazon DynamoDB** es una base de datos NoSQL de clave-valor y documentos. **Amazon DocumentDB** es una base de datos de documentos JSON compatible con MongoDB.
+- **Amazon Athena** es un motor de consultas SQL sobre archivos guardados en S3.
+- **Amazon Rekognition** (visión por computadora), **Amazon Transcribe** (voz a texto) y **Amazon Comprehend** (procesamiento de lenguaje natural) son servicios de IA ya entrenados que se usan mediante una API.
+
+> [!warning] Nota de precisión: la tabla mezcla almacenamiento con procesamiento
+> Rekognition, Transcribe y Comprehend no **almacenan** datos no estructurados: los **procesan** y extraen de ellos información estructurada o semiestructurada (etiquetas de una imagen, el texto de un audio, las entidades de un documento). Athena tampoco almacena nada; consulta datos que viven en S3. Para una pregunta de examen sobre dónde **guardar** datos no estructurados, la respuesta de esta tabla es S3.
+
+Como habrás notado, Amazon S3 es el servicio más flexible, porque sirve para las tres categorías de datos. Además, puedes complementar Amazon S3 con Amazon Athena y consultar tus datos directamente en S3 sin darles formato ni administrar la infraestructura. Aquí, «sin darles formato» significa que no hace falta cargar los datos en una base de datos antes de consultarlos. Basta con declarar un esquema de tabla que apunta a los archivos (el esquema se aplica al leer, lo que se conoce como *schema-on-read*), y esa definición se guarda en el catálogo de datos de AWS Glue, que verás en la sección de Glue.
+
+En las próximas secciones profundizaremos en estos servicios en lo que respecta a la ingesta y el almacenamiento.
+
+## Elegir servicios de ingesta de AWS (*Choosing AWS Ingestion Services*)
+
+En servicios de ingesta, AWS ofrece un amplio abanico de opciones. El servicio que mejor se ajusta a tu caso de uso depende de varios factores:
+
+- **Escalabilidad.** Tu solución de ingesta debe poder soportar la velocidad y el volumen de tus datos a medida que llegan de todas sus fuentes.
+- **Resiliencia.** Tu solución de ingesta debe poder recuperarse de fallas y reanudar sin problemas desde el punto donde ocurrió la falla. Esto supone que el sistema registra hasta dónde procesó (una marca de posición que se suele llamar *checkpoint* u *offset*), de modo que al reanudar no pierda datos ni los procese dos veces.
+- **Seguridad y cumplimiento normativo.** Los datos deben protegerse durante la ingesta de modo que ningún actor no autorizado pueda consumirlos nunca, ni en tránsito ni almacenados. Además, el proceso de ingesta debe cumplir las regulaciones de cada industria, como el Payment Card Industry Data Security Standard (**PCI DSS**) o la Health Insurance Portability and Accountability Act (**HIPAA**). PCI DSS es el estándar de seguridad que exige la industria de tarjetas de pago a cualquier empresa que guarde o procese datos de tarjetas. HIPAA es la ley estadounidense que protege la información de salud de los pacientes. También deben examinarse los requisitos de **residencia de datos** para asegurar que los datos se ingieren y almacenan conforme a ellos. La residencia de datos es la obligación legal o contractual de que ciertos datos permanezcan físicamente en un país o región. En AWS se cumple, en primer lugar, eligiendo la región donde se crean los recursos, y revisando que ningún servicio copie los datos a otra región sin que lo sepas.
+- **Costo.** Con el modelo de pago por uso (*pay-as-you-go*) de la nube, siempre conviene mantener el costo bajo control, y más aún con datos de streaming, que prácticamente nunca se detienen. Por eso, los costos de ingerir y almacenar datos para entrenar tus modelos de ML pueden crecer rápidamente. Tú, como ingeniero de ML, necesitas elegir un servicio de ingesta de AWS cuyo modelo de precios sea el más económico para tu caso de uso. La razón de fondo es que un servicio de streaming funciona las 24 horas: si se cobra por hora de capacidad reservada, pagas unas 730 horas al mes aunque el tráfico sea bajo, mientras que si se cobra por gigabyte procesado, pagas en proporción al tráfico real.
+- **Flexibilidad.** Tu solución de ingesta debe poder adaptarse a los cambios. Los servicios de AWS son altamente personalizables. Adapta tus *pipelines* de ingesta a tus requisitos técnicos y de negocio, pero contempla también el cambio como un elemento más de la arquitectura de tu solución. Un **pipeline** es una cadena automatizada de pasos por la que pasan los datos (leer, validar, transformar, guardar) sin intervención manual.
+
+Empecemos con los servicios de ingesta de AWS para datos de streaming.
 
 ### Amazon Data Firehose
 
-Amazon Data Firehose (formerly known as Amazon Kinesis Data Firehose) is a fully managed service that allows you to collect, transform, and deliver data streams to data lakes, data warehouses, and analytics services in near real time (within seconds).
+Amazon Data Firehose (antes llamado Amazon Kinesis Data Firehose) es un servicio **totalmente administrado** (*fully managed*) que permite recolectar, transformar y entregar flujos de datos a data lakes, data warehouses y servicios de analítica casi en tiempo real (en segundos). *Totalmente administrado* significa que AWS opera todo lo que hay debajo (servidores, sistema operativo, parches de seguridad, escalado y recuperación ante fallas) y tú solo configuras el servicio y pagas por usarlo. Es la diferencia entre usar un notebook alojado y montar tú mismo el servidor de Jupyter. Importa porque un equipo sin especialistas en infraestructura puede operar un pipeline de producción; a cambio, se renuncia a parte del control sobre la configuración.
 
-As a fully managed service, Amazon Data Firehose continuously processes the stream, automatically scales based on the volume of data available, and delivers it to its destination within seconds.
+Como servicio totalmente administrado, Amazon Data Firehose procesa el flujo continuamente, escala automáticamente según el volumen de datos que llegan y los entrega a su destino en segundos.
 
-To use Amazon Data Firehose, you configure a data stream with a source, a destination, and the transformations your data needs prior to reaching its destination.
+Para usar Amazon Data Firehose, configuras un flujo de datos con un origen, un destino y las transformaciones que tus datos necesitan antes de llegar al destino. En la documentación actual, este recurso se llama *Firehose stream* (antes, *delivery stream*).
 
-You must select the source for your data stream, such as a topic in Amazon Managed Streaming for Kafka (MSK) or a stream in Kinesis Data Streams, or you can directly write data using the Firehose Direct PUT application programming interface (API). Amazon Data Firehose is integrated into more than 20 AWS services so you can set up a data stream from sources such as Amazon CloudWatch Logs, AWS Web Application Firewall (WAF) web ACL logs, AWS Network Firewall Logs, Amazon Simple Notification Services (SNS), or AWS IoT.
+Debes seleccionar el origen de tu flujo, como un *topic* de Amazon Managed Streaming for Kafka (MSK) o un *stream* de Kinesis Data Streams (ambos se explican en las secciones siguientes), o puedes escribir datos directamente con la API (interfaz de programación de aplicaciones) Firehose Direct PUT. Con *Direct PUT*, tu propia aplicación envía los registros a Firehose con una llamada a la API, sin un servicio de streaming intermedio. Amazon Data Firehose está integrado con más de 20 servicios de AWS, así que puedes configurar un flujo desde orígenes como estos:
 
-You must select a destination for your stream, such as Amazon S3, Amazon OpenSearch Service, Amazon Redshift, Splunk, Snowflake, or a custom HTTP endpoint.
+- **Amazon CloudWatch Logs**, el servicio donde las aplicaciones y los servicios de AWS escriben sus registros (*logs*).
+- Los registros de las *web ACL* de **AWS Web Application Firewall (WAF)**. WAF es un firewall que filtra el tráfico web (HTTP) según reglas, y una *web ACL* es la lista de reglas que aplica. Sus registros anotan cada petición permitida o bloqueada.
+- Los registros de **AWS Network Firewall**, un firewall que filtra el tráfico a nivel de red dentro de tu red privada en AWS.
+- **Amazon Simple Notification Service (SNS)**, un servicio de mensajería de publicación y suscripción: un mensaje publicado en un tema llega a todos sus suscriptores.
+- **AWS IoT**, el servicio que conecta dispositivos IoT con la nube.
 
-You can optionally specify whether you want to convert your data stream into a format such as Parquet or ORC, decompress the data, perform custom data transformations using your own AWS Lambda function, or dynamically partition input records based on attributes to deliver into different locations.
+Debes seleccionar un destino para tu flujo, como Amazon S3, Amazon OpenSearch Service, Amazon Redshift, Splunk, Snowflake o un endpoint HTTP personalizado. **Amazon OpenSearch Service** es un motor de búsqueda y análisis de logs. **Splunk** es una plataforma comercial de análisis de logs y seguridad. **Snowflake** es un data warehouse en la nube de otra empresa. Un **endpoint HTTP** personalizado es la dirección (URL) de un servicio propio que recibe los datos mediante peticiones HTTP. Según la documentación vigente, la lista de destinos creció desde la edición del libro e incluye, entre otros, tablas de **Apache Iceberg** (un formato de tablas abiertas sobre archivos en S3) y varias plataformas de monitoreo de terceros.
 
-#### Un Firehose que escribe en S3 particionando por comercio
+Opcionalmente, puedes indicar si quieres convertir tu flujo de datos a un formato como Parquet u ORC, descomprimir los datos, aplicar transformaciones personalizadas con tu propia función de AWS Lambda o particionar dinámicamente los registros de entrada según sus atributos para entregarlos en ubicaciones distintas.
 
-El flujo que monta este bloque, con los nombres que aparecen en el código:
+- **AWS Lambda** es el servicio de funciones *serverless* de AWS: subes una función (por ejemplo, en Python) y AWS la ejecuta cada vez que llega un evento, cobrando por milisegundo de ejecución, sin que haya un servidor a tu cargo. *Serverless* (sin servidor) no significa que no haya servidores, sino que no los ves ni los administras.
+- La **conversión de formato** de Firehose espera registros de entrada en JSON y toma el esquema de destino de una tabla del catálogo de datos de AWS Glue.
+- El **particionamiento dinámico** usa un campo de cada registro para decidir la carpeta de destino. Por ejemplo, con el campo `cliente_id`, cada registro se escribe bajo el prefijo `cliente_id=123/` de S3, lo que después abarata las consultas que filtran por cliente.
+- La **descompresión** existe porque algunos orígenes, como CloudWatch Logs, entregan los datos comprimidos con GZIP.
 
-```mermaid
-flowchart LR
-    P["productor: put_record_batch"] --> F["Firehose: kanan-tx-a-s3"]
-    F --> B["BufferingHints: 64 MB o 60 s"]
-    B --> M["MetadataExtraction: .merchant"]
-    M -->|clave válida| S3["S3: streaming/tx/merchant=.../dt=.../"]
-    M -->|registro sin merchant o JSON inválido| E["S3: streaming/errores/..."]
-    P -.->|FailedPutCount > 0| P
-```
+> [!warning] Nota de precisión: «en segundos» depende del búfer
+> Firehose no entrega cada registro al instante. Acumula los datos en un **búfer** hasta alcanzar un tamaño o un tiempo máximo, lo que ocurra primero, y entonces escribe. Para el destino S3, los valores por defecto son **5 MB o 300 segundos** (5 minutos), y el intervalo se puede configurar entre 0 y 900 segundos. Con un intervalo de cero, la documentación indica que entrega «en unos pocos segundos». Intervalos más cortos producen más archivos pequeños y más peticiones a S3, lo que sube el costo. Para el examen, la regla práctica es que Firehose es *casi* tiempo real y Kinesis Data Streams es tiempo real (menos de un segundo). Verifica los valores en la documentación vigente.
 
-Firehose acumula registros hasta que se cumple la primera de las dos condiciones
-de `BufferingHints` y entonces escribe un objeto en S3. Con la partición
-dinámica activada, antes de escribir extrae `merchant` de cada JSON y lo usa para
-decidir la carpeta; un registro del que no puede extraerlo no se pierde, va al
-prefijo de errores. La flecha punteada es el único error que ve el productor:
-registros rechazados en la llamada, que debe reenviar él.
+#### Casos de uso (*Use Cases*)
 
-```python
-import time
+Estos son casos de uso típicos:
 
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-firehose = session.client("firehose")
-
-STREAM = "kanan-tx-a-s3"
-firehose.create_delivery_stream(
-    DeliveryStreamName=STREAM,
-    DeliveryStreamType="DirectPut",
-    ExtendedS3DestinationConfiguration={
-        "RoleARN": "arn:aws:iam::111111111111:role/KananFirehoseDeliveryRole-dev",
-        "BucketARN": "arn:aws:s3:::kanan-ml-dev-raw-us-east-1",
-        "Prefix": "streaming/tx/merchant=!{partitionKeyFromQuery:merchant}/dt=!{timestamp:yyyy-MM-dd}/",
-        "ErrorOutputPrefix": "streaming/errores/!{firehose:error-output-type}/dt=!{timestamp:yyyy-MM-dd}/",
-        "BufferingHints": {"SizeInMBs": 64, "IntervalInSeconds": 60},
-        "CompressionFormat": "GZIP",
-        "DynamicPartitioningConfiguration": {"Enabled": True},
-        "ProcessingConfiguration": {
-            "Enabled": True,
-            "Processors": [{
-                "Type": "MetadataExtraction",
-                "Parameters": [
-                    {"ParameterName": "MetadataExtractionQuery", "ParameterValue": "{merchant: .merchant}"},
-                    {"ParameterName": "JsonParsingEngine", "ParameterValue": "JQ-1.6"},
-                ],
-            }],
-        },
-    },
-)
-
-while True:
-    desc = firehose.describe_delivery_stream(DeliveryStreamName=STREAM)["DeliveryStreamDescription"]
-    if desc["DeliveryStreamStatus"] == "ACTIVE":
-        break
-    time.sleep(10)
-print("listo:", desc["DeliveryStreamARN"])
-```
-
-`DeliveryStreamType="DirectPut"` elige la fuente «Firehose Direct PUT API» del
-texto: los productores llaman a la API directamente. Las otras fuentes son
-`"KinesisStreamAsSource"` y `"MSKAsSource"`, que piden además
-`KinesisStreamSourceConfiguration` o `MSKSourceConfiguration` con el ARN del origen.
-
-`"RoleARN"` es un rol que Firehose **asume** para escribir en el bucket: tu
-usuario crea el stream, pero quien escribe en S3 es el servicio con ese rol. Si
-el rol no tiene `s3:PutObject` sobre el bucket, la creación funciona igual y el
-fallo aparece después, como entregas fallidas en CloudWatch.
-
-`"Prefix"` lleva dos expresiones que Firehose sustituye en cada entrega:
-`!{partitionKeyFromQuery:merchant}` es el valor que extrajo el procesador de
-abajo, y `!{timestamp:yyyy-MM-dd}` la fecha de llegada. El resultado,
-`merchant=online/dt=2026-09-22/`, es el estilo `clave=valor` que Glue y Athena
-reconocen como particiones sin configuración extra.
-
-`"ErrorOutputPrefix"` es obligatorio en cuanto `Prefix` usa expresiones; sin él,
-`create_delivery_stream` responde con `InvalidArgumentException`.
-`!{firehose:error-output-type}` separa los errores por causa (por ejemplo, fallos
-de partición frente a fallos de procesamiento).
-
-`"BufferingHints"`: el primero de los dos umbrales que se cumpla dispara la
-escritura. Esto explica el «within seconds» del texto: 60 s es el retraso máximo
-que añade el búfer. Con partición dinámica, el mínimo de `SizeInMBs` es 64.
-
-`"MetadataExtractionQuery": "{merchant: .merchant}"` es una expresión de `jq`
-(de ahí `"JsonParsingEngine": "JQ-1.6"`) que construye un objeto con las claves
-de partición a partir de cada registro JSON.
-
-Enviar datos a ese stream:
-
-```python
-import json
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-firehose = session.client("firehose")
-
-transacciones = [
-    {"customer_id": 123, "amount": 45.9, "merchant": "online"},
-    {"customer_id": 456, "amount": 12.0, "merchant": "fuel"},
-]
-resp = firehose.put_record_batch(
-    DeliveryStreamName="kanan-tx-a-s3",
-    Records=[{"Data": (json.dumps(t) + "\n").encode("utf-8")} for t in transacciones],
-)
-if resp["FailedPutCount"] > 0:
-    fallidas = [t for t, r in zip(transacciones, resp["RequestResponses"]) if "ErrorCode" in r]
-    print("reenviar:", fallidas)
-```
-
-`json.dumps(t) + "\n"`: Firehose concatena los registros tal cual en el objeto
-de S3. Sin el salto de línea, el archivo resultante es `{...}{...}{...}` en una
-sola línea, que ni Athena ni Glue leen como JSON Lines.
-
-`resp["FailedPutCount"]`: `put_record_batch` **no lanza excepción** cuando fallan
-algunos registros de la tanda; devuelve éxito y marca los fallidos con
-`ErrorCode` en `RequestResponses`, en el mismo orden que los enviaste. Un
-productor que no mira este campo pierde datos sin enterarse. Cada llamada admite
-hasta 500 registros y 4 MiB.
-
-#### Transformar registros con una función Lambda
-
-La «custom data transformation» del texto es una función Lambda a la que
-Firehose entrega lotes de registros y de la que espera los mismos registros de
-vuelta. Este código es la función completa y se puede probar en local, porque
-el final construye un evento con la misma forma que el que envía Firehose.
-
-```python
-import base64
-import json
-
-
-def lambda_handler(event, context):
-    salida = []
-    for registro in event["records"]:
-        tx = json.loads(base64.b64decode(registro["data"]))
-        if tx.get("amount") is None:
-            salida.append({"recordId": registro["recordId"], "result": "Dropped", "data": registro["data"]})
-            continue
-        tx["merchant"] = tx.get("merchant", "").strip().lower()
-        datos = base64.b64encode((json.dumps(tx) + "\n").encode("utf-8")).decode("utf-8")
-        salida.append({"recordId": registro["recordId"], "result": "Ok", "data": datos})
-    return {"records": salida}
-
-
-evento_prueba = {"records": [
-    {"recordId": "1", "data": base64.b64encode(b'{"customer_id": 1, "amount": 10.5, "merchant": " Online "}').decode()},
-    {"recordId": "2", "data": base64.b64encode(b'{"customer_id": 2}').decode()},
-]}
-for r in lambda_handler(evento_prueba, None)["records"]:
-    print(r["recordId"], r["result"], base64.b64decode(r["data"]))
-```
-
-Salida:
-
-```text
-1 Ok b'{"customer_id": 1, "amount": 10.5, "merchant": "online"}\n'
-2 Dropped b'{"customer_id": 2}'
-```
-
-`base64.b64decode(registro["data"])`: Firehose entrega el contenido de cada
-registro en base64 y lo espera de vuelta en base64. Devolver el JSON en claro
-hace que la entrega falle y los registros acaben en el prefijo de errores.
-
-`"recordId"` tiene que volver **idéntico**: es como Firehose empareja cada
-respuesta con el registro original. Un `recordId` que falta o no coincide marca
-el lote como fallido.
-
-`"result"` admite tres valores: `"Ok"` (se entrega `data`), `"Dropped"` (se
-descarta a propósito y no cuenta como error) y `"ProcessingFailed"` (va al
-prefijo de errores).
-
-La función se conecta al stream agregando otro procesador a la lista
-`Processors` del bloque de creación:
-
-```python
-procesador_lambda = {
-    "Type": "Lambda",
-    "Parameters": [
-        {"ParameterName": "LambdaArn", "ParameterValue": "arn:aws:lambda:us-east-1:111111111111:function:kanan-tx-normaliza"},
-        {"ParameterName": "BufferSizeInMBs", "ParameterValue": "1"},
-        {"ParameterName": "BufferIntervalInSeconds", "ParameterValue": "60"},
-    ],
-}
-```
-
-La conversión a Parquet que menciona el texto necesita un esquema registrado en
-el catálogo de AWS Glue, así que aparece después de la sección de AWS Glue.
-
-#### Use Cases
-
-Typical use cases include the following:
-
-- **Streaming into data lakes and warehouses.** You can stream data into Amazon S3, Amazon Redshift, and other destinations, converting it into formats like Parquet for analysis without building complex processing pipelines.
-- **Security observability.** You can monitor network security in real time and create alerts when potential threats arise using supported security information and event management (SIEM) tools.
-- **Machine learning applications.** You can enrich data streams with ML models to analyze data and predict outcomes as the data moves to its destination.
+- **Streaming hacia data lakes y data warehouses.** Puedes enviar datos en streaming a Amazon S3, Amazon Redshift y otros destinos, convirtiéndolos a formatos como Parquet para su análisis, sin construir pipelines de procesamiento complejos. Sin Firehose, tendrías que escribir y mantener un programa que lea el flujo, agrupe los registros, los convierta, escriba los archivos y reintente cuando algo falle.
+- **Observabilidad de seguridad.** Puedes monitorear la seguridad de la red en tiempo real y crear alertas cuando surjan amenazas potenciales, usando herramientas compatibles de gestión de información y eventos de seguridad (**SIEM**, *security information and event management*). Un SIEM es una plataforma que centraliza los registros de seguridad de muchas fuentes y los correlaciona para detectar ataques, como Splunk. *Observabilidad* es la capacidad de entender qué pasa dentro de un sistema a partir de lo que emite: logs, métricas y trazas.
+- **Aplicaciones de machine learning.** Puedes enriquecer los flujos de datos con modelos de ML que analicen los datos y predigan resultados mientras los datos viajan a su destino. El libro no dice cómo se hace. El mecanismo habitual es la transformación con Lambda: la función llama al modelo (por ejemplo, un endpoint de SageMaker) y agrega la predicción a cada registro antes de la entrega.
 
 ### Amazon Kinesis Data Streams
 
-Amazon Kinesis Data Streams is another managed service to ingest and store data streams for processing, with the value-add of performing real-time data streaming as well as providing extensive integration with the AWS ecosystem of data engineering services.
+Amazon Kinesis Data Streams es otro servicio administrado para ingerir y almacenar flujos de datos para su procesamiento. Su valor añadido es que hace streaming de datos en tiempo real y se integra ampliamente con el ecosistema de servicios de ingeniería de datos de AWS. La diferencia de fondo con Firehose es que Kinesis Data Streams **almacena** los registros durante un periodo de retención (24 horas por defecto, ampliable hasta 365 días; verifícalo en la documentación vigente), y cualquier número de aplicaciones puede leerlos, cada una a su ritmo, e incluso releerlos. Firehose, en cambio, es un conducto de entrega: recibe, transforma y deposita los datos en un destino, pero ninguna aplicación puede leer de él.
 
-Amazon Kinesis Data Streams lets you build custom, real-time applications using the Amazon Managed Service for Apache Flink or other popular frameworks like Apache Spark. You can also stream your data directly to consumer applications running on Amazon EC2 instances. Additionally, AWS Lambda can be used as a consumer to process data in near real time without the need to manage servers.
+Kinesis Data Streams te permite construir aplicaciones personalizadas en tiempo real con Amazon Managed Service for Apache Flink o con otros frameworks populares, como **Apache Spark**, el motor de procesamiento distribuido más usado en big data, que tiene un módulo de streaming. También puedes enviar tus datos en streaming directamente a aplicaciones consumidoras que corren en instancias de Amazon EC2. Además, AWS Lambda puede actuar como consumidor para procesar los datos casi en tiempo real sin administrar servidores.
 
-With Amazon Kinesis Data Streams, your data is put into Kinesis data streams, which ensures durability and elasticity. The delay between the time a record is put into the stream and the time it can be consumed (put-to-get delay) is typically less than one second. Put differently, a Kinesis Data Streams application can start consuming the data from the stream almost immediately after the data is added. Because Amazon Kinesis Data Streams is a managed service, you don’t need to worry about creating and running a data intake pipeline.
+Con Kinesis Data Streams, tus datos se colocan en *data streams* de Kinesis, que garantizan durabilidad y elasticidad. La durabilidad viene de que AWS replica los datos en varias **zonas de disponibilidad** (*Availability Zones*, AZ). Una zona de disponibilidad es uno o varios centros de datos con energía, red y refrigeración independientes, separados físicamente de las demás zonas de la misma región. Una región tiene varias, así que un incendio o un corte eléctrico en una zona no afecta a las copias guardadas en otra. La elasticidad se basa en los **shards**: un stream se divide en shards, que son sus unidades de capacidad. Según la documentación, cada shard acepta hasta 1 MB/s o 1000 registros por segundo de escritura. Cada registro se asigna a un shard según una **clave de partición** que eliges tú, como el ID del dispositivo. Más shards significan más capacidad.
 
-The elasticity of Kinesis Data Streams enables you to automatically scale the stream up or down so that you never lose data records before they expire.
+El retraso entre el momento en que un registro se coloca en el stream y el momento en que puede consumirse (retraso *put-to-get*) suele ser menor a un segundo. Dicho de otro modo, una aplicación de Kinesis Data Streams puede empezar a consumir los datos del stream casi inmediatamente después de que se agregan. Como Kinesis Data Streams es un servicio administrado, no tienes que preocuparte por crear y operar un pipeline de entrada de datos.
 
-#### Crear un stream y escribir en él
+La elasticidad de Kinesis Data Streams te permite escalar automáticamente el stream hacia arriba o hacia abajo para que nunca pierdas registros antes de que expiren. Los registros *expiran* cuando se cumple el periodo de retención.
 
-```python
-import json
+> [!warning] Nota de precisión: el escalado automático depende del modo de capacidad
+> - Kinesis Data Streams tiene dos familias de modos. En el modo **on-demand** (con sus variantes *Standard* y *Advantage*), AWS administra los shards y escala solo. Según la documentación, un stream on-demand admite hasta el doble del pico de escritura de los últimos 30 días, y si el tráfico supera ese doble en menos de 15 minutos puede haber rechazos temporales que el productor debe reintentar. En el modo **provisioned**, tú fijas el número de shards y lo cambias cuando haga falta; no escala solo.
+> - El escalado protege la **escritura**: evita que se rechacen registros por falta de capacidad. No protege contra otra forma de pérdida: si un consumidor se atrasa más que el periodo de retención, los registros expiran sin que nadie los haya leído.
 
-import boto3
+#### Casos de uso (*Use Cases*)
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-kinesis = session.client("kinesis")
+Estos son casos de uso típicos de Amazon Kinesis Data Streams:
 
-STREAM = "kanan-tx-stream"
-kinesis.create_stream(StreamName=STREAM, StreamModeDetails={"StreamMode": "ON_DEMAND"})
-kinesis.get_waiter("stream_exists").wait(StreamName=STREAM)
-
-eventos = [
-    {"customer_id": 123, "amount": 45.9, "merchant": "online"},
-    {"customer_id": 456, "amount": 12.0, "merchant": "fuel"},
-]
-resp = kinesis.put_records(
-    StreamName=STREAM,
-    Records=[
-        {"Data": json.dumps(e).encode("utf-8"), "PartitionKey": str(e["customer_id"])}
-        for e in eventos
-    ],
-)
-print("fallidos:", resp["FailedRecordCount"])
-for r in resp["Records"]:
-    print(r.get("ShardId"), r.get("SequenceNumber"), r.get("ErrorCode"))
-```
-
-Un stream de Kinesis se divide en _shards_: particiones con capacidad fija,
-1 MB/s o 1.000 registros/s de escritura y 2 MB/s de lectura cada una.
-`"StreamMode": "ON_DEMAND"` hace que AWS añada y quite shards según el tráfico:
-es la elasticidad del texto sin que tú hagas nada. La alternativa,
-`"PROVISIONED"`, fija el número de shards y lo cambias tú (último bloque de esta
-sección).
-
-`get_waiter("stream_exists").wait(...)`: `create_stream` vuelve en cuanto acepta
-la petición, con el stream todavía en `CREATING`. Escribir en ese momento
-produce `ResourceNotFoundException`; el _waiter_ consulta el estado hasta que es
-`ACTIVE`.
-
-`"PartitionKey"` decide el shard: Kinesis calcula el hash MD5 de la cadena y la
-coloca en el rango de algún shard. Usar `customer_id` garantiza que todas las
-transacciones de un cliente caen en el mismo shard y se leen en orden, que es lo
-que necesita un detector de fraude que compara cada compra con las anteriores.
-Una clave constante (por ejemplo `"tx"`) manda todo a un shard, que se satura a
-1 MB/s aunque el stream tenga cien.
-
-`resp["FailedRecordCount"]`: igual que en Firehose, `put_records` no lanza
-excepción por fallos parciales. Los registros rechazados, normalmente con
-`ErrorCode` `ProvisionedThroughputExceededException`, hay que reenviarlos.
-
-#### Leer el stream desde un consumidor propio
-
-Un consumidor lee cada shard con un _iterador_: un marcador de posición que la
-API te entrega y que se renueva en cada lectura.
-
-```python
-import json
-import time
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-kinesis = session.client("kinesis")
-
-STREAM = "kanan-tx-stream"
-shard_id = kinesis.list_shards(StreamName=STREAM)["Shards"][0]["ShardId"]
-iterador = kinesis.get_shard_iterator(
-    StreamName=STREAM, ShardId=shard_id, ShardIteratorType="TRIM_HORIZON"
-)["ShardIterator"]
-
-for _ in range(10):
-    lote = kinesis.get_records(ShardIterator=iterador, Limit=100)
-    for r in lote["Records"]:
-        print(r["SequenceNumber"], r["ApproximateArrivalTimestamp"], json.loads(r["Data"]))
-    iterador = lote["NextShardIterator"]
-    time.sleep(1)
-```
-
-`ShardIteratorType="TRIM_HORIZON"` empieza por el registro más antiguo que
-sigue retenido; `"LATEST"` empieza por lo que llegue a partir de ahora, y
-`"AT_SEQUENCE_NUMBER"` retoma desde un punto guardado, que es como un consumidor
-se recupera tras caerse. El nombre es histórico: el _trim horizon_ es el borde
-por donde Kinesis va recortando los registros que caducan.
-
-`iterador = lote["NextShardIterator"]`: cada iterador sirve para una lectura y
-caduca a los 5 minutos. Reusar el viejo repite los mismos registros.
-
-`time.sleep(1)`: cada shard admite 5 llamadas `GetRecords` por segundo,
-compartidas entre todos los consumidores. Un bucle sin pausa agota ese límite y
-recibe `ProvisionedThroughputExceededException`.
-
-Este bucle recorre un único shard y no guarda por dónde va. En producción ese
-trabajo lo hace la Kinesis Client Library o, sin servidores, AWS Lambda.
-
-#### Consumir el stream con AWS Lambda
-
-Con Lambda no hay iteradores: el servicio lee los shards por ti y llama a tu
-función con lotes de registros.
-
-```python
-import base64
-import json
-
-
-def lambda_handler(event, context):
-    for registro in event["Records"]:
-        tx = json.loads(base64.b64decode(registro["kinesis"]["data"]))
-        if tx["amount"] > 1000:
-            print("revisar:", registro["kinesis"]["partitionKey"], tx)
-```
-
-Y la conexión entre el stream y la función, que se crea una vez:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-lam = session.client("lambda")
-
-lam.create_event_source_mapping(
-    EventSourceArn="arn:aws:kinesis:us-east-1:111111111111:stream/kanan-tx-stream",
-    FunctionName="kanan-tx-alertas",
-    StartingPosition="LATEST",
-    BatchSize=100,
-    MaximumBatchingWindowInSeconds=1,
-)
-```
-
-`create_event_source_mapping` crea el _event source mapping_: un lector que
-administra Lambda, uno por shard, y que invoca tu función. `BatchSize` y
-`MaximumBatchingWindowInSeconds` hacen el papel de `BufferingHints` en Firehose:
-Lambda te llama al llenarse 100 registros o al pasar 1 segundo. Si la función
-lanza una excepción, Lambda reintenta **el mismo lote** y ese shard no avanza
-hasta que el lote se procese o caduque; un registro malformado puede bloquear un
-shard entero.
-
-#### Modo aprovisionado, número de shards y retención
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-kinesis = session.client("kinesis")
-
-STREAM = "kanan-tx-stream"
-arn = kinesis.describe_stream_summary(StreamName=STREAM)["StreamDescriptionSummary"]["StreamARN"]
-
-kinesis.update_stream_mode(StreamARN=arn, StreamModeDetails={"StreamMode": "PROVISIONED"})
-kinesis.get_waiter("stream_exists").wait(StreamName=STREAM)
-
-kinesis.update_shard_count(StreamName=STREAM, TargetShardCount=4, ScalingType="UNIFORM_SCALING")
-kinesis.get_waiter("stream_exists").wait(StreamName=STREAM)
-
-kinesis.increase_stream_retention_period(StreamName=STREAM, RetentionPeriodHours=168)
-```
-
-`update_shard_count` divide o fusiona shards hasta llegar a 4, y el stream pasa
-por `UPDATING` mientras tanto; por eso el _waiter_ entre llamadas: una segunda
-modificación con el stream en `UPDATING` responde `ResourceInUseException`.
-
-`increase_stream_retention_period(..., RetentionPeriodHours=168)`: por defecto
-un registro se conserva 24 horas y después caduca aunque nadie lo haya leído.
-Es el «before they expire» del texto. El máximo es 8.760 horas (365 días), y la
-retención extendida se cobra aparte.
-
-#### Use Cases
-
-Typical use cases for Amazon Kinesis Data Streams include the following:
-
-- **Accelerated log and data feed intake and processing.** You can have producers push data directly into a stream without having to worry about your data being lost if the application server fails. Amazon Kinesis Data Streams provides accelerated data feed intake because you don’t batch the data on the servers before you submit it for intake.
-- **Real-time metrics and reporting.** You can use data collected into Amazon Kinesis Data Streams for simple data analysis and reporting in real time. For example, your data-processing application can work on metrics and reporting for system and application logs as the data is streaming in, rather than wait to receive batches of data.
-- **Real-time data analytics.** This combines the power of parallel processing with the value of real-time data. For example, process website clickstreams in real time, and then analyze site usability engagement using multiple different Kinesis Data Streams applications running in parallel.
-- **Complex stream processing.** You can create sophisticated data streams applications that combine multiple data streams into new data streams for downstream processing.
+- **Ingesta y procesamiento acelerados de logs y fuentes de datos.** Los **productores** (los programas que escriben en el stream; los que leen son los **consumidores**) pueden enviar los datos directamente al stream sin que te preocupe perderlos si falla el servidor de aplicaciones. Kinesis Data Streams acelera la entrada de datos porque no agrupas los datos en lotes en los servidores antes de enviarlos. El razonamiento implícito es este: en el esquema tradicional, la aplicación escribe sus logs en un archivo local y un proceso los sube cada hora. Si el servidor se cae antes de la subida, esa hora de logs se pierde. Si cada evento sale del servidor en cuanto se produce, ya está guardado de forma durable fuera de él.
+- **Métricas y reportes en tiempo real.** Puedes usar los datos recolectados en Kinesis Data Streams para análisis y reportes sencillos en tiempo real. Por ejemplo, tu aplicación de procesamiento puede calcular métricas y reportes sobre los logs del sistema y de las aplicaciones a medida que llegan, en lugar de esperar a recibir lotes de datos.
+- **Analítica de datos en tiempo real.** Combina la potencia del procesamiento en paralelo con el valor de los datos en tiempo real. Por ejemplo, puedes procesar en tiempo real el ***clickstream*** de un sitio web (la secuencia de clics y páginas vistas de cada visitante) y luego analizar la usabilidad y el nivel de interacción del sitio con varias aplicaciones de Kinesis Data Streams que corren en paralelo. Cada aplicación lee el mismo stream de forma independiente, así que una puede calcular embudos de conversión mientras otra detecta errores de navegación.
+- **Procesamiento complejo de flujos.** Puedes crear aplicaciones sofisticadas que combinan varios data streams en nuevos data streams para su procesamiento posterior (*downstream*, es decir, en las etapas siguientes del pipeline).
 
 ### Amazon Managed Streaming for Apache Kafka (MSK)
 
-If you are familiar with the Apache Kafka event streaming platform, the good news is that you can build and run applications that use Apache Kafka on AWS with limited effort and minimal administration. AWS offers Amazon MSK, which enables you to securely ingest and process streaming data in real time with a fully managed, highly available Apache Kafka service.
+Si conoces la plataforma de streaming de eventos Apache Kafka, la buena noticia es que puedes construir y ejecutar en AWS aplicaciones que usan Apache Kafka con poco esfuerzo y una administración mínima. Si no la conoces, estos son los conceptos que necesitas para esta sección:
 
-Amazon MSK provides the control plane to let you create, update, and delete Apache Kafka clusters. For on-demand streaming and zero-operations use cases, you can choose Amazon MSK Serverless, which automatically provisions and scales capacity while managing the partitions in your topic, so you can stream data without worrying about right-sizing or scaling clusters. With Amazon MSK serverless, you pay only for what you use.
+- **Apache Kafka** es una plataforma distribuida de código abierto, creada en LinkedIn, para almacenar y transmitir flujos de eventos. Es el estándar de facto de la industria para streaming.
+- Los eventos se guardan en **topics**: registros con nombre (por ejemplo, `pedidos`), ordenados y persistentes, a los que solo se agregan eventos al final. Un topic es a los eventos lo que una tabla es a las filas.
+- Cada topic se divide en **particiones** para repartir la carga: cada partición es un registro ordenado independiente que puede vivir en un servidor distinto. Es la misma idea que los shards de Kinesis.
+- Los **productores** escriben eventos en un topic. Los **consumidores** los leen y llevan la cuenta de su posición (el *offset*). Pueden volver a una posición anterior y releer el historial (*replay*) mientras los eventos sigan retenidos. Por defecto, Apache Kafka retiene los eventos 7 días, y es configurable.
+- Alrededor de Kafka existe un ecosistema enorme de herramientas que hablan su protocolo, como los conectores de *Kafka Connect* o las bibliotecas de procesamiento *Kafka Streams*. Por eso la compatibilidad con Kafka suele pesar tanto en la elección de un servicio.
 
-Amazon MSK also lets you use Apache Kafka’s data plane operations, such as those for producing and consuming data.
+AWS ofrece **Amazon MSK**, que te permite ingerir y procesar datos de streaming en tiempo real de forma segura con un servicio de Apache Kafka totalmente administrado y de **alta disponibilidad**. Alta disponibilidad significa que el servicio sigue funcionando aunque falle un servidor o una zona de disponibilidad completa, porque mantiene copias y servidores de reserva en otras zonas.
 
-Additionally, Amazon MSK runs open-source versions of Apache Kafka. As a result, existing applications, tooling, and plugins from partners and the Apache Kafka community are supported without requiring changes to application code.
+Amazon MSK proporciona el **plano de control** (*control plane*) para crear, actualizar y eliminar **clústeres** de Apache Kafka. Un clúster es un grupo de servidores que funcionan juntos como un solo sistema. El plano de control agrupa las operaciones que administran la infraestructura, como crear el clúster o cambiar cuántos servidores tiene, y se usan a través de la API de AWS. El **plano de datos** (*data plane*) agrupa las operaciones sobre los datos, como escribir y leer eventos, y se usan con el protocolo de Kafka, conectándose directamente a los servidores del clúster. En una base de datos, la diferencia sería la que hay entre crear la base o agregarle réplicas (control) y ejecutar `SELECT` o `INSERT` (datos).
 
-The exam does not expect you to master every aspect of Amazon MSK. Nonetheless, you will be required to know the main components of Amazon MSK’s architecture and their intended purpose:
+Para casos de uso de streaming bajo demanda y sin operación (*zero-operations*), puedes elegir **Amazon MSK Serverless**. MSK Serverless aprovisiona y escala la capacidad automáticamente mientras administra las particiones de tu topic, así que puedes hacer streaming de datos sin preocuparte por dimensionar (*right-sizing*) ni escalar clústeres. *Right-sizing* es elegir el número y el tamaño correctos de servidores: si te quedas corto, el clúster se satura; si te pasas, pagas capacidad ociosa. Con Amazon MSK Serverless, solo pagas por lo que usas.
 
-- **Broker nodes.** These are the worker nodes that perform the “heavy-duty” tasks, including ingesting, storing (in topic partitions), and processing your streaming data. When creating an Amazon MSK cluster, you specify how many broker nodes you want Amazon MSK to create in each Availability Zone. Some of these broker nodes are elected for you as the controller nodes and are responsible for managing the states of partitions and replicas, performing administrative tasks like reassigning partitions, and maintaining the leader-follower relationship between brokers for partitions. The minimum is one broker node per Availability Zone. Each Availability Zone has its own virtual private cloud (VPC) subnet.
-- **ZooKeeper nodes.** Amazon MSK also creates the Apache ZooKeeper nodes for you. Apache ZooKeeper is an open-source server that enables highly reliable distributed coordination between the broker nodes.
-- **KRaft controllers.** The Apache Kafka community developed KRaft to replace Apache ZooKeeper for metadata management in Apache Kafka clusters. In KRaft mode, cluster metadata is propagated within a group of Kafka controllers, which are part of the Kafka cluster, instead of across ZooKeeper nodes. KRaft controllers are included at no additional cost and require no additional setup or management from you.
-- **Producers, consumers, and topic creators.** Amazon MSK enables you to use Apache Kafka’s data-plane operations to create topics and to produce and consume data.
-- **Cluster operations.** You can use the AWS Management Console, the AWS Command Line Interface (AWS CLI), or the APIs in the SDK to perform control plane operations. For example, you can create or delete an Amazon MSK cluster, list all the clusters in an account, view the properties of a cluster, and update the number and type of brokers in a cluster.
+> [!warning] Nota de precisión: el costo de MSK Serverless
+> «Solo pagas por lo que usas» es una simplificación. Hasta donde sé, el precio de MSK Serverless combina un cargo por hora por clúster, un cargo por hora por partición, el almacenamiento y los datos que entran y salen. Un clúster serverless tiene, por tanto, un costo base aunque no reciba tráfico. Verifica la estructura de precios vigente en la página de precios de Amazon MSK.
 
-#### Plano de control: crear un clúster MSK Serverless con boto3
+Amazon MSK también te permite usar las operaciones del plano de datos de Apache Kafka, como las de producir y consumir datos.
 
-El último punto de la lista separa dos planos, y el código también: con boto3
-(cliente `kafka`) se crea y se describe el clúster; producir y consumir mensajes
-se hace con un cliente de Kafka, en el bloque siguiente.
+Además, Amazon MSK ejecuta versiones de código abierto de Apache Kafka. Por eso admite, sin cambios en el código de la aplicación, las aplicaciones, herramientas y *plugins* que ya existen, tanto de socios comerciales como de la comunidad de Apache Kafka. La razón es que MSK habla exactamente el mismo protocolo que un Kafka instalado a mano. Lo que sí cambia al migrar es la configuración: la dirección del clúster y el método de autenticación.
 
-Un clúster de MSK vive dentro de una VPC, en subredes de varias zonas de
-disponibilidad, y eso obliga a pasar identificadores de red que esta nota no
-enseña a crear:
+El examen no espera que domines todos los aspectos de Amazon MSK. Aun así, tendrás que conocer los componentes principales de la arquitectura de Amazon MSK y su propósito:
 
-> **Caja negra.** `SUBNETS` (lista de IDs `subnet-...` privadas, una por zona de
-> disponibilidad) y `SECURITY_GROUP` (un ID `sg-...`) ya existen en la VPC de
-> desarrollo y permiten el tráfico entre los recursos del proyecto. Aquí solo
-> importa ese contrato: los copias de la consola de VPC y los pegas. Cómo se
-> diseñan es el tema de [[23 - Red]]. Los bloques de EFS, FSx y RDS de esta nota
-> usan la misma caja negra.
+- **Nodos broker (*broker nodes*).** Un **nodo** es cada servidor (máquina virtual) del clúster, y un **broker** es un servidor de Kafka. Los brokers son los nodos de trabajo que realizan las tareas «pesadas»: ingerir, almacenar (en las particiones de los topics) y procesar tus datos de streaming. Al crear un clúster de Amazon MSK, indicas cuántos nodos broker quieres que Amazon MSK cree en cada zona de disponibilidad. Algunos de estos brokers se eligen como **nodos controladores** (*controller nodes*). Estos se encargan de administrar el estado de las particiones y sus réplicas, de tareas administrativas como reasignar particiones y de mantener la relación **líder-seguidor** entre brokers para cada partición. Esa relación funciona así: cada partición se copia en varios brokers (normalmente tres), y esas copias son sus **réplicas**. Una réplica es la **líder**, que recibe todas las escrituras; las demás son **seguidoras** y copian a la líder. Si el broker de la líder falla, una seguidora pasa a ser la nueva líder y los datos no se pierden. El mínimo es un nodo broker por zona de disponibilidad. Cada zona de disponibilidad tiene su propia **subred** de la **nube privada virtual** (VPC). Una **VPC** es tu red privada y aislada dentro de AWS, como la red interna de una empresa. Una **subred** es un rango de direcciones de esa red que vive en una sola zona de disponibilidad. Por eso, para repartir los brokers en tres zonas, necesitas tres subredes.
+- **Nodos ZooKeeper.** Amazon MSK también crea por ti los nodos de Apache ZooKeeper. Apache ZooKeeper es un servidor de código abierto que permite una coordinación distribuida muy confiable entre los nodos broker. *Coordinación distribuida* es lograr que varias máquinas se pongan de acuerdo en hechos compartidos (qué brokers están vivos, cuál es el líder de cada partición, qué configuración rige) aunque alguna falle o la red se corte a ratos.
+- **Controladores KRaft.** La comunidad de Apache Kafka desarrolló KRaft para reemplazar a Apache ZooKeeper en la gestión de los metadatos de los clústeres de Apache Kafka. Los **metadatos** del clúster son los datos sobre los datos: qué topics existen, cuántas particiones tiene cada uno, qué broker lidera cada partición y qué permisos hay. En el modo KRaft, los metadatos del clúster se propagan dentro de un grupo de controladores de Kafka, que forman parte del propio clúster, en lugar de hacerlo entre nodos ZooKeeper. Los controladores KRaft se incluyen sin costo adicional y no requieren configuración ni administración de tu parte. El nombre viene de *Kafka* + *Raft*, el algoritmo de consenso que usan los controladores para ponerse de acuerdo.
+- **Productores, consumidores y creadores de topics.** Amazon MSK te permite usar las operaciones del plano de datos de Apache Kafka para crear topics y para producir y consumir datos.
+- **Operaciones del clúster.** Puedes usar la consola de administración de AWS (la interfaz web), la interfaz de línea de comandos de AWS (AWS CLI) o las API de los SDK para realizar operaciones del plano de control. Por ejemplo, puedes crear o eliminar un clúster de Amazon MSK, listar todos los clústeres de una cuenta, ver las propiedades de un clúster y actualizar el número y el tipo de brokers de un clúster.
 
-```python
-import time
+> [!warning] Nota de precisión: ZooKeeper, KRaft y zonas de disponibilidad
+> - Amazon MSK admite el modo KRaft desde la versión 3.7.x de Kafka, y los clústeres existentes con ZooKeeper se pueden migrar a KRaft. Además, Apache Kafka 4.0 (marzo de 2025) eliminó por completo el soporte de ZooKeeper. En clústeres nuevos con versiones recientes, lo normal es KRaft. Consulta en la documentación de MSK qué versiones de Kafka admite hoy.
+> - Aunque el mínimo es un broker por zona, un clúster aprovisionado de MSK se reparte en **dos o tres zonas de disponibilidad**, según el tipo de broker y la región. Los brokers de tipo *Express* exigen tres. Es decir, el mínimo real de un clúster es de dos o tres brokers, no uno.
 
-import boto3
+#### Casos de uso (*Use Cases*)
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-kafka = session.client("kafka")
+Estos son casos de uso típicos de Amazon MSK:
 
-SUBNETS = ["subnet-0aaa1111bbbb2222c", "subnet-0ddd3333eeee4444f", "subnet-0ggg5555hhhh6666i"]
-SECURITY_GROUP = "sg-0123456789abcdef0"
-
-cluster_arn = kafka.create_cluster_v2(
-    ClusterName="kanan-tx-kafka",
-    Serverless={
-        "VpcConfigs": [{"SubnetIds": SUBNETS, "SecurityGroupIds": [SECURITY_GROUP]}],
-        "ClientAuthentication": {"Sasl": {"Iam": {"Enabled": True}}},
-    },
-)["ClusterArn"]
-
-while kafka.describe_cluster_v2(ClusterArn=cluster_arn)["ClusterInfo"]["State"] != "ACTIVE":
-    time.sleep(30)
-
-brokers = kafka.get_bootstrap_brokers(ClusterArn=cluster_arn)["BootstrapBrokerStringSaslIam"]
-print(brokers)
-```
-
-`create_cluster_v2(..., Serverless=...)` crea la variante MSK Serverless del
-texto: no se elige número ni tipo de brokers. La misma operación con
-`Provisioned=...` crea un clúster con brokers que dimensionas tú (bloque
-siguiente al de Kafka).
-
-`"ClientAuthentication": {"Sasl": {"Iam": {"Enabled": True}}}`: en MSK
-Serverless la única autenticación de clientes es IAM, así que los productores y
-consumidores se identifican con las mismas credenciales de boto3 y sus permisos
-se escriben como políticas (`kafka-cluster:WriteData`, `kafka-cluster:ReadData`).
-
-El bucle de `describe_cluster_v2`: el cliente `kafka` no tiene _waiters_, y el
-clúster tarda varios minutos en pasar de `CREATING` a `ACTIVE`.
-
-`get_bootstrap_brokers(...)["BootstrapBrokerStringSaslIam"]` devuelve la
-dirección `host:9098` a la que se conectan los clientes de Kafka. Es la única
-pieza que el plano de datos necesita del plano de control.
-
-#### Plano de datos: crear un tema, producir y consumir
-
-Esto corre en una máquina **dentro de la VPC** del clúster (una instancia EC2 o
-una Lambda en esas subredes): el clúster no tiene dirección pública. Necesita
-`pip install kafka-python==3.0.11 aws-msk-iam-sasl-signer-python==1.0.2`.
-
-```python
-import json
-
-from aws_msk_iam_sasl_signer import MSKAuthTokenProvider
-from kafka import KafkaConsumer, KafkaProducer
-from kafka.admin import KafkaAdminClient, NewTopic
-from kafka.net.sasl.oauth import AbstractTokenProvider
-
-REGION = "us-east-1"
-BOOTSTRAP = "boot-abcd1234.c2.kafka-serverless.us-east-1.amazonaws.com:9098"
-
-
-class TokenMSK(AbstractTokenProvider):
-    def token(self):
-        token, _ = MSKAuthTokenProvider.generate_auth_token(REGION)
-        return token
-
-
-conexion = {
-    "bootstrap_servers": BOOTSTRAP,
-    "security_protocol": "SASL_SSL",
-    "sasl_mechanism": "OAUTHBEARER",
-    "sasl_oauth_token_provider": TokenMSK(),
-}
-
-admin = KafkaAdminClient(**conexion)
-admin.create_topics([NewTopic(name="tx", num_partitions=6)])
-
-productor = KafkaProducer(value_serializer=lambda v: json.dumps(v).encode("utf-8"), **conexion)
-productor.send("tx", key=b"123", value={"customer_id": 123, "amount": 45.9})
-productor.flush()
-
-consumidor = KafkaConsumer(
-    "tx",
-    group_id="kanan-fraude",
-    auto_offset_reset="earliest",
-    value_deserializer=lambda b: json.loads(b),
-    **conexion,
-)
-for mensaje in consumidor:
-    print(mensaje.partition, mensaje.offset, mensaje.value)
-```
-
-`class TokenMSK(AbstractTokenProvider)`: kafka-python no sabe nada de IAM. Su
-mecanismo `OAUTHBEARER` le pide a un objeto un _token_ cada vez que se conecta,
-y la biblioteca de AWS fabrica ese token firmando con tus credenciales de boto3.
-La clase solo une las dos piezas. En kafka-python 3.x la clase **tiene que
-heredar** de `AbstractTokenProvider`; el ejemplo que circula para la 2.x, con una
-clase suelta que solo define `token()`, falla con
-`KafkaConfigurationError: sasl_oauth_token_provider must implement kafka.net.sasl.oauth.AbstractTokenProvider`.
-
-`NewTopic(name="tx", num_partitions=6)`: las particiones de un tema de Kafka
-cumplen el papel de los shards de Kinesis, y `key=b"123"` el de `PartitionKey`:
-misma clave, misma partición, orden garantizado. No paso `replication_factor`
-porque MSK Serverless fija la replicación por su cuenta.
-
-`productor.flush()`: `send` solo encola el mensaje en memoria y lo envía en
-segundo plano. Sin `flush`, un script que termina justo después pierde lo que
-quedaba en cola.
-
-`group_id="kanan-fraude"`: consumidores con el mismo grupo se reparten las
-particiones y Kafka recuerda por qué _offset_ (posición) va cada grupo. Un
-segundo grupo con otro nombre vuelve a leer todo el tema de forma
-independiente, que es lo que hace de MSK un «system of record».
-
-#### El mismo clúster, aprovisionado y en modo KRaft
-
-Los componentes de la lista del texto aparecen como parámetros cuando el
-clúster es aprovisionado:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-kafka = session.client("kafka")
-
-SUBNETS = ["subnet-0aaa1111bbbb2222c", "subnet-0ddd3333eeee4444f", "subnet-0ggg5555hhhh6666i"]
-SECURITY_GROUP = "sg-0123456789abcdef0"
-
-kafka.create_cluster(
-    ClusterName="kanan-tx-kafka-prov",
-    KafkaVersion="3.7.x.kraft",
-    NumberOfBrokerNodes=3,
-    BrokerNodeGroupInfo={
-        "InstanceType": "kafka.m5.large",
-        "ClientSubnets": SUBNETS,
-        "SecurityGroups": [SECURITY_GROUP],
-        "StorageInfo": {"EbsStorageInfo": {"VolumeSize": 100}},
-    },
-    ClientAuthentication={"Sasl": {"Iam": {"Enabled": True}}},
-)
-print(kafka.list_clusters_v2()["ClusterInfoList"])
-```
-
-`NumberOfBrokerNodes=3` con tres subredes es un broker por zona de
-disponibilidad, el mínimo que menciona el texto. El número tiene que ser
-múltiplo del número de subredes; 4 brokers en 3 subredes se rechaza.
-
-`KafkaVersion="3.7.x.kraft"`: el sufijo `.kraft` elige metadatos gestionados por
-controladores KRaft en lugar de nodos ZooKeeper. Ni unos ni otros aparecen como
-parámetros: MSK los crea sin que los pidas, que es lo que el texto quiere decir
-con «no additional setup». Las versiones disponibles en tu región las lista
-`kafka.list_kafka_versions()`.
-
-`"StorageInfo"`: el almacenamiento de las particiones son volúmenes EBS
-adjuntos a cada broker, de 100 GiB aquí.
-
-#### Use Cases
-
-Typical use cases for Amazon MSK include the following:
-
-- **Ingesting, storing, processing, and delivering real-time event streams.** Amazon MSK enables you to capture and process in real time high-volume application and database events and continuously ingest them into a data lake or to a variety of supported destinations for further processing.
-- **System of record for streaming data.** Amazon MSK can act as a single source of truth for the state of your data. This means that all changes to the data are captured and stored in Amazon MSK durable topics, allowing different applications to access and update the state consistently.
-- **Powering your event-driven architectures on AWS.** You can leverage the versatility of Apache Kafka to develop and build modern, secure event-driven applications on AWS.
+- **Ingerir, almacenar, procesar y entregar flujos de eventos en tiempo real.** Amazon MSK te permite capturar y procesar en tiempo real grandes volúmenes de eventos de aplicaciones y de bases de datos, e ingerirlos continuamente en un data lake o en otros destinos compatibles para su procesamiento posterior. Los «eventos de bases de datos» suelen obtenerse con **captura de cambios de datos** (*change data capture*, CDC), una técnica que publica como evento cada `INSERT`, `UPDATE` o `DELETE` de una base de datos, sin modificar la aplicación que la usa.
+- **Sistema de registro para datos de streaming.** Amazon MSK puede actuar como fuente única de verdad del estado de tus datos. Esto significa que todos los cambios de los datos se capturan y se guardan en topics durables de Amazon MSK, lo que permite que distintas aplicaciones accedan al estado y lo actualicen de forma consistente. Un **sistema de registro** (*system of record*) es la fuente autorizada de un dato: si dos sistemas discrepan, manda la suya. El razonamiento implícito es que, como el topic contiene cada cambio en orden, cualquier aplicación puede reconstruir el estado actual releyéndolo desde el principio, lo que exige una retención larga o indefinida.
+- **Impulsar tus arquitecturas orientadas a eventos en AWS.** Puedes aprovechar la versatilidad de Apache Kafka para desarrollar aplicaciones modernas y seguras orientadas a eventos en AWS. En una **arquitectura orientada a eventos** (*event-driven*), los componentes no se llaman directamente unos a otros. Uno publica un hecho («se creó el pedido 881») y los interesados (facturación, inventario, un modelo de fraude) reaccionan cada uno por su cuenta. Así, los componentes quedan desacoplados: si facturación está caída, los eventos esperan en Kafka hasta que vuelva.
 
 ### Amazon Managed Service for Apache Flink
 
-With Amazon Managed Service for Apache Flink (formerly known as Amazon Kinesis Data Analytics), you can leverage the Apache Flink framework to process and analyze streaming data in real time. Apache Flink is an open-source stream processing framework for stateful computations and complex analytics.
+Con Amazon Managed Service for Apache Flink (antes llamado Amazon Kinesis Data Analytics), puedes usar el framework Apache Flink para procesar y analizar datos de streaming en tiempo real. Apache Flink es un framework de código abierto para el procesamiento de flujos que realiza **cómputos con estado** y analítica compleja. *Con estado* (*stateful*) significa que el cálculo recuerda información entre un evento y otro: el número de compras de cada tarjeta en los últimos 10 minutos, un promedio móvil o la sesión en curso de cada usuario. Para un estadístico, es como calcular un promedio móvil sobre una serie infinita sin poder guardar toda la historia. Flink guarda ese estado de forma periódica en un almacenamiento durable (lo que llama *checkpoints*), para que una falla no obligue a empezar de cero.
 
-Unlike Apache Kafka, Apache Flink does not provide its own data storage system. However, it is fully integrated with various external storage systems to manage state and process data, such as Amazon S3, Amazon MSK, Amazon Kinesis Data Streams, and other data sources.
+A diferencia de Apache Kafka, Apache Flink no tiene su propio sistema de almacenamiento de datos. Sin embargo, se integra por completo con varios sistemas de almacenamiento externos para manejar su estado y procesar datos, como Amazon S3, Amazon MSK, Amazon Kinesis Data Streams y otras fuentes. Dicho de otro modo, Kafka o Kinesis son el lugar donde **viven** los eventos y Flink es lo que **calcula** sobre ellos. Una arquitectura típica es Kinesis o MSK → Flink → S3 o una base de datos.
 
-Some of the unique capabilities offered by Apache Flink are its robust support for data streaming workloads at scale, fault tolerance, and strong guarantees of exactly-once correctness. This is particularly appealing to global enterprises, which require reliable and performant infrastructure to transfer large volumes of data in the form of real-time events.
+Entre las capacidades distintivas de Apache Flink están su sólido soporte para cargas de trabajo de streaming a gran escala, su tolerancia a fallas y sus fuertes garantías de corrección *exactly-once*.
 
-Moreover, the service offers access to Apache Flink’s expressive APIs, and through Amazon Managed Service for Apache Flink Studio, you can interactively query data streams or launch stateful applications in only a few steps. With this managed service, you can get started with Apache Flink and quickly deploy and operate your data stream processing applications.
+- Una **carga de trabajo** (*workload*) es, en la jerga de la nube, cualquier aplicación o proceso que ejecutas con su patrón de uso de recursos, como «un job de entrenamiento que lee 2 TB por época» o «un pipeline de streaming que procesa 5000 eventos por segundo».
+- La **tolerancia a fallas** es la capacidad de seguir produciendo resultados correctos aunque fallen máquinas durante el cálculo.
+- ***Exactly-once*** (exactamente una vez) garantiza que cada evento afecta al resultado una sola vez, aunque una falla obligue a reprocesar. Las alternativas más débiles son *at-most-once* (como máximo una vez, que puede perder eventos) y *at-least-once* (al menos una vez, que puede duplicarlos). Importa cuando contar dos veces no es aceptable: facturación, saldos o conteos para detectar fraude. La garantía completa, de punta a punta, requiere además que el origen y el destino colaboren, por ejemplo, con escrituras transaccionales.
 
-Just like Apache MSK and most of the AWS fully managed services, there are no servers and clusters to manage, and there is no compute infrastructure to set up. You pay only for the resources you use.
+Estas capacidades resultan especialmente atractivas para las empresas globales, que necesitan una infraestructura confiable y de alto rendimiento para transferir grandes volúmenes de datos en forma de eventos en tiempo real.
 
-#### Una consulta continua sobre el stream de Kinesis (Studio)
+Además, el servicio ofrece acceso a las API expresivas de Apache Flink, que incluyen tanto interfaces de programación en Java, Scala y Python como SQL. Con **Amazon Managed Service for Apache Flink Studio**, un entorno de notebooks (basado en Apache Zeppelin) conectado a los flujos en vivo, puedes consultar data streams de forma interactiva o lanzar aplicaciones con estado en pocos pasos. Con este servicio administrado, puedes empezar a usar Apache Flink y desplegar y operar rápidamente tus aplicaciones de procesamiento de flujos.
 
-En un cuaderno de Managed Service for Apache Flink Studio, un párrafo que
-empieza con `%flink.ssql` se ejecuta como Flink SQL. Esta consulta declara el
-stream `kanan-tx-stream` como tabla y calcula, por cliente, cuántas compras hace
-y cuánto gasta en ventanas de un minuto. Las opciones del conector son las del
-conector `kinesis` de Flink 1.15 que usan los cuadernos Studio; en versiones
-recientes de Flink algunas cambiaron de nombre, así que si el cuaderno usa otra
-versión conviene contrastarlas con la documentación del conector.
+Igual que Apache MSK y la mayoría de los servicios totalmente administrados de AWS, no hay servidores ni clústeres que administrar ni infraestructura de cómputo que configurar. Solo pagas por los recursos que usas.
 
-```sql
-%flink.ssql
+> [!warning] Nota de precisión
+> - «Apache MSK» es una errata del original: el servicio es **Amazon** MSK.
+> - La comparación es imprecisa para MSK: en un clúster **aprovisionado** de MSK sí eliges el número y el tipo de brokers (ver la sección anterior). Solo MSK Serverless encaja en «sin clústeres que administrar».
+> - Hasta donde sé, Managed Service for Apache Flink factura por hora las unidades de procesamiento asignadas a la aplicación (KPU, cada una con 1 vCPU y 4 GB de memoria), así que «los recursos que usas» son los que asignas, aunque estén ociosos. Verifícalo en la página de precios vigente.
 
-CREATE TABLE tx (
-  customer_id BIGINT,
-  amount DOUBLE,
-  merchant STRING,
-  event_time TIMESTAMP(3),
-  WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
-) WITH (
-  'connector' = 'kinesis',
-  'stream' = 'kanan-tx-stream',
-  'aws.region' = 'us-east-1',
-  'scan.stream.initpos' = 'LATEST',
-  'format' = 'json',
-  'json.timestamp-format.standard' = 'ISO-8601'
-);
+#### Casos de uso (*Use Cases*)
 
-SELECT
-  customer_id,
-  TUMBLE_END(event_time, INTERVAL '1' MINUTE) AS fin_ventana,
-  COUNT(*) AS n_compras,
-  SUM(amount) AS gasto
-FROM tx
-GROUP BY customer_id, TUMBLE(event_time, INTERVAL '1' MINUTE);
-```
+Estos son casos de uso típicos de Amazon Managed Service for Apache Flink:
 
-`CREATE TABLE ... WITH ('connector' = 'kinesis', ...)` no crea nada en Kinesis ni
-copia datos: declara cómo leer el stream como si fuera una tabla. Es la frase
-del texto «Flink does not provide its own data storage system» vuelta código.
-
-`WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND` le dice a Flink
-cuánto retraso tolerar: una ventana que acaba a las 12:01 se cierra cuando ha
-visto eventos de las 12:01:05. Sin _watermark_, una ventana definida sobre
-`event_time` nunca sabe cuándo está completa y no emite resultados.
-
-`GROUP BY ... TUMBLE(event_time, INTERVAL '1' MINUTE)` agrupa en ventanas
-consecutivas de un minuto que no se solapan. A diferencia de un `GROUP BY` sobre
-una tabla, la consulta no termina: emite una fila por cliente cada vez que se
-cierra una ventana. Los conteos parciales de cada ventana abierta son el
-«estado» del que habla el texto, y Flink los guarda en _checkpoints_ para no
-perderlos si la aplicación se reinicia.
-
-#### Desplegar una aplicación Flink empaquetada
-
-Fuera de Studio, una aplicación Flink es un JAR (o un ZIP de PyFlink) en S3 que
-el servicio ejecuta:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-flink = session.client("kinesisanalyticsv2")
-
-APP = "kanan-tx-features"
-flink.create_application(
-    ApplicationName=APP,
-    RuntimeEnvironment="FLINK-1_20",
-    ServiceExecutionRole="arn:aws:iam::111111111111:role/KananFlinkAppRole-dev",
-    ApplicationConfiguration={
-        "ApplicationCodeConfiguration": {
-            "CodeContent": {"S3ContentLocation": {
-                "BucketARN": "arn:aws:s3:::kanan-ml-dev-artifacts-us-east-1",
-                "FileKey": "flink/tx-features-1.0.jar",
-            }},
-            "CodeContentType": "ZIPFILE",
-        },
-        "FlinkApplicationConfiguration": {
-            "CheckpointConfiguration": {"ConfigurationType": "DEFAULT"},
-            "ParallelismConfiguration": {
-                "ConfigurationType": "CUSTOM",
-                "Parallelism": 4,
-                "ParallelismPerKPU": 1,
-                "AutoScalingEnabled": True,
-            },
-        },
-        "EnvironmentProperties": {"PropertyGroups": [{
-            "PropertyGroupId": "kanan",
-            "PropertyMap": {"input.stream": "kanan-tx-stream", "output.bucket": "kanan-ml-dev-curated-us-east-1"},
-        }]},
-    },
-)
-flink.start_application(ApplicationName=APP, RunConfiguration={"FlinkRunConfiguration": {"AllowNonRestoredState": False}})
-```
-
-El cliente se llama `kinesisanalyticsv2` porque el servicio se llamaba Amazon
-Kinesis Data Analytics; el cambio de nombre no llegó a la API.
-
-`"CodeContentType": "ZIPFILE"` vale también para un JAR: la otra opción,
-`"PLAINTEXT"`, es para código en línea de las aplicaciones SQL antiguas.
-
-`"CheckpointConfiguration": {"ConfigurationType": "DEFAULT"}` activa los
-_checkpoints_ periódicos con los valores del servicio. De ellos depende la
-garantía «exactly-once» del texto: tras un fallo, la aplicación retoma desde el
-último checkpoint en lugar de reprocesar o saltarse eventos.
-
-`"ParallelismConfiguration"`: el servicio cobra por KPU (_Kinesis Processing
-Unit_, otra vez el nombre antiguo); `Parallelism` 4 con `ParallelismPerKPU` 1
-son 4 KPU, y `AutoScalingEnabled` permite que el servicio suba el paralelismo
-cuando la carga lo pide.
-
-`"EnvironmentProperties"` son los parámetros que el código de la aplicación lee
-al arrancar; así el mismo JAR sirve para desarrollo y producción.
-
-#### Use Cases
-
-Typical use cases for Amazon Managed Service for Apache Flink include the following:
-
-- **Streaming data pipelines.** Continuously ingest, enrich, and transform data streams, loading them into destination systems for timely action (versus batch processing). Examples include data lake ingestion, ML pipelines, and streaming extract, transform, load (ETL).
-- **Stream and batch analytics.** Amazon Managed Service for Apache Flink supports traditional batch queries on bounded datasets and real-time, continuous queries from unbounded, live data streams. Examples include usage metering and billing, network monitoring, feature engineering, and campaign performance.
-- **Event-driven applications.** You can leverage the capabilities of Apache Flink to easily develop and maintain event-driven applications on AWS. An event-driven application is a stateful application that ingests events from one or more event streams and reacts to incoming events by triggering computations, state updates, or external actions. Examples include fraud detection, business processes monitoring, and geo-fencing.
+- **Pipelines de datos de streaming.** Ingerir, enriquecer y transformar flujos de datos continuamente, y cargarlos en sistemas de destino para actuar a tiempo (frente al procesamiento por lotes). Algunos ejemplos son la ingesta en un data lake, los pipelines de ML y el ETL (extraer, transformar, cargar) de streaming. El **ETL de streaming** aplica las transformaciones evento a evento, de forma continua, en lugar de hacerlo en una ejecución nocturna.
+- **Analítica de flujos y por lotes.** Amazon Managed Service for Apache Flink admite tanto consultas por lotes tradicionales sobre **datasets acotados** (*bounded*), es decir, finitos, como un archivo con las ventas del mes pasado, como consultas continuas en tiempo real sobre **flujos no acotados** (*unbounded*), que no tienen final porque los eventos siguen llegando. Una *consulta continua* no termina: su resultado se actualiza con cada evento nuevo. Algunos ejemplos son la medición de consumo y la facturación (contar cuánto usa cada cliente para cobrarle), el monitoreo de redes, la ingeniería de características (calcular en vivo variables como «transacciones en la última hora» para un modelo en tiempo real; el capítulo 3 trata el tema) y el rendimiento de campañas.
+- **Aplicaciones orientadas a eventos.** Puedes aprovechar las capacidades de Apache Flink para desarrollar y mantener fácilmente aplicaciones orientadas a eventos en AWS. Una aplicación orientada a eventos es una aplicación con estado que ingiere eventos de uno o más flujos y reacciona a ellos disparando cálculos, actualizaciones de estado o acciones externas. Algunos ejemplos son la detección de fraude, el monitoreo de procesos de negocio y el ***geo-fencing***. El geo-fencing define un perímetro virtual en un mapa y dispara un evento cuando la posición GPS de un dispositivo entra o sale de él, por ejemplo, para avisar que un camión llegó al almacén.
 
 ### AWS DataSync
 
-AWS DataSync is a data transfer and discovery service that simplifies data migration and helps you quickly, easily, and securely transfer your file or object data to, from, and between AWS storage services.
+AWS DataSync es un servicio de transferencia y descubrimiento de datos que simplifica la **migración de datos** y te ayuda a transferir de forma rápida, sencilla y segura tus datos de archivos u objetos hacia, desde y entre servicios de almacenamiento de AWS. Una migración de datos es el traslado, normalmente una sola vez y a gran escala, de los datos de un sistema de almacenamiento a otro, por ejemplo, del centro de datos de la empresa a la nube.
 
-AWS DataSync achieves data discovery by using a DataSync agent to connect to your source storage system’s management interface. The agent collects information about your storage resources, including performance metrics and capacity utilization. This data is then sent to AWS DataSync Discovery, which analyzes the information and provides recommendations for migrating your data to AWS storage services. This automated process helps you understand your storage utilization and plan your migration more effectively.
+AWS DataSync logra el descubrimiento de datos usando un **agente de DataSync** que se conecta a la interfaz de administración de tu sistema de almacenamiento de origen. El agente es una máquina virtual que proporciona AWS y que tú instalas dentro de tu red (por ejemplo, en el mismo entorno de virtualización donde corren tus servidores). Hace falta porque AWS no puede entrar por su cuenta a tu red privada: el agente lee desde dentro y envía hacia AWS. La **interfaz de administración** es la API o consola con la que se configura y monitorea un equipo de almacenamiento empresarial. El agente recolecta información sobre tus recursos de almacenamiento, incluidas métricas de rendimiento y el uso de capacidad. Luego esos datos se envían a AWS DataSync Discovery, que los analiza y da recomendaciones para migrar tus datos a los servicios de almacenamiento de AWS. Este proceso automatizado te ayuda a entender el uso de tu almacenamiento y a planificar tu migración con más eficacia.
 
-With AWS DataSync, you can also transfer data between other cloud storage systems or on-premises storage systems and AWS services. In this context, cloud storage systems can include the following:
+> [!warning] Estado del servicio (verificado el 23-09-2026)
+> **AWS DataSync Discovery llegó al fin de su soporte el 20 de mayo de 2025** y ya no se puede usar. Todo lo que el libro dice sobre descubrimiento y recomendaciones de migración describe una función que ya no existe. La transferencia de datos con DataSync, que es el resto de esta sección, sigue vigente.
 
-- Self-managed storage systems, such as an NFS file server in your VPC within AWS
-- Storage systems or services hosted by another cloud provider
-- Storage systems or services hosted on-premises in your company data center(s)
+Con AWS DataSync también puedes transferir datos entre otros sistemas de almacenamiento en la nube o sistemas de almacenamiento *on-premises* y los servicios de AWS. **On-premises** (en las instalaciones) se refiere a la infraestructura que la empresa compra y opera en sus propios **centros de datos**, es decir, en salas o edificios con servidores, red, energía y refrigeración propios, en contraposición a la nube. En este contexto, los sistemas de almacenamiento pueden incluir los siguientes:
 
-AWS DataSync supports the following storage systems:
+- Sistemas de almacenamiento **autoadministrados**, como un servidor de archivos NFS en tu VPC dentro de AWS. *Autoadministrado* (*self-managed*) significa que tú instalas y operas el software, por ejemplo, en instancias EC2, en lugar de usar un servicio administrado. Un **servidor de archivos** (*file server*) es una computadora cuyo trabajo es guardar archivos y compartirlos por la red con otras computadoras. NFS se explica en la lista siguiente.
+- Sistemas o servicios de almacenamiento alojados en otro proveedor de nube.
+- Sistemas o servicios de almacenamiento alojados on-premises, en los centros de datos de tu empresa.
 
-- Network File System (NFS)
-- Server Message Block (SMB)
-- Hadoop Distributed File Systems (HDFS)
-- Object storage (Google Cloud Storage, Azure Blob Storage, Wasabi Cloud Storage, and self-managed object storage compatible with the Amazon S3 API)
+AWS DataSync admite los siguientes sistemas de almacenamiento. Los tres primeros son **protocolos** o sistemas de archivos en red: las reglas con que una computadora le pide a otra, por la red, operaciones como «abre este archivo» o «lee sus bytes del 0 al 4095».
 
-AWS DataSync supports the following AWS storage services:
+- **Network File System (NFS).** Es el protocolo estándar del mundo Linux y Unix para compartir archivos. Lo creó Sun Microsystems en los años 80. Con él, una computadora **monta** una carpeta de un servidor remoto, es decir, la conecta en un punto de su propio árbol de carpetas (por ejemplo, `/mnt/datos`), y a partir de ahí los programas la usan como si fuera un disco local. Importa porque la mayoría de los servidores Linux y de los clústeres de cómputo científico comparten datos por NFS. Sus versiones (v3, v4.x) se explican en la sección de Amazon EFS.
+- **Server Message Block (SMB).** Es el equivalente de NFS en el mundo Windows: el protocolo de las carpetas compartidas de una red Windows, las rutas del tipo `\\servidor\carpeta` y las «unidades de red» con letra, como `S:`. Se integra con las cuentas de usuario y los permisos de Windows. También lo usan macOS y Linux. A una versión antigua de SMB se le llama CIFS.
+- **Hadoop Distributed File System (HDFS).** Es el sistema de archivos distribuido del ecosistema **Hadoop**, la plataforma de código abierto de big data que precedió a Spark. HDFS divide cada archivo grande en bloques (de 128 MB por defecto) y los reparte entre las máquinas de un clúster, con tres copias de cada bloque. Muchas empresas tienen su data lake histórico en HDFS, on-premises, y lo migran a S3.
+- **Almacenamiento de objetos** (Google Cloud Storage, Azure Blob Storage, Wasabi Cloud Storage y almacenamiento de objetos autoadministrado **compatible con la API de Amazon S3**). Que un producto sea compatible con la API de S3 significa que implementa las mismas operaciones HTTP que S3, con los mismos nombres y formatos, así que las herramientas escritas para S3 funcionan con él sin cambios.
+
+AWS DataSync admite los siguientes servicios de almacenamiento de AWS:
 
 - Amazon S3
 - Amazon EFS
@@ -1299,1758 +367,804 @@ AWS DataSync supports the following AWS storage services:
 - AWS Snowcone
 - AWS Snowball Edge
 
-By using DataSync, you can achieve the following benefits:
+**Amazon EFS** y la familia **Amazon FSx** son servicios de almacenamiento de archivos que se explican más adelante en este capítulo. Cada variante de FSx es un sistema de archivos administrado construido sobre una tecnología de terceros, y lo que va después de «for» indica cuál: Lustre, Windows File Server, NetApp ONTAP u OpenZFS. **AWS Snowcone** y **AWS Snowball Edge** son dispositivos físicos de la familia *Snow*. AWS te los envía, tú copias los datos localmente, los devuelves por mensajería y AWS los carga en S3. Tienen sentido cuando la red es demasiado lenta. Por ejemplo, 500 TB por una línea de 1 Gbps tardan unos 46 días aun a plena velocidad, porque 500 TB son 4 × 10¹⁵ bits y a 10⁹ bits por segundo eso da 4 × 10⁶ segundos. (Recuerda que Snowcone se descontinuó y Snowball Edge ya no admite clientes nuevos; ver el recuadro del inicio.)
 
-- **Simplify migration planning.** With automated data collection and recommendations, DataSync Discovery can minimize the time, effort, and costs associated with planning your data migrations to AWS. You can use recommendations to inform your budget planning and rerun discovery jobs to validate your assumptions as you approach your migration.
-- **Automate data movement.** DataSync makes it easier to transfer data over the network between storage systems and services. DataSync automates both the management of data-transfer processes and the infrastructure required for high performance and secure data transfer.
-- **Transfer data securely.** DataSync provides end-to-end security, including encryption and integrity validation, to help ensure that your data arrives securely, intact, and ready to use. DataSync accesses your AWS storage through built-in AWS security mechanisms, such as AWS Identity and Access Management (IAM) roles. It also supports VPC endpoints, giving you the option to transfer data without traversing the public Internet and further increasing the security of data copied online.
-- **Move data faster.** DataSync uses a purpose-built network protocol and a parallel, multithreaded architecture to accelerate your transfers. This approach speeds up migrations, recurring data-processing workflows for analytics and ML, and data protection processes.
-- **Reduce operational costs.** Move data cost-effectively with the flat, per-gigabyte pricing of DataSync. Avoid having to write and maintain custom scripts or use costly commercial transfer tools.
+Con DataSync puedes obtener los siguientes beneficios:
 
-#### Una tarea de DataSync de un NFS local a S3
+- **Simplificar la planificación de la migración.** Con la recolección automática de datos y las recomendaciones, DataSync Discovery puede minimizar el tiempo, el esfuerzo y los costos de planificar tus migraciones a AWS. Puedes usar las recomendaciones para tu presupuesto y volver a ejecutar los trabajos de descubrimiento para validar tus supuestos a medida que te acercas a la migración. (Función retirada; ver el recuadro anterior.)
+- **Automatizar el movimiento de datos.** DataSync facilita transferir datos por la red entre sistemas y servicios de almacenamiento. Automatiza tanto la gestión de los procesos de transferencia como la infraestructura necesaria para una transferencia segura y de alto rendimiento. En la práctica, se encarga de programar las copias, reintentar lo que falla, verificar el resultado y, en ejecuciones sucesivas, copiar solo lo que cambió.
+- **Transferir datos de forma segura.** DataSync ofrece seguridad de punta a punta, incluidos cifrado y **validación de integridad**, para que tus datos lleguen de forma segura, intactos y listos para usarse. La validación de integridad compara sumas de verificación (*checksums*), una especie de huella digital de los bytes, en el origen y en el destino para confirmar que la copia es idéntica. DataSync accede a tu almacenamiento de AWS mediante los mecanismos de seguridad integrados de AWS, como los **roles** de AWS Identity and Access Management (**IAM**). IAM es el servicio donde se define qué identidad puede hacer qué acción sobre qué recurso, y un rol es una identidad con permisos que un servicio asume temporalmente; aquí, el permiso de DataSync para escribir en tu bucket. También admite **endpoints de VPC**, con los que puedes transferir datos sin pasar por el internet público, lo que aumenta aún más la seguridad de los datos copiados en línea. Un endpoint de VPC es una puerta de entrada privada, dentro de tu red de AWS, hacia un servicio de AWS, de modo que el tráfico viaja por la red interna de AWS.
+- **Mover datos más rápido.** DataSync usa un protocolo de red construido para este propósito y una arquitectura paralela y multihilo (*multithreaded*) para acelerar tus transferencias. En lugar de copiar un archivo tras otro con un protocolo genérico, abre muchas transferencias simultáneas y usa un protocolo optimizado para enlaces largos, donde cada ida y vuelta de la red tarda. Es como abrir muchas cajas en un supermercado en lugar de una. Esto acelera las migraciones, los flujos recurrentes de procesamiento de datos para analítica y ML, y los procesos de protección de datos (copias de seguridad y réplicas).
+- **Reducir los costos operativos.** Mueve datos de forma económica con el precio fijo por gigabyte de DataSync. Evitas escribir y mantener scripts propios o usar costosas herramientas comerciales de transferencia. (El modelo de precios puede haber cambiado desde la edición del libro; verifícalo en la página de precios vigente.)
 
-Una transferencia en DataSync son tres recursos: una _location_ de origen, una de
-destino y una _task_ que las une; cada ejecución de la tarea es una _task
-execution_.
+#### Casos de uso (*Use Cases*)
 
-```python
-import time
+Estos son casos de uso típicos de AWS DataSync:
 
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-datasync = session.client("datasync")
-
-origen = datasync.create_location_nfs(
-    ServerHostname="nas01.kanan.local",
-    Subdirectory="/exports/transacciones",
-    OnPremConfig={"AgentArns": ["arn:aws:datasync:us-east-1:111111111111:agent/agent-0123456789abcdef0"]},
-)["LocationArn"]
-
-destino = datasync.create_location_s3(
-    S3BucketArn="arn:aws:s3:::kanan-ml-dev-raw-us-east-1",
-    Subdirectory="/onprem/transacciones",
-    S3StorageClass="STANDARD",
-    S3Config={"BucketAccessRoleArn": "arn:aws:iam::111111111111:role/KananDataSyncS3Role-dev"},
-)["LocationArn"]
-
-tarea = datasync.create_task(
-    Name="kanan-nas-a-s3",
-    SourceLocationArn=origen,
-    DestinationLocationArn=destino,
-    Options={"VerifyMode": "ONLY_FILES_TRANSFERRED", "TransferMode": "CHANGED"},
-    Schedule={"ScheduleExpression": "cron(0 3 * * ? *)"},
-)["TaskArn"]
-
-ejecucion = datasync.start_task_execution(TaskArn=tarea)["TaskExecutionArn"]
-while True:
-    estado = datasync.describe_task_execution(TaskExecutionArn=ejecucion)
-    if estado["Status"] in ("SUCCESS", "ERROR"):
-        break
-    time.sleep(30)
-print(estado["Status"], estado.get("FilesTransferred"), estado.get("BytesTransferred"))
-```
-
-`"AgentArns"`: el agente del texto es una máquina virtual que instalas junto al
-NAS, en tu centro de datos, y que se activa desde la consola de DataSync. La
-activación te da este ARN. Sin agente, DataSync no tiene forma de leer un NFS que
-no está en AWS; entre servicios de AWS no hace falta.
-
-`"S3StorageClass": "STANDARD"`: los objetos se escriben directamente en esa
-clase. Para el caso de uso «Archive cold data» del texto se pone
-`"DEEP_ARCHIVE"` o `"GLACIER"`, y los archivos nunca pasan por S3 Standard.
-
-`"BucketAccessRoleArn"`: igual que Firehose, DataSync escribe en el bucket
-asumiendo un rol propio, no con tus credenciales.
-
-`"VerifyMode": "ONLY_FILES_TRANSFERRED"` calcula sumas de verificación de lo que
-copió y las compara con el origen: es la «integrity validation» del texto.
-`"TransferMode": "CHANGED"` copia solo lo nuevo o modificado desde la última
-ejecución, lo que hace barata una tarea programada a diario con `Schedule`.
-
-DataSync Discovery, la otra mitad de la sección, no aparece aquí: sus operaciones
-(`AddStorageSystem`, `StartDiscoveryJob`) ya no están en el modelo de la API de
-botocore 1.43.99, así que no hay llamada que mostrar con las versiones de este
-vault.
-
-#### Use Cases
-
-Typical use cases for AWS DataSync include the following:
-
-- **Discover data.** Get visibility into your on-premises storage performance and utilization. AWS DataSync Discovery can also provide recommendations for migrating your data to AWS storage services.
-- **Migrate data.** Transfer active datasets rapidly over the network into AWS storage services. DataSync includes automatic encryption and data integrity validation to help make sure your data arrives securely, intact, and ready to use.
-- **Archive cold data.** Move cold data stored in on-premises storage directly to durable, highly available, and secure long-term storage classes such as S3 Glacier Flexible Retrieval and S3 Glacier Deep Archive. Doing so can free up on-premises storage capacity and shut down legacy systems.
-- **Replicate data.** Copy data into any Amazon S3 storage class, choosing the most cost-effective storage class for your needs. You can also send data to Amazon EFS, FSx for Windows File Server, FSx for Lustre, or FSx for OpenZFS for a standby file system.
-- **Transfer data for timely in-cloud processing.** Transfer data in or out of AWS for processing. This approach can speed up critical hybrid cloud workflows across many industries. These include ML in the life-sciences industry, video production in media and entertainment, big-data analytics in financial services, and seismic research in the oil and gas industry.
+- **Descubrir datos.** Obtén visibilidad sobre el rendimiento y el uso de tu almacenamiento on-premises. AWS DataSync Discovery también puede darte recomendaciones para migrar tus datos a los servicios de almacenamiento de AWS. (Función retirada en mayo de 2025.)
+- **Migrar datos.** Transfiere rápidamente por la red *datasets activos* a los servicios de almacenamiento de AWS. Un dataset activo es uno que se sigue usando y modificando durante la migración, por eso importa poder repetir la copia y traer solo los cambios antes del corte final. DataSync incluye cifrado automático y validación de la integridad de los datos para que lleguen de forma segura, intactos y listos para usarse.
+- **Archivar datos fríos.** Mueve los datos fríos (*cold data*, los que casi nunca se consultan) del almacenamiento on-premises directamente a clases de almacenamiento de largo plazo durables, de alta disponibilidad y seguras, como S3 Glacier Flexible Retrieval y S3 Glacier Deep Archive (ver la Tabla 2.4). Así puedes liberar capacidad de almacenamiento on-premises y apagar sistemas heredados (*legacy*, sistemas antiguos que siguen en uso aunque ya estén desfasados).
+- **Replicar datos.** Copia datos en cualquier clase de almacenamiento de Amazon S3 y elige la más económica para tus necesidades. También puedes enviar datos a Amazon EFS, FSx for Windows File Server, FSx for Lustre o FSx for OpenZFS como sistema de archivos de reserva (*standby*), es decir, una copia lista para tomar el relevo si falla el sistema principal.
+- **Transferir datos para procesarlos a tiempo en la nube.** Transfiere datos hacia AWS o desde AWS para procesarlos. Este enfoque puede acelerar flujos de trabajo críticos de **nube híbrida**, aquellos en que una parte corre on-premises y otra en la nube, en muchas industrias. Entre ellos están el ML en ciencias de la vida, la producción de video en medios y entretenimiento, la analítica de big data en servicios financieros y la investigación sísmica en la industria del petróleo y el gas.
 
 ### AWS Glue
 
-The process to prepare your data to be ready for a selection of an ML algorithm is a key step in the ML lifecycle. AWS Glue is a cloud-optimized ETL serverless service, which allows you to discover, prepare, move, and integrate data from multiple sources across your business so your data is ready for use.
+El proceso de preparar tus datos para que estén listos para un algoritmo de ML es un paso clave del ciclo de vida de ML. AWS Glue es un servicio de ETL serverless, optimizado para la nube, que te permite descubrir, preparar, mover e integrar datos de múltiples fuentes de tu negocio para que estén listos para usarse.
 
-AWS Glue is different from other ETL services in four important ways:
+AWS Glue se diferencia de otros servicios de ETL en cuatro aspectos importantes:
 
-- **Serverless.** You don’t need to provision, configure, or spin up servers or manage their lifecycle.
-- **Automatic schema inference.** AWS Glue comes with crawlers, which parse your datasets, discover your file types, extract the schema, and store all this metadata in a centralized catalog for later querying and analysis.
-- **Automatic ETL scripts generation.** AWS Glue automatically generates the scripts you need to extract, transform, and load your data from source to target.
-- **Extensive connectivity.** AWS Glue offers a wide range of connectors to integrate with various data sources. It provides built-in support for commonly used data stores such as Amazon Redshift, Amazon Aurora, Microsoft SQL Server, MySQL, MongoDB, MariaDB, and PostgreSQL. Additionally, AWS Glue allows the use of custom JDBC drivers to integrate with other data sources.
+- **Serverless.** No necesitas aprovisionar, configurar ni levantar servidores, ni administrar su ciclo de vida.
+- **Inferencia automática del esquema.** AWS Glue incluye **crawlers**, que analizan tus datasets, descubren los tipos de archivo, extraen el esquema y guardan todos estos metadatos en un catálogo centralizado para consultarlos y analizarlos después. Un crawler (rastreador) es un proceso que recorre, por ejemplo, un prefijo de S3, lee muestras de los archivos, deduce columnas y tipos, y registra el resultado como una tabla. Ese catálogo, el **AWS Glue Data Catalog**, es el mismo que usa Athena para saber qué columnas tiene cada tabla y dónde están sus archivos.
+- **Generación automática de scripts de ETL.** AWS Glue genera automáticamente los scripts que necesitas para extraer, transformar y cargar tus datos desde el origen hasta el destino. Por ejemplo, diseñas el flujo en un editor visual y Glue produce el código PySpark equivalente.
+- **Conectividad extensa.** AWS Glue ofrece una amplia gama de **conectores** para integrarse con distintas fuentes de datos. Incluye soporte integrado para almacenes de datos de uso común, como Amazon Redshift, Amazon Aurora, Microsoft SQL Server, MySQL, MongoDB, MariaDB y PostgreSQL. Además, AWS Glue permite usar controladores **JDBC** personalizados para integrarse con otras fuentes de datos. JDBC (*Java Database Connectivity*) es el estándar de Java para conectarse a bases de datos, y un controlador (*driver*) JDBC es la biblioteca que sabe hablar con un motor concreto. Cumple el mismo papel que un «dialecto» de SQLAlchemy en Python.
 
-With the aforementioned benefits, AWS Glue makes data preparation simple, fast, secure, and cost-effective. Your team of ML and data engineers can leverage AWS Glue to visually create, run, and monitor ETL pipelines to load data into your data lakes and prepare your data to select an ML algorithm.
+Con estos beneficios, AWS Glue hace que la preparación de datos sea simple, rápida, segura y económica. Tu equipo de ingenieros de ML y de datos puede usar AWS Glue para crear, ejecutar y monitorear visualmente pipelines de ETL que cargan datos en tus data lakes y preparan tus datos para seleccionar un algoritmo de ML.
 
-Additionally, AWS Glue is expressive and flexible, enabling the development of custom ETL scripts using popular frameworks like Spark, PySpark, Scala, and Ray (AWS Glue for Ray). This allows for tailored data processing solutions that can meet the unique needs of your ML projects, ensuring both efficiency and precision in data preparation.
+Además, AWS Glue es expresivo y flexible, y permite desarrollar scripts de ETL personalizados con frameworks populares como Spark, PySpark, Scala y Ray (AWS Glue for Ray). Esto permite construir soluciones de procesamiento a la medida de las necesidades de tus proyectos de ML, con eficiencia y precisión en la preparación de los datos. La lista mezcla niveles distintos. **Spark** es el motor de procesamiento distribuido, y **PySpark** y **Scala** son dos lenguajes para programarlo: la API de Spark en Python y el lenguaje en que está escrito Spark. **Ray** es un framework de cómputo distribuido para Python, popular en ML. (AWS Glue for Ray ya no admite clientes nuevos; ver el recuadro del inicio.)
 
-#### Un crawler que infiere el esquema de lo que dejó Firehose
+#### Casos de uso (*Use Cases*)
 
-El crawler recorre un prefijo de S3, deduce el formato y las columnas, y deja una
-**tabla** en el Glue Data Catalog: un registro con el esquema y la ubicación de
-los datos, no una copia de ellos. Athena, los jobs de Glue y Firehose leen ese
-registro para saber cómo interpretar los archivos.
+Estos son casos de uso típicos de AWS Glue:
 
-```python
-import time
+- **Desarrollo de pipelines de ETL complejos.** Gracias a su capacidad de escalado automático (*Auto Scaling*), AWS Glue es el servicio ideal para ejecutar trabajos de ETL con demandas de cómputo irregulares, una cantidad de datos impredecible y un gran número de fuentes de datos. Con el escalado automático, el trabajo agrega o quita *workers* (las máquinas que ejecutan el procesamiento) durante la ejecución según la carga, en lugar de mantener un número fijo todo el tiempo, y solo pagas por los que realmente se usaron.
+- **Descubrimiento de datos.** Las capacidades nativas de AWS Glue facilitan identificar datos en AWS, on-premises y en otras nubes, y dejarlos disponibles de inmediato para consultarlos y transformarlos. Los crawlers y el catálogo son la pieza que lo hace posible; las fuentes on-premises se alcanzan mediante conexiones JDBC.
+- **Soporte para frameworks de procesamiento de datos.** Con AWS Glue puedes conectarte a más de 70 fuentes de datos distintas, implementar varios tipos de cargas de trabajo (por lotes, por **microlotes** y streaming) y administrar tus datos en un catálogo centralizado. Un microlote (*micro-batch*) procesa un flujo en pequeños lotes cada pocos segundos o minutos, un término medio entre el lote nocturno y el evento a evento; así funciona el streaming de Spark.
+- **Experiencia de ingeniería de datos simplificada.** Con las sesiones interactivas de AWS Glue, los ingenieros de datos y de ML pueden explorar y preparar datos de forma interactiva desde el **entorno de desarrollo integrado** (IDE, como VS Code o PyCharm) o el notebook que prefieran. Una sesión interactiva levanta bajo demanda un motor Spark serverless conectado a tu notebook y se cobra por el tiempo de uso.
 
-import boto3
+## Elegir servicios de almacenamiento de AWS (*Choosing AWS Storage Services*)
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-glue = session.client("glue")
+Los datos con los que entrenarás tu modelo de ML tendrán que persistirse en su formato crudo en un servicio de almacenamiento adecuado. Esto es crucial, porque asegura que tus datos estén accesibles y en un estado óptimo para el preprocesamiento y el entrenamiento del modelo. Además, el almacenamiento es esencial no solo para los datos de entrenamiento, sino también para guardar los **artefactos** que resultan del entrenamiento, como los parámetros del modelo, los pesos y otros datos derivados. En SageMaker, el artefacto típico es un archivo comprimido (`model.tar.gz`) en S3 que contiene los pesos del modelo entrenado y que después se usa para desplegarlo. Estos artefactos son vitales para hacer predicciones precisas y te permiten desplegar y operar tus modelos de ML con eficacia. Una buena gestión del almacenamiento facilita las transiciones entre la ingesta de datos, el entrenamiento, la evaluación y el despliegue del modelo, y así da soporte a todo el ciclo de vida de ML.
 
-glue.create_database(DatabaseInput={"Name": "kanan_raw"})
-glue.create_crawler(
-    Name="kanan-raw-tx",
-    Role="arn:aws:iam::111111111111:role/KananGlueCrawlerRole-dev",
-    DatabaseName="kanan_raw",
-    Targets={"S3Targets": [{"Path": "s3://kanan-ml-dev-raw-us-east-1/streaming/tx/"}]},
-    SchemaChangePolicy={"UpdateBehavior": "UPDATE_IN_DATABASE", "DeleteBehavior": "LOG"},
-)
+Estos son los principales factores que debes considerar al seleccionar el servicio de almacenamiento adecuado:
 
-glue.start_crawler(Name="kanan-raw-tx")
-time.sleep(30)
-while glue.get_crawler(Name="kanan-raw-tx")["Crawler"]["State"] != "READY":
-    time.sleep(15)
+- **Durabilidad.** Responde a la pregunta «¿durante cuánto tiempo necesitas conservar tus datos?». La durabilidad mide la capacidad de un servicio de almacenamiento de conservar los datos frente a los problemas de la operación normal a lo largo de su vida útil (discos que se estropean, errores de escritura). Se expresa como la probabilidad de no perder un dato en un año. S3, por ejemplo, está diseñado para una durabilidad del 99.999999999 % («once nueves»). AWS lo ilustra así: si guardas 10 millones de objetos, puedes esperar perder uno cada 10 000 años en promedio. Como contraste, la documentación de EBS indica para sus volúmenes de uso general una durabilidad del 99.8 % al 99.9 % anual, es decir, una tasa de falla anual del 0.1 % al 0.2 %. La durabilidad varía mucho entre servicios.
+- **Disponibilidad.** Responde a la pregunta «¿qué tan pronto necesitas usar tus datos?». La disponibilidad mide el porcentaje del tiempo en que el servicio de almacenamiento puede usarse, entendiendo por «puede usarse» que cumple su función acordada cuando se le requiere. La disponibilidad (también llamada disponibilidad del servicio) es una métrica muy usada para medir cuantitativamente la confiabilidad. Para darle escala, un 99.99 % de disponibilidad (el diseño de S3 Standard) equivale a unos 53 minutos al año sin servicio, un 99.9 % a unas 8.8 horas y un 99.5 % a unas 44 horas.
+- **Tipo de almacenamiento.** Responde a la pregunta «¿en qué formato necesitas tus datos para usarlos eficazmente en la preparación?». Los tipos de almacenamiento incluyen objetos, bloques, archivos y otros tipos específicos según el caso de uso, como bases de datos o streaming. Los tres primeros se explicaron junto a la Figura 2.3.
+- **Costo.** Responde a la pregunta «¿cuánto dinero estás dispuesto a gastar para guardar tus datos?». El costo es uno de los pilares del **AWS Well-Architected Framework** y aplica a cualquier solución que diseñes, arquitectes y construyas en la nube. El Well-Architected Framework es la guía de buenas prácticas de AWS para diseñar arquitecturas en la nube, organizada en seis pilares: excelencia operativa, seguridad, confiabilidad, eficiencia del rendimiento, optimización de costos y sostenibilidad. En las próximas secciones veremos el factor costo de cada servicio de almacenamiento de AWS relevante para el ciclo de vida de ML.
+- **Seguridad.** Responde a la pregunta «¿qué tipo de protección necesitan tus datos en reposo?». La seguridad es otro pilar del Well-Architected Framework y aplica a cualquier solución que diseñes, arquitectes y construyas en la nube. La sensibilidad de tus datos determina qué controles de protección se requieren mientras están almacenados, es decir, **en reposo** (a diferencia de *en tránsito*, cuando viajan por la red). El control básico es el **cifrado en reposo**: los datos se guardan cifrados, de modo que quien obtenga el disco o una copia del archivo no pueda leerlos sin la clave.
 
-for tabla in glue.get_tables(DatabaseName="kanan_raw")["TableList"]:
-    columnas = [(c["Name"], c["Type"]) for c in tabla["StorageDescriptor"]["Columns"]]
-    particiones = [p["Name"] for p in tabla.get("PartitionKeys", [])]
-    print(tabla["Name"], columnas, particiones)
-```
-
-Resultado esperado sobre la salida del Firehose de antes: una tabla `tx` con
-columnas `customer_id` (`int`), `amount` (`double`) y `merchant` (`string`), y
-particiones `merchant` y `dt`, deducidas de las carpetas `merchant=.../dt=.../`.
-
-`create_database`: una base de datos del catálogo es solo un espacio de nombres
-para tablas; no tiene almacenamiento ni cómputo.
-
-`"Path": "s3://.../streaming/tx/"`: el crawler usa el nombre de la última
-carpeta del prefijo como nombre de tabla (`tx`) y convierte las subcarpetas
-`clave=valor` en columnas de partición.
-
-`"UpdateBehavior": "UPDATE_IN_DATABASE"`: si en una ejecución posterior aparece
-una columna nueva, el crawler la añade a la tabla. Con `"LOG"` solo lo anotaría
-en CloudWatch y la tabla se quedaría como estaba.
-
-`time.sleep(30)` antes del bucle: el crawler tarda unos segundos en pasar de
-`READY` a `RUNNING`. Sin la pausa inicial, el bucle puede ver el `READY` previo al
-arranque y salir antes de que el crawler haga nada.
-
-#### El script de un job de ETL: JSON comprimido a Parquet
-
-Este es el script que ejecuta Glue, no tu máquina: importa `awsglue`, que solo
-existe dentro del entorno de Glue. Se sube a S3 y el job del bloque siguiente lo
-referencia.
-
-```python
-import sys
-
-from awsglue.context import GlueContext
-from awsglue.job import Job
-from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
-
-args = getResolvedOptions(sys.argv, ["JOB_NAME", "salida"])
-glue_context = GlueContext(SparkContext.getOrCreate())
-job = Job(glue_context)
-job.init(args["JOB_NAME"], args)
-
-tx = glue_context.create_dynamic_frame.from_catalog(
-    database="kanan_raw", table_name="tx", transformation_ctx="leer_tx"
-)
-tx = tx.resolveChoice(specs=[("amount", "cast:double")])
-
-glue_context.write_dynamic_frame.from_options(
-    frame=tx,
-    connection_type="s3",
-    connection_options={"path": args["salida"], "partitionKeys": ["dt"]},
-    format="parquet",
-    transformation_ctx="escribir_parquet",
-)
-job.commit()
-```
-
-`getResolvedOptions(sys.argv, ["JOB_NAME", "salida"])`: Glue pasa los
-argumentos del job como `--salida s3://...` en la línea de comandos; esta función
-los devuelve como diccionario. Un nombre que pides aquí y no pasaste al lanzar el
-job produce un error al arrancar.
-
-`create_dynamic_frame.from_catalog`: lee usando la tabla que dejó el crawler;
-el script no menciona ni rutas ni formato de entrada. Un _DynamicFrame_ es la
-versión de Glue de un DataFrame de Spark que tolera columnas con tipos mezclados.
-
-`resolveChoice(specs=[("amount", "cast:double")])`: si en unos archivos `amount`
-llegó como `10` y en otros como `10.5`, el DynamicFrame guarda ambos tipos; aquí
-se decide convertir todo a `double` antes de escribir Parquet, que exige un tipo
-por columna.
-
-`transformation_ctx` y `job.commit()` son los _job bookmarks_: Glue anota qué
-archivos ya procesó y la siguiente ejecución lee solo los nuevos. Es la
-«resilience» del texto aplicada al ETL: un job que falla a mitad de camino retoma
-desde el último `commit`. Sin `transformation_ctx`, cada ejecución reprocesa todo.
-
-#### Crear y lanzar el job
-
-```python
-import time
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-glue = session.client("glue")
-
-glue.create_job(
-    Name="kanan-tx-a-parquet",
-    Role="arn:aws:iam::111111111111:role/KananGlueJobRole-dev",
-    Command={
-        "Name": "glueetl",
-        "ScriptLocation": "s3://kanan-ml-dev-artifacts-us-east-1/glue/tx_a_parquet.py",
-        "PythonVersion": "3",
-    },
-    GlueVersion="5.0",
-    WorkerType="G.1X",
-    NumberOfWorkers=10,
-    DefaultArguments={
-        "--job-bookmark-option": "job-bookmark-enable",
-        "--enable-auto-scaling": "true",
-        "--salida": "s3://kanan-ml-dev-curated-us-east-1/fraude/tx-parquet/",
-    },
-)
-
-run_id = glue.start_job_run(JobName="kanan-tx-a-parquet")["JobRunId"]
-while True:
-    run = glue.get_job_run(JobName="kanan-tx-a-parquet", RunId=run_id)["JobRun"]
-    if run["JobRunState"] in ("SUCCEEDED", "FAILED", "STOPPED", "TIMEOUT", "ERROR"):
-        break
-    time.sleep(30)
-print(run["JobRunState"], run.get("ErrorMessage"))
-```
-
-`"Name": "glueetl"` elige un job de Spark. Los otros motores del texto son
-`"pythonshell"` (un único proceso de Python, para tareas pequeñas) y `"glueray"`
-(AWS Glue for Ray).
-
-`WorkerType="G.1X"`, `NumberOfWorkers=10`: cada _worker_ G.1X es un ejecutor de
-Spark con 4 vCPU y 16 GB. Con `"--enable-auto-scaling": "true"`, 10 pasa a ser
-el máximo: Glue usa menos cuando el volumen de datos no los necesita, que es el
-«Auto Scaling» del primer caso de uso.
-
-`"--job-bookmark-option": "job-bookmark-enable"` activa los bookmarks que el
-script prepara con `transformation_ctx`. Las dos piezas hacen falta: el script
-sin el argumento no guarda nada, y el argumento sin `transformation_ctx` en el
-script tampoco.
-
-#### De vuelta a Firehose: convertir a Parquet al entregar
-
-Con una tabla en el catálogo, Firehose puede escribir Parquet directamente, que
-es la opción «convert your data stream into a format such as Parquet or ORC» de
-la sección de Firehose. El esquema de salida lo toma de la tabla `tx`.
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-firehose = session.client("firehose")
-
-ROL = "arn:aws:iam::111111111111:role/KananFirehoseDeliveryRole-dev"
-firehose.create_delivery_stream(
-    DeliveryStreamName="kanan-tx-a-parquet",
-    DeliveryStreamType="DirectPut",
-    ExtendedS3DestinationConfiguration={
-        "RoleARN": ROL,
-        "BucketARN": "arn:aws:s3:::kanan-ml-dev-curated-us-east-1",
-        "Prefix": "streaming/tx-parquet/dt=!{timestamp:yyyy-MM-dd}/",
-        "ErrorOutputPrefix": "streaming/errores-parquet/!{firehose:error-output-type}/",
-        "BufferingHints": {"SizeInMBs": 128, "IntervalInSeconds": 300},
-        "CompressionFormat": "UNCOMPRESSED",
-        "DataFormatConversionConfiguration": {
-            "Enabled": True,
-            "InputFormatConfiguration": {"Deserializer": {"OpenXJsonSerDe": {}}},
-            "OutputFormatConfiguration": {"Serializer": {"ParquetSerDe": {"Compression": "SNAPPY"}}},
-            "SchemaConfiguration": {
-                "DatabaseName": "kanan_raw",
-                "TableName": "tx",
-                "Region": "us-east-1",
-                "RoleARN": ROL,
-                "VersionId": "LATEST",
-            },
-        },
-    },
-)
-```
-
-`"Deserializer": {"OpenXJsonSerDe": {}}`: la conversión solo acepta **JSON** como
-entrada. Si el productor envía CSV, hace falta una Lambda de transformación (la de
-la sección de Firehose) que convierta cada línea CSV en un objeto JSON antes de
-esta etapa. Es exactamente la combinación que pregunta la _review question_ 7.
-
-`"CompressionFormat": "UNCOMPRESSED"`: con conversión activada, la compresión la
-decide el serializador (`"Compression": "SNAPPY"` dentro de Parquet), y el campo
-general debe quedar sin compresión; con `"GZIP"` la creación se rechaza.
-
-`"BufferingHints": {"SizeInMBs": 128, ...}`: la conversión exige un búfer de al
-menos 64 MB. Búferes grandes producen archivos Parquet grandes, que es lo que
-conviene: muchos archivos de pocos kilobytes anulan la ventaja del formato
-columnar.
-
-`"VersionId": "LATEST"`: si el crawler añade columnas a `tx`, Firehose empieza a
-usar el esquema nuevo sin tocar el stream.
-
-#### Use Cases
-
-Typical use cases for AWS Glue include the following:
-
-- **Complex ETL pipeline development.** Because of its Auto Scaling capability, AWS Glue is the ideal service to run data processing for ETL jobs with uneven compute demands, an unpredictable amount of data, and a large number of data sources.
-- **Data discovery.** AWS Glue’s native capabilities make it easy to identify data across AWS, on premises, and on other clouds and then make it instantly available for querying and transforming.
-- **Support for data processing frameworks.** With AWS Glue, you can connect to more than 70 diverse data sources, implement a variety of workload types (batch, micro-batch, and streaming), and manage your data in a centralized data catalog.
-- **Simplified data engineering experience.** Using AWS Glue interactive sessions, data and ML engineers can interactively explore and prepare data using the integrated development environment (IDE) or notebook of their choice.
-
-## Choosing AWS Storage Services
-
-The data you will use to train your ML model will need to be persisted in its raw format using a suitable storage service. This is crucial as it ensures that your data is readily accessible and in an optimal state for preprocessing and model training. Additionally, storage is essential not only for training data but also for storing the artifacts resulting from the training process, such as model parameters, weights, and other derived data. These artifacts are vital for making accurate predictions, enabling you to deploy and operationalize your ML models effectively. Proper storage management facilitates seamless transitions between data ingestion, model training, model evaluation, and model deployment, thereby supporting the end-to-end ML lifecycle.
-
-The following are the main factors you need to consider in selecting the appropriate storage service:
-
-- **Durability.** Addresses the question “For how long do you need to keep your data?” Durability measures the ability of a storage service to persist data when faced with the challenges of normal operation over its lifetime.
-- **Availability.** Addresses the question “How soon do you need to use your data?” Availability measures the percentage of time that the storage service is available for use, where “available for use” means that it performs its agreed function when required. Availability (also known as service availability) is a commonly used metric to quantitatively measure reliability.
-- **Storage type.** Addresses the question “In which format do you need your data to be effectively used for the preparation process?” Storage types include Object, Block, File, and other specific types based on use cases.
-- **Cost.** Addresses the question “How much money are you willing to spend to store your data?” Cost is one of the pillars of the Well-Architected Framework and applies to any solution you design, architect, and build in the cloud. In the next sections, we will cover the cost factor for each AWS storage service relevant to the ML lifecycle.
-- **Security.** Addresses the question “What type of protection is required for your data at rest?” Security is another pillar of the Well-Architected Framework and applies to any solution you design, architect, and build in the cloud. The sensitivity of your data determines what data protection security controls are required while your data is stored, i.e., at rest.
-
-In the upcoming sections, the main storage services offered by AWS for ML workloads will be covered. We will start with the three storage services that are natively integrated with Amazon SageMaker: Amazon S3, Amazon Elastic File System (EFS), and Amazon FSx for Lustre.
+En las próximas secciones se cubren los principales servicios de almacenamiento de AWS para cargas de trabajo de ML. Empezaremos con los tres servicios de almacenamiento que se integran de forma nativa con Amazon SageMaker: Amazon S3, Amazon Elastic File System (EFS) y Amazon FSx for Lustre. Que la integración sea nativa significa que, al crear un job de entrenamiento, puedes declarar cualquiera de los tres como origen de datos de un **canal de entrada**, y SageMaker se encarga de copiar o montar los datos en las instancias de entrenamiento. Con cualquier otro almacenamiento, tu propio código tendría que ir a buscar los datos.
 
 ### Amazon Simple Storage Service (S3)
 
-Amazon S3 is an object storage service that provides industry-leading durability, availability, scalability, security, and performance.
+Amazon S3 es un servicio de almacenamiento de objetos que ofrece durabilidad, disponibilidad, escalabilidad, seguridad y rendimiento líderes en la industria.
 
-Object storage is a storage type that persists and manages data in an unstructured format called objects. As organizations embark in their digital transformation journey, their ability to store large amounts of unstructured data such as photos, videos, email, web pages, sensor data, and audio files has become a key aspect of their digital transformation.
+El almacenamiento de objetos es un tipo de almacenamiento que persiste y gestiona los datos en un formato no estructurado llamado *objetos*. Aquí, «no estructurado» significa que S3 no interpreta el contenido: para S3, un archivo Parquet con una tabla perfectamente estructurada es una secuencia opaca de bytes. A medida que las organizaciones avanzan en su transformación digital, su capacidad para almacenar grandes cantidades de datos no estructurados, como fotos, videos, correos electrónicos, páginas web, datos de sensores y archivos de audio, se ha vuelto un aspecto clave de esa transformación.
 
-Amazon S3 distributes this data across multiple physical devices but allows users to access the content efficiently from a unique identifier, i.e., the object’s Uniform Resource Identifier (URI).
+Amazon S3 distribuye estos datos entre múltiples dispositivos físicos, pero permite que los usuarios accedan al contenido de forma eficiente a partir de un identificador único, el **URI** (*Uniform Resource Identifier*) del objeto, que tiene la forma `s3://mi-bucket/ventas/2024/05/dia-01.csv`.
 
-The major benefits of object storage are the virtually unlimited scalability and the lower cost of storing large amounts of data for use cases such as data lakes, cloud native applications, analytics, log files, and ML.
+Los principales beneficios del almacenamiento de objetos son una escalabilidad prácticamente ilimitada y un costo menor para guardar grandes cantidades de datos, en casos de uso como data lakes, aplicaciones **nativas de la nube** (*cloud native*, diseñadas desde el principio para aprovechar servicios administrados y escalar agregando máquinas), analítica, archivos de log y ML.
 
-Object storage also delivers greater data durability and resilience because it stores objects on multiple devices, across multiple systems, and even across multiple Availability Zones and regions. This allows for virtually unlimited scale and also improves resilience and availability of the data.
+El almacenamiento de objetos también ofrece mayor durabilidad y resiliencia, porque guarda los objetos en múltiples dispositivos, en múltiples sistemas e incluso en múltiples zonas de disponibilidad y regiones. Esto permite una escala prácticamente ilimitada y mejora la resiliencia y la disponibilidad de los datos.
 
-With its native integration with Amazon SageMaker, Amazon S3 is one of the most cost-effective and user-friendly storage options for ML operations in AWS. It offers a range of storage classes to suit different access patterns and budgets, making it a versatile choice for storing both training data and model artifacts. Moreover, Amazon S3’s integration with various AWS services— such as AWS Lambda, Amazon Elastic Container Services (ECS), and Amazon Elastic Kubernetes Services (EKS)—simplifies the process of building, training, and deploying ML models.
+> [!warning] Nota de precisión: zonas sí, regiones solo si lo configuras
+> Según la documentación de S3, las clases de almacenamiento estándar guardan los datos en **al menos tres zonas de disponibilidad de una misma región**. S3 **no** copia tus objetos a otra región por su cuenta; para eso hay que configurar la replicación entre regiones (*Cross-Region Replication*). Y las clases *One Zone* guardan los datos en una sola zona.
 
-Figure 2.4 illustrates a simple workflow that highlights how Amazon S3 and Amazon SageMaker can interact with each other during the ML lifecycle.
+Gracias a su integración nativa con Amazon SageMaker, Amazon S3 es una de las opciones de almacenamiento más económicas y fáciles de usar para las operaciones de ML en AWS. Ofrece una variedad de clases de almacenamiento para distintos patrones de acceso y presupuestos, lo que lo convierte en una opción versátil para guardar tanto datos de entrenamiento como artefactos de modelos. Además, la integración de Amazon S3 con varios servicios de AWS, como AWS Lambda, Amazon Elastic Container Service (**ECS**) y Amazon Elastic Kubernetes Service (**EKS**), simplifica el proceso de construir, entrenar y desplegar modelos de ML. ECS y EKS ejecutan **contenedores**, aplicaciones empaquetadas junto con todas sus dependencias (el formato más común es Docker). EKS es la versión administrada de **Kubernetes**, el orquestador de contenedores estándar de la industria, que decide en qué máquina corre cada contenedor y lo reinicia si falla.
 
-_FIGURE 2.4 Amazon S3 use in the ML lifecycle._
+La Figura 2.4 ilustra un flujo de trabajo sencillo que muestra cómo Amazon S3 y Amazon SageMaker pueden interactuar durante el ciclo de vida de ML.
 
-#### Cómo lee SageMaker desde S3: los modos de entrada
+*Figura 2.4 Uso de Amazon S3 en el ciclo de vida de ML.*
 
-La flecha de S3 a SageMaker de la Figura 2.4 es un canal de entrada del training
-job, y el canal decide **cómo** llegan los objetos al contenedor:
+Para el examen, asegúrate de entender bien las clases de almacenamiento de Amazon S3, que se describen en la Tabla 2.4. Una **clase de almacenamiento** es un nivel de precio y de acceso que se asigna a cada objeto: cuanto menos frecuente es el acceso esperado, más barato es guardar el dato y más caro (o más lento) es leerlo.
 
-```python
-from datetime import datetime
+**Tabla 2.4** Clases de almacenamiento de Amazon S3.
 
-import boto3
+| Clase de almacenamiento de S3 | Descripción |
+| --- | --- |
+| S3 Standard | Diseñada para datos a los que se accede con frecuencia |
+| S3 Intelligent-Tiering | Optimiza los costos moviendo automáticamente los datos entre dos niveles de acceso según los cambios en los patrones de acceso |
+| S3 Express One Zone | Clase de alto rendimiento en una sola zona de disponibilidad, que ofrece acceso a los datos con una latencia constante de un solo dígito de milisegundos para aplicaciones sensibles a la latencia |
+| S3 Standard-IA (acceso poco frecuente) | Adecuada para datos a los que se accede con menos frecuencia pero que requieren acceso rápido cuando se necesitan, a un costo menor que S3 Standard |
+| S3 One Zone-IA | Ideal para datos de acceso poco frecuente que no requieren la resiliencia de múltiples zonas de disponibilidad; ofrece costos de almacenamiento más bajos |
+| S3 Glacier Instant Retrieval | Diseñada para datos de larga vida a los que se accede rara vez pero que requieren acceso inmediato; ofrece tiempos y costos de recuperación bajos |
+| S3 Glacier Flexible Retrieval | Se usa para datos de archivo con tiempos de acceso flexibles, de minutos a horas; ofrece almacenamiento de bajo costo |
+| S3 Glacier Deep Archive | Ofrece el almacenamiento de menor costo para archivar datos a largo plazo, con tiempos de recuperación de hasta 12 horas |
+| S3 Outposts | Lleva el almacenamiento de S3 a tus entornos on-premises, lo que asegura un rendimiento constante y cumple los requisitos de residencia de datos |
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-sm = session.client("sagemaker")
+Algunos términos de la tabla necesitan explicación:
 
-def canal_s3(nombre, uri, modo, distribucion):
-    return {
-        "ChannelName": nombre,
-        "ContentType": "text/csv",
-        "InputMode": modo,
-        "DataSource": {"S3DataSource": {
-            "S3DataType": "S3Prefix",
-            "S3Uri": uri,
-            "S3DataDistributionType": distribucion,
-        }},
-    }
+- **Latencia** es el tiempo que pasa entre que pides un dato y empieza a llegar la respuesta. «Un solo dígito de milisegundos» son entre 1 y 9 ms. Como escala aproximada, leer de un SSD NVMe de laptop tarda del orden de 0.1 ms, un disco duro mecánico tarda de 5 a 10 ms (su cabezal tiene que moverse) y S3 Standard suele responder objetos pequeños en unos 100 a 200 ms, según las guías de rendimiento de S3. Importa en ML porque si un entrenamiento lee un millón de imágenes pequeñas una tras otra, 100 ms por lectura son casi 28 horas solo de espera, frente a menos de 3 horas con 10 ms. En la práctica se lee en paralelo, pero la latencia sigue marcando el ritmo.
+- **Recuperación** (*retrieval*) es el paso previo a leer un objeto archivado. En las clases Glacier Flexible Retrieval y Deep Archive los objetos no se pueden leer directamente: primero se pide su restauración, que tarda de minutos a horas, y después se leen.
+- **S3 on Outposts** usa **AWS Outposts**, bastidores de hardware de AWS que se instalan en tu propio centro de datos, AWS los administra y ejecutan servicios de AWS localmente.
 
-sm.create_training_job(
-    TrainingJobName="kanan-fraude-xgb-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
-    RoleArn="arn:aws:iam::111111111111:role/KananSageMakerExecutionRole-dev",
-    AlgorithmSpecification={
-        "TrainingImage": "683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-xgboost:1.7-1",
-        "TrainingInputMode": "File",
-    },
-    HyperParameters={"objective": "binary:logistic", "num_round": "100"},
-    InputDataConfig=[
-        canal_s3("train", "s3://kanan-ml-dev-curated-us-east-1/fraude/train-csv/", "FastFile", "ShardedByS3Key"),
-        canal_s3("validation", "s3://kanan-ml-dev-curated-us-east-1/fraude/val-csv/", "File", "FullyReplicated"),
-    ],
-    OutputDataConfig={"S3OutputPath": "s3://kanan-ml-dev-artifacts-us-east-1/fraude/modelos/"},
-    ResourceConfig={"InstanceType": "ml.m5.xlarge", "InstanceCount": 2, "VolumeSizeInGB": 30},
-    StoppingCondition={"MaxRuntimeInSeconds": 3600},
-)
-```
+> [!warning] Nota de precisión: la Tabla 2.4 está desactualizada o simplificada en dos filas
+> - **S3 Intelligent-Tiering** no mueve los datos entre **dos** niveles, sino entre **tres niveles automáticos**: *Frequent Access*, *Infrequent Access* (tras 30 días sin acceso) y *Archive Instant Access* (tras 90 días). Además, tiene **dos niveles opcionales** de archivo, *Archive Access* y *Deep Archive Access*, que hay que activar y cuyos objetos deben restaurarse antes de leerlos. Los objetos de menos de 128 KB no se monitorean y se quedan siempre en el nivel frecuente.
+> - En **S3 Glacier Deep Archive**, 12 horas es el plazo de la recuperación *estándar*. La recuperación masiva (*bulk*), más barata, puede tardar hasta 48 horas.
+> - Verifica estos valores en la documentación vigente de S3.
 
-`"InputMode"` a nivel de canal sustituye al `TrainingInputMode` general para
-ese canal. Los tres valores:
+La tabla siguiente **no está en el libro**. Resume datos de la documentación de S3 (consultada el 23-09-2026) que suelen aparecer en preguntas de examen:
 
-| Modo       | Qué ocurre antes de que empiece tu código                            | Cuándo conviene                                                                 |
-| ---------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `File`     | Se descarga el prefijo completo al disco EBS de la instancia         | Datasets pequeños o medianos; es el valor por defecto                           |
-| `FastFile` | Los objetos aparecen como archivos, pero se leen de S3 al abrirlos   | Datasets grandes leídos secuencialmente; el job empieza sin esperar la descarga |
-| `Pipe`     | Los datos llegan por una tubería (FIFO) que se lee una vez, en orden | Algoritmos que la soportan, como los que leen RecordIO-protobuf                 |
+| Clase | Disponibilidad de diseño | Zonas de disponibilidad | Duración mínima facturada | Cargo por recuperación |
+| --- | --- | --- | --- | --- |
+| S3 Standard | 99.99 % | ≥ 3 | Ninguna | No |
+| S3 Intelligent-Tiering | 99.9 % | ≥ 3 | Ninguna | No (hay cargo de monitoreo por objeto) |
+| S3 Express One Zone | 99.95 % | 1 | Ninguna | No |
+| S3 Standard-IA | 99.9 % | ≥ 3 | 30 días | Sí |
+| S3 One Zone-IA | 99.5 % | 1 | 30 días | Sí |
+| S3 Glacier Instant Retrieval | 99.9 % | ≥ 3 | 90 días | Sí |
+| S3 Glacier Flexible Retrieval | 99.99 % (tras restaurar) | ≥ 3 | 90 días | Sí |
+| S3 Glacier Deep Archive | 99.99 % (tras restaurar) | ≥ 3 | 180 días | Sí |
 
-`"S3DataDistributionType": "ShardedByS3Key"`: con `InstanceCount` 2, cada
-instancia recibe la mitad de los **objetos** del prefijo. `"FullyReplicated"`
-entrega todo a todas. El reparto es por objeto, no por fila: un prefijo con un
-único CSV gigante no se puede repartir, y una instancia se queda sin datos.
-
-`"VolumeSizeInGB": 30` solo tiene que alojar los datos en modo `File`; con
-`FastFile` o `Pipe` puede ser mucho menor que el dataset.
-
-For the exam, make sure you have a good understanding of the Amazon S3 storage classes, as described in Table 2.4.
-
-**TABLE 2.4 Amazon S3 storage classes.**
-
-| S3 storage class                   | Description                                                                                                                                            |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S3 Standard                        | Designed for frequently accessed data                                                                                                                  |
-| S3 Intelligent-Tiering             | Optimizes costs by automatically moving data between two access tiers based on changing data access patterns                                           |
-| S3 Express One Zone                | High-performance, single Availability Zone storage class delivering consistent single-digit millisecond data access for latency-sensitive applications |
-| S3 Standard-IA (infrequent access) | Suitable for data that is less frequently accessed but requires rapid access when needed at lower cost compared to S3 Standard                         |
-| S3 One Zone-IA                     | Ideal for infrequently accessed data that doesn’t require multiple Availability Zone resilience, offering lower storage costs                          |
-| S3 Glacier Instant Retrieval       | Designed for long-lived, rarely accessed data that requires immediate access, providing low retrieval times and costs                                  |
-| S3 Glacier Flexible Retrieval      | Used for archival data with flexible access times ranging from minutes to hours, offering low-cost storage                                             |
-| S3 Glacier Deep Archive            | Provides the lowest cost storage for long-term data archiving, with retrieval times of up to 12 hours                                                  |
-| S3 Outposts                        | Brings S3 storage to your on-premises environments, ensuring consistent performance and meeting data residency requirements                            |
-
-#### Subir objetos eligiendo la clase de almacenamiento
-
-La clase se elige por objeto, al escribirlo:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-s3 = session.client("s3")
-
-BUCKET = "kanan-ml-dev-raw-us-east-1"
-
-s3.put_object(
-    Bucket=BUCKET,
-    Key="crudo/iot/2026-09-22/lecturas-0001.json",
-    Body=b'{"sensor": "t-17", "valor": 21.4}\n',
-    StorageClass="STANDARD_IA",
-)
-
-with open("muestra.csv", "w") as f:
-    f.write("1,45.9,online\n0,12.0,fuel\n")
-s3.upload_file(
-    "muestra.csv",
-    BUCKET,
-    "procesado/fraude/muestra.csv",
-    ExtraArgs={"StorageClass": "INTELLIGENT_TIERING"},
-)
-
-print(s3.head_object(Bucket=BUCKET, Key="crudo/iot/2026-09-22/lecturas-0001.json").get("StorageClass"))
-```
-
-El equivalente en la CLI:
-
-```bash
-aws s3 cp muestra.csv s3://kanan-ml-dev-raw-us-east-1/procesado/fraude/ --storage-class INTELLIGENT_TIERING --profile kanan-dev
-```
-
-`StorageClass="STANDARD_IA"`: los nombres de la API no coinciden del todo con
-los de la Tabla 2.4. S3 Glacier Flexible Retrieval es `"GLACIER"`, Glacier
-Instant Retrieval es `"GLACIER_IR"`, One Zone-IA es `"ONEZONE_IA"` y Express
-One Zone es `"EXPRESS_ONEZONE"`.
-
-`s3.upload_file(...)` con `ExtraArgs`: a diferencia de `put_object`, parte los
-archivos grandes en trozos que sube en paralelo (_multipart upload_), y es la
-forma normal de subir datasets. El `with open(...)` previo solo crea un archivo local
-de ejemplo para tener algo que subir.
-
-`head_object(...).get("StorageClass")`: para objetos en S3 Standard la
-respuesta **no trae** el campo, por eso `.get` y no `["StorageClass"]`, que
-lanzaría `KeyError`.
-
-#### Reglas de ciclo de vida: mover y borrar sin intervención
-
-La _review question_ 2 pide datos procesados accesibles al instante durante
-6 meses y datos crudos recuperables en 12 horas durante 6 años. Las reglas de
-ciclo de vida lo convierten en configuración:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-s3 = session.client("s3")
-
-s3.put_bucket_lifecycle_configuration(
-    Bucket="kanan-ml-dev-raw-us-east-1",
-    LifecycleConfiguration={"Rules": [
-        {
-            "ID": "crudo-a-deep-archive-6-anios",
-            "Status": "Enabled",
-            "Filter": {"Prefix": "crudo/"},
-            "Transitions": [{"Days": 1, "StorageClass": "DEEP_ARCHIVE"}],
-            "Expiration": {"Days": 2190},
-        },
-        {
-            "ID": "procesado-6-meses",
-            "Status": "Enabled",
-            "Filter": {"Prefix": "procesado/"},
-            "Expiration": {"Days": 180},
-        },
-    ]},
-)
-print(s3.get_bucket_lifecycle_configuration(Bucket="kanan-ml-dev-raw-us-east-1")["Rules"])
-```
-
-`put_bucket_lifecycle_configuration` **reemplaza** toda la configuración del
-bucket. Si ya había reglas y envías solo una nueva, las anteriores desaparecen
-sin aviso; para añadir una regla se lee con `get_bucket_lifecycle_configuration`,
-se agrega a la lista y se vuelve a escribir la lista completa.
-
-`"Transitions": [{"Days": 1, "StorageClass": "DEEP_ARCHIVE"}]`: al día siguiente
-de escribirse, el objeto pasa a Deep Archive, cuya recuperación estándar tarda
-hasta 12 horas: el límite de la pregunta. `"Expiration": {"Days": 2190}` lo borra
-a los seis años.
-
-`"Filter": {"Prefix": "crudo/"}`: la regla solo afecta a las claves que empiezan
-así. Con `"Filter": {}` afectaría a todo el bucket, procesados incluidos.
-
-#### Recuperar un objeto archivado
-
-Un objeto en Glacier Flexible Retrieval o Deep Archive no se puede leer
-directamente: `get_object` responde `InvalidObjectState`. Primero se pide una
-copia temporal.
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-s3 = session.client("s3")
-
-BUCKET = "kanan-ml-dev-raw-us-east-1"
-KEY = "crudo/iot/2026-09-22/lecturas-0001.json"
-
-s3.restore_object(
-    Bucket=BUCKET,
-    Key=KEY,
-    RestoreRequest={"Days": 7, "GlacierJobParameters": {"Tier": "Standard"}},
-)
-print(s3.head_object(Bucket=BUCKET, Key=KEY).get("Restore"))
-```
-
-`"Tier"`: en Glacier Flexible Retrieval, `"Expedited"` tarda de 1 a 5 minutos,
-`"Standard"` de 3 a 5 horas y `"Bulk"` de 5 a 12 horas; en Deep Archive,
-`"Standard"` tarda hasta 12 horas y `"Bulk"` hasta 48 (no admite `"Expedited"`).
-Son las «flexible access times» de la Tabla 2.4.
-
-`"Days": 7`: la copia restaurada existe durante 7 días; el objeto sigue
-archivado. `head_object(...)["Restore"]` vale `ongoing-request="true"` mientras
-se recupera y `ongoing-request="false", expiry-date="..."` cuando ya se puede
-leer.
-
-#### Un bucket de S3 Express One Zone
-
-Express One Zone no es una clase que se asigne a un objeto de un bucket normal:
-necesita su propio tipo de bucket, el _directory bucket_, fijado a una zona de
-disponibilidad.
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-s3 = session.client("s3")
-
-s3.create_bucket(
-    Bucket="kanan-ml-dev-hot--use1-az4--x-s3",
-    CreateBucketConfiguration={
-        "Location": {"Type": "AvailabilityZone", "Name": "use1-az4"},
-        "Bucket": {"Type": "Directory", "DataRedundancy": "SingleAvailabilityZone"},
-    },
-)
-```
-
-El nombre tiene una forma obligatoria: `nombre--idzona--x-s3`. `use1-az4` es un
-_ID_ de zona, no un nombre como `us-east-1a`: los nombres se asignan distinto en
-cada cuenta, los IDs no. Para bajar la latencia al mínimo de un dígito de
-milisegundos, el cómputo que lee el bucket tiene que estar en esa misma zona.
+Todas están diseñadas para una durabilidad del 99.999999999 %. La *duración mínima facturada* significa que, si borras un objeto antes de ese plazo, pagas igualmente los días restantes.
 
 #### Amazon Athena
 
-Amazon Athena is a serverless, interactive query service that allows you to analyze data directly in Amazon S3 using standard SQL.
+Amazon Athena es un servicio de consultas interactivas y serverless que te permite analizar datos directamente en Amazon S3 con SQL estándar. *Interactivo* quiere decir que las consultas devuelven resultados en segundos, lo bastante rápido para ir iterando como en un notebook. Athena lee las definiciones de las tablas (columnas y ubicación de los archivos) del catálogo de datos de AWS Glue y cobra según la cantidad de datos que escanea cada consulta. Por eso los formatos columnares y el particionamiento, explicados antes en este capítulo, abaratan directamente las consultas.
 
-With Amazon Athena, you can perform SQL queries against data stored in S3. Examples include CSV, JSON, or columnar data formats such as Apache Parquet and Apache ORC.
+Con Amazon Athena, puedes ejecutar consultas SQL sobre datos guardados en S3, por ejemplo, en CSV, en JSON o en formatos columnares como Apache Parquet y Apache ORC.
 
-#### Consultar con Athena la tabla que creó el crawler
+#### Casos de uso (*Use Cases*)
 
-Athena ejecuta SQL sobre las tablas del Glue Data Catalog: el crawler de la
-sección de AWS Glue ya dejó `kanan_raw.tx` apuntando al JSON comprimido que
-escribe Firehose. Una consulta es asíncrona: se lanza, se espera y se leen los
-resultados, que Athena escribe como CSV en S3.
+Construido sobre una arquitectura resiliente diseñada específicamente para persistir grandes cantidades de datos no estructurados, Amazon S3 es el más adecuado para los casos de uso siguientes. El «más adecuado» se apoya en lo explicado antes: durabilidad de once nueves, crecimiento sin aprovisionar capacidad, el menor costo por gigabyte, acceso por API desde cualquier servicio y una integración nativa con casi todo AWS.
 
-```python
-import time
+- **Data lakes y ML.** Un data lake es un repositorio centralizado que te permite almacenar todos tus datos en su formato crudo, a cualquier escala. Puedes usar un data lake para ejecutar procesamiento de datos, analítica, ML y aplicaciones de computación de alto rendimiento (**HPC**, *high-performance computing*) que extraigan el valor de tus datos. HPC es el uso de muchos servidores trabajando en paralelo sobre un mismo problema de cálculo, como simulaciones climáticas, genómica o dinámica de fluidos.
+- **Copias de seguridad y restauración.** Con las sólidas capacidades de replicación y protección de datos de Amazon S3, puedes construir aplicaciones que cumplan tu **objetivo de tiempo de recuperación** (RTO), tu **objetivo de punto de recuperación** (RPO) y tus requisitos de cumplimiento normativo. El RTO es el tiempo máximo aceptable para volver a dar servicio después de un desastre («debemos estar operando en menos de 4 horas»). El RPO es la cantidad máxima de datos que se acepta perder, medida en tiempo («como mucho, la última hora de transacciones»).
+- **Archivo de datos.** Puedes conservar tus datos «fríos» (datos de acceso poco frecuente que deben conservarse por cumplimiento normativo) en las clases de almacenamiento Amazon S3 Glacier para reducir costos, eliminar complejidades operativas y cumplir los requisitos de archivo de datos de tu organización.
+- **Inteligencia artificial (IA) generativa.** En el momento de escribir el libro, Amazon S3 almacenaba exabytes de datos en más de 350 billones de objetos (350 *trillion* en inglés, es decir, 350 × 10¹²) y atendía un promedio de más de 100 millones de peticiones por segundo. Un exabyte son mil petabytes, o un millón de terabytes: el equivalente a un millón de discos de laptop de 1 TB. Con este nivel masivo de escalabilidad, Amazon S3 es el servicio de almacenamiento ideal para preparar y entrenar tus **modelos de lenguaje grandes** (**LLM**), las redes neuronales con miles de millones de parámetros que generan texto. Los LLM se entrenan para aprender relaciones estadísticas a partir de enormes cantidades de datos durante un proceso de entrenamiento autosupervisado y semisupervisado. En el aprendizaje **autosupervisado**, el modelo aprende de datos sin etiquetar prediciendo partes del propio dato, como la siguiente palabra de un texto. En el **semisupervisado**, se combinan pocos ejemplos etiquetados con muchos sin etiquetar. Veremos estos conceptos en los próximos capítulos.
 
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-athena = session.client("athena")
-
-
-def ejecutar(sql):
-    qid = athena.start_query_execution(
-        QueryString=sql,
-        QueryExecutionContext={"Database": "kanan_raw"},
-        WorkGroup="primary",
-        ResultConfiguration={"OutputLocation": "s3://kanan-ml-dev-artifacts-us-east-1/athena-resultados/"},
-    )["QueryExecutionId"]
-    while True:
-        ejecucion = athena.get_query_execution(QueryExecutionId=qid)["QueryExecution"]
-        if ejecucion["Status"]["State"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
-            break
-        time.sleep(1)
-    if ejecucion["Status"]["State"] != "SUCCEEDED":
-        raise RuntimeError(ejecucion["Status"].get("StateChangeReason"))
-    print("bytes escaneados:", ejecucion["Statistics"]["DataScannedInBytes"])
-    return qid
-
-
-qid = ejecutar("""
-    SELECT merchant, COUNT(*) AS n, AVG(amount) AS ticket_medio
-    FROM tx
-    WHERE dt = '2026-09-22'
-    GROUP BY merchant
-""")
-for fila in athena.get_query_results(QueryExecutionId=qid)["ResultSet"]["Rows"]:
-    print([celda.get("VarCharValue") for celda in fila["Data"]])
-
-ejecutar("""
-    CREATE TABLE tx_parquet
-    WITH (
-        format = 'PARQUET',
-        write_compression = 'SNAPPY',
-        external_location = 's3://kanan-ml-dev-curated-us-east-1/fraude/tx-parquet-athena/',
-        partitioned_by = ARRAY['dt']
-    ) AS
-    SELECT customer_id, amount, merchant, dt FROM tx
-""")
-```
-
-`ResultConfiguration={"OutputLocation": ...}`: Athena no devuelve filas por la
-conexión; las escribe en ese prefijo y `get_query_results` las lee de ahí. Sin
-ubicación de resultados (ni en la llamada ni en el _workgroup_), la consulta
-falla con `InvalidRequestException`.
-
-`WHERE dt = '2026-09-22'`: `dt` es columna de partición, así que Athena solo
-abre los objetos de esa carpeta. Es la razón de que Firehose escribiera
-`dt=.../` en el prefijo. `DataScannedInBytes` lo muestra, y es además lo que se
-cobra.
-
-`["ResultSet"]["Rows"]`: la primera fila es el encabezado, y todos los valores
-llegan como cadenas en `VarCharValue`, también los números.
-
-`CREATE TABLE ... WITH (format = 'PARQUET', ...) AS SELECT` (_CTAS_) escribe el
-resultado de la consulta como archivos Parquet en `external_location` y registra
-la tabla nueva en el catálogo, en una sola sentencia. La columna de
-`partitioned_by` tiene que ir **la última** en el `SELECT`; en otra posición la
-sentencia falla. Repetir la primera consulta sobre `tx_parquet` escanea una
-fracción de los bytes, por lo visto en el primer bloque de la nota.
-
-#### Use Cases
-
-Built on a resilient architecture specifically designed to persist large amounts of unstructured data, Amazon S3 is best suited for the following use cases:
-
-- **Data lakes and ML.** A data lake is a centralized repository that allows you to store all your data in its raw format at any scale. You can use a data lake to run data processing, data analytics, ML, and high-performance computing (HPC) applications to unlock the value of your data.
-- **Data backup and restore.** With Amazon S3’s robust replication and data protection capabilities, you can build applications that meet your recovery time objective (RTO), recovery point objective (RPO), and compliance requirements.
-- **Data archival.** You can retain your “cold” data (infrequently accessed data that must be retained for compliance) to the Amazon S3 Glacier storage classes to lower costs, eliminate operational complexities, and meet your organization’s data archival requirements.
-- **Generative artificial intelligence (AI).** At the time of writing this book, Amazon S3 stores exabytes of data for more than 350 trillion objects and averages more than 100 million requests per second. With this massive level of scalability, Amazon S3 is the ideal storage service to prepare and train your large language models (LLMs). LLMs are trained to learn statistical relationships from vast amounts of data during a self-supervised and semi-supervised training process. We will cover these concepts in the upcoming chapters.
+> [!warning] Cifras actualizadas de S3
+> En marzo de 2026, con motivo de los 20 años de S3, AWS informó que el servicio almacena **más de 500 billones de objetos**, en **cientos de exabytes**, y atiende **más de 200 millones de peticiones por segundo**. Las cifras del libro eran correctas en su momento, pero ya quedaron cortas.
+>
+> Hay además un matiz sobre el entrenamiento de LLM: S3 suele ser el **repositorio** de los datos, pero durante el entrenamiento es habitual interponer una capa más rápida entre S3 y las GPU, como FSx for Lustre (ver más abajo) o S3 Express One Zone, porque la latencia de S3 Standard puede dejar a las GPU esperando datos.
 
 ### Amazon Elastic File System (EFS)
 
-Amazon EFS is a serverless, fully elastic AWS file-based storage service. Its serverless feature means there is no administration required to manage, configure, and create its underlying infrastructure; AWS will perform these tasks for you.
+Amazon EFS es un servicio de almacenamiento de AWS basado en archivos, serverless y totalmente elástico. Que sea serverless significa que no hace falta administrar, configurar ni crear la infraestructura subyacente, porque AWS hace esas tareas por ti. Que sea **totalmente elástico** significa que no eliges un tamaño: el sistema de archivos crece y se encoge solo a medida que agregas o borras archivos, y pagas por los gigabytes que realmente guardas.
 
-Amazon EFS enables you to create and configure distributed file systems on AWS and mount them to a variety of AWS compute resources, including Amazon EC2 instances, Amazon EKS clusters, Amazon ECS, AWS Lambda functions, and others. No provisioning, deploying, patching, or maintenance is required.
+Amazon EFS te permite crear y configurar **sistemas de archivos distribuidos** en AWS y montarlos en diversos recursos de cómputo de AWS, como instancias de Amazon EC2, clústeres de Amazon EKS, Amazon ECS, funciones de AWS Lambda y otros. Un sistema de archivos distribuido reparte sus datos entre muchos servidores (y, en EFS, entre varias zonas de disponibilidad), pero los presenta como un único árbol de carpetas. No requiere aprovisionamiento (reservar capacidad antes de usarla), despliegue, parches (instalar actualizaciones de software, sobre todo de seguridad) ni mantenimiento.
 
-It also supports the popular NFS versions 4.0 and 4.1 (NFSv4) protocols, resulting in seamless integration with workloads requiring NFS.
+También admite los populares protocolos NFS versiones 4.0 y 4.1 (NFSv4), lo que permite integrarlo sin fricción con cargas de trabajo que requieren NFS. Las versiones de NFS importan porque cliente y servidor tienen que hablar la misma. **NFSv3** es *sin estado* (*stateless*): el servidor no recuerda qué cliente tiene abierto qué archivo, lo que lo hace simple y robusto, pero deja los bloqueos de archivos a un protocolo aparte. **NFSv4** es *con estado*: mantiene sesiones, integra los bloqueos de archivos, mejora la seguridad y usa un único puerto de red, lo que simplifica los firewalls. **NFSv4.1** mejora las sesiones y agrega extensiones para acceso en paralelo. Los clientes Linux modernos hablan NFSv4.1 sin configuración especial. Según la documentación de EFS, las instancias EC2 con Windows no están soportadas.
 
-You can then share these files, optimize costs with Amazon EFS lifecycle management, and further protect your data with AWS Backup and Amazon EFS replication.
+Después, puedes compartir estos archivos, optimizar costos con la gestión del ciclo de vida de Amazon EFS y proteger aún más tus datos con AWS Backup y la replicación de Amazon EFS. La **gestión del ciclo de vida** aplica reglas que mueven a clases más baratas los archivos que no se leen desde hace cierto número de días. **AWS Backup** es el servicio centralizado de copias de seguridad de AWS. La **replicación de EFS** mantiene una copia del sistema de archivos en otra región o zona.
 
-Its elastic ability means the service will scale workloads on demand to petabytes of storage and gigabytes per second of throughput out of the box. With a pay-as-you-go pricing model, you can reduce total cost of ownership (TCO) by leveraging its built-in lifecycle management feature, which is designed to intelligently move “cold” data to cost-optimized Infrequent Access and Archive EFS storage classes.
+Su capacidad elástica significa que el servicio escala las cargas de trabajo bajo demanda hasta petabytes de almacenamiento y gigabytes por segundo de **throughput**, sin configuración adicional. El throughput (tasa de transferencia) es la cantidad de datos que se mueven por segundo, en MB/s o GB/s. Si el almacenamiento fuera una carretera, el throughput serían los autos que pasan por hora y la latencia, el tiempo que tarda cada auto en llegar. Para dar escala, un disco duro mecánico lee de forma secuencial unos 150 a 250 MB/s, un SSD NVMe de laptop entre 3 y 7 GB/s, y una conexión doméstica de 1 Gbps transfiere 0.125 GB/s. Un **petabyte** son mil terabytes.
 
-As an alternative to Amazon S3, if your training data already resides in Amazon EFS, you can easily access and use this data within Amazon SageMaker for model training. This integration streamlines the workflow, allowing you to leverage the scalable and high-performance storage capabilities of Amazon EFS while developing and deploying your ML models in Amazon SageMaker efficiently.
+> [!note] Cifras de rendimiento de EFS (documentación consultada el 23-09-2026)
+> En el modo de throughput *Elastic*, un sistema de archivos regional de EFS alcanza, según la región, de 20 a 60 GiB/s de lectura y de 1 a 5 GiB/s de escritura, con latencias de alrededor de 1 ms en lectura y 2.7 ms en escritura. Cada cliente individual llega como máximo a unos 1500 MiB/s (con el cliente `amazon-efs-utils` 2.0 o posterior). Es decir, los GB/s del total se alcanzan sumando muchos clientes, no desde una sola máquina. Verifica los valores vigentes antes de dimensionar.
 
-Figure 2.5 illustrates an example workflow that shows how Amazon EFS can be used to store training data and learning artifacts during the ML lifecycle.
+Con su modelo de precios de pago por uso, puedes reducir el **costo total de propiedad** (TCO, *total cost of ownership*) aprovechando su función integrada de gestión del ciclo de vida, que mueve de forma inteligente los datos «fríos» a las clases de almacenamiento de EFS optimizadas en costo: Infrequent Access y Archive. El TCO suma todos los costos de una solución a lo largo del tiempo (hardware, personal que la administra, energía, licencias, fallas), no solo el precio por gigabyte. Según la documentación, la clase Standard de EFS usa SSD con latencias de lectura de alrededor de 1 ms, mientras que las clases Infrequent Access y Archive tienen latencias de decenas de milisegundos para el primer byte.
 
-_FIGURE 2.5 Amazon EFS use in the ML lifecycle._
+Como alternativa a Amazon S3, si tus datos de entrenamiento ya residen en Amazon EFS, puedes acceder a ellos fácilmente y usarlos en Amazon SageMaker para entrenar modelos. Esta integración simplifica el flujo de trabajo, porque te permite aprovechar el almacenamiento escalable y de alto rendimiento de Amazon EFS mientras desarrollas y despliegas tus modelos de ML en Amazon SageMaker de forma eficiente.
 
-When deciding between Amazon EFS and Amazon S3 for ML storage in AWS, it’s essential to consider their distinct benefits tailored to specific use cases. Amazon EFS offers a file system interface with strong consistency, file locking, and support for NFS protocols, making it ideal for applications requiring traditional file system semantics and fast access to training datasets. However, it is important to note that setting up Amazon EFS with Amazon SageMaker requires some DevOps work, as you need to configure an interface VPC endpoint to ensure secure connectivity. This involves creating the endpoint in your VPC, configuring security groups, and ensuring proper IAM policies are in place.
+La Figura 2.5 ilustra un flujo de trabajo de ejemplo que muestra cómo se puede usar Amazon EFS para guardar datos de entrenamiento y artefactos de aprendizaje durante el ciclo de vida de ML.
 
-#### Crear un sistema de archivos EFS con ciclo de vida
+*Figura 2.5 Uso de Amazon EFS en el ciclo de vida de ML.*
 
-EFS usa la misma caja negra de red que MSK (`SUBNETS`, `SECURITY_GROUP`): un
-sistema de archivos es accesible a través de un _mount target_, una interfaz de
-red en cada subred.
+Al decidir entre Amazon EFS y Amazon S3 para el almacenamiento de ML en AWS, es esencial considerar los beneficios particulares de cada uno según el caso de uso. Amazon EFS ofrece una interfaz de sistema de archivos con consistencia fuerte, bloqueo de archivos y soporte para los protocolos NFS, lo que lo hace ideal para aplicaciones que requieren la **semántica** tradicional de un sistema de archivos y un acceso rápido a los datasets de entrenamiento.
 
-```python
-import time
+- La **semántica de sistema de archivos** son las operaciones que un programa da por hecho al trabajar con archivos: abrir un archivo y modificar bytes en medio, agregar al final, renombrar una carpeta completa de una vez, listar un directorio o aplicar permisos de usuario y grupo al estilo **POSIX** (el estándar de interfaces de los sistemas tipo Unix, que incluye cómo se manejan los archivos y sus permisos). S3 no permite modificar un fragmento de un objeto ni renombrar una «carpeta» de forma atómica, porque las carpetas no existen como tales.
+- La **consistencia fuerte** garantiza que, una vez terminada una escritura, cualquier lectura posterior, desde cualquier cliente, ve el dato nuevo.
+- El **bloqueo de archivos** (*file locking*) es el mecanismo con el que un programa marca un archivo, o una parte, como «en uso» para que otro no escriba al mismo tiempo y lo corrompa. Es imprescindible cuando varias instancias escriben en los mismos archivos.
 
-import boto3
+Sin embargo, es importante tener en cuenta que configurar Amazon EFS con Amazon SageMaker requiere algo de trabajo de **DevOps** (el rol y las prácticas que unen el desarrollo con la operación de la infraestructura: redes, permisos, despliegues). Hay que configurar un endpoint de VPC de tipo interfaz para asegurar una conectividad segura. Esto implica crear el endpoint en tu VPC, configurar los **grupos de seguridad** y asegurarte de que las políticas de IAM sean las adecuadas. Un grupo de seguridad es un firewall virtual asociado a un recurso que indica qué tráfico de red se permite entrar y salir; para NFS, por ejemplo, debe permitir el puerto 2049.
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-efs = session.client("efs")
+> [!warning] Nota de precisión: qué se configura realmente para usar EFS con SageMaker
+> - **Consistencia.** Desde diciembre de 2020, Amazon S3 también ofrece consistencia fuerte de lectura tras escritura. La consistencia ya no distingue a EFS de S3; lo que los distingue es la semántica de sistema de archivos y el bloqueo.
+> - **Red.** Según la documentación de SageMaker, el requisito para leer de EFS (y de FSx for Lustre) es que el job de entrenamiento **se conecte a una VPC**: le indicas subredes y grupos de seguridad desde los que pueda alcanzar el sistema de archivos. EFS no se alcanza por un endpoint de interfaz, sino por sus **puntos de montaje** (*mount targets*), unas interfaces de red que EFS coloca en tus subredes. Los endpoints de VPC entran en juego si la VPC no tiene salida a internet, para que el job pueda llegar a S3 y a las demás API de AWS que necesite.
 
-SUBNETS = ["subnet-0aaa1111bbbb2222c", "subnet-0ddd3333eeee4444f"]
-SECURITY_GROUP = "sg-0123456789abcdef0"
+En cambio, Amazon S3 es un servicio versátil de almacenamiento de objetos que destaca en el manejo de datasets grandes y no estructurados, y que cubre diversas necesidades de almacenamiento de tus cargas de trabajo de ML.
 
-fs_id = efs.create_file_system(
-    CreationToken="kanan-ml-datos-compartidos",
-    PerformanceMode="generalPurpose",
-    ThroughputMode="elastic",
-    Encrypted=True,
-    Tags=[{"Key": "Name", "Value": "kanan-ml-datos"}],
-)["FileSystemId"]
+Aunque S3 suele ser más económico para el almacenamiento general, la elección entre Amazon EFS y Amazon S3 debe basarse en los requisitos específicos de tu aplicación. Amazon EFS es preferible para cargas de trabajo que necesitan acceso rápido a datos de entrenamiento guardados en un sistema de archivos compartido, con consistencia fuerte. S3 se adapta mejor al almacenamiento de objetos económico y a soluciones de almacenamiento a gran escala. Para dar escala a la diferencia, a precios de lista de la región us-east-1, un gigabyte en la clase Standard de EFS cuesta del orden de diez veces más que en S3 Standard. Verifica los precios vigentes.
 
-while efs.describe_file_systems(FileSystemId=fs_id)["FileSystems"][0]["LifeCycleState"] != "available":
-    time.sleep(5)
+#### Casos de uso (*Use Cases*)
 
-efs.put_lifecycle_configuration(
-    FileSystemId=fs_id,
-    LifecyclePolicies=[
-        {"TransitionToIA": "AFTER_30_DAYS"},
-        {"TransitionToArchive": "AFTER_90_DAYS"},
-        {"TransitionToPrimaryStorageClass": "AFTER_1_ACCESS"},
-    ],
-)
+Por sus características serverless, de escalabilidad y de confiabilidad, Amazon EFS es el más adecuado para casos de uso en que cantidades impredecibles de datos en archivos deben compartirse entre múltiples consumidores. El razonamiento es que «cantidades impredecibles» pide un almacenamiento que no haya que dimensionar (EFS es elástico), y «compartidos entre múltiples consumidores» pide que muchas máquinas monten lo mismo a la vez (EFS usa NFS). Justamente esas dos cosas son las que no ofrecen EBS (un disco de tamaño fijo para una instancia) ni S3 (sin semántica de archivos). Estos son algunos casos:
 
-for subnet in SUBNETS:
-    efs.create_mount_target(FileSystemId=fs_id, SubnetId=subnet, SecurityGroups=[SECURITY_GROUP])
-print(fs_id)
-```
-
-`CreationToken`: si la llamada se repite (por un reintento de red, por ejemplo)
-con el mismo token, EFS no crea un segundo sistema de archivos sino que responde
-`FileSystemAlreadyExists`. Es una protección contra duplicados, no un nombre.
-
-`ThroughputMode="elastic"` es el «scale ... gigabytes per second of throughput
-out of the box» del texto: el rendimiento sigue a la demanda y se paga por lo
-que se transfiere.
-
-`put_lifecycle_configuration`: el _lifecycle management_ del texto. Los
-archivos que nadie abre en 30 días pasan a Infrequent Access y a los 90 a
-Archive. `"TransitionToPrimaryStorageClass": "AFTER_1_ACCESS"` los devuelve a la
-clase estándar en cuanto alguien los vuelve a leer. Cada regla va en su propio
-diccionario dentro de la lista.
-
-`create_mount_target`: uno por subred (por zona de disponibilidad). El grupo de
-seguridad tiene que admitir el puerto 2049 (NFS) desde quienes montan; si no,
-el montaje se queda colgado hasta agotar el tiempo de espera, sin un error
-explícito.
-
-Montarlo desde una instancia EC2 de la misma VPC, con el paquete
-`amazon-efs-utils` instalado:
-
-```bash
-sudo mkdir -p /mnt/efs
-sudo mount -t efs -o tls fs-0123456789abcdef0:/ /mnt/efs
-```
-
-#### Entrenar en SageMaker leyendo de EFS
-
-```python
-from datetime import datetime
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-sm = session.client("sagemaker")
-
-SUBNETS = ["subnet-0aaa1111bbbb2222c", "subnet-0ddd3333eeee4444f"]
-SECURITY_GROUP = "sg-0123456789abcdef0"
-
-sm.create_training_job(
-    TrainingJobName="kanan-fraude-xgb-efs-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
-    RoleArn="arn:aws:iam::111111111111:role/KananSageMakerExecutionRole-dev",
-    AlgorithmSpecification={
-        "TrainingImage": "683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-xgboost:1.7-1",
-        "TrainingInputMode": "File",
-    },
-    HyperParameters={"objective": "binary:logistic", "num_round": "100"},
-    InputDataConfig=[{
-        "ChannelName": "train",
-        "ContentType": "text/csv",
-        "DataSource": {"FileSystemDataSource": {
-            "FileSystemId": "fs-0123456789abcdef0",
-            "FileSystemType": "EFS",
-            "FileSystemAccessMode": "ro",
-            "DirectoryPath": "/fraude/train-csv",
-        }},
-    }],
-    VpcConfig={"SecurityGroupIds": [SECURITY_GROUP], "Subnets": SUBNETS},
-    OutputDataConfig={"S3OutputPath": "s3://kanan-ml-dev-artifacts-us-east-1/fraude/modelos/"},
-    ResourceConfig={"InstanceType": "ml.m5.xlarge", "InstanceCount": 1, "VolumeSizeInGB": 30},
-    StoppingCondition={"MaxRuntimeInSeconds": 3600},
-)
-```
-
-`"FileSystemDataSource"` sustituye a `"S3DataSource"`: el directorio se
-**monta** en el contenedor, no se copia, así que no hay fase de descarga.
-`"FileSystemAccessMode": "ro"` lo monta en solo lectura; el entrenamiento no
-tiene por qué modificar los datos compartidos con otros equipos.
-
-`VpcConfig` es la «DevOps work» del texto: sin él, las instancias de
-entrenamiento corren fuera de tu VPC y no alcanzan el mount target, y el job
-falla al montar. Con él, además, las instancias pierden la salida directa a
-Internet, así que para escribir el modelo en S3 la VPC necesita un _endpoint_
-de S3; eso vive dentro de la caja negra de red.
-
-In contrast, Amazon S3 is a versatile object storage service that excels in handling large, unstructured datasets and supporting various data storage needs for your ML workloads.
-
-Although S3 is often more cost-effective for general storage, the choice between Amazon EFS and Amazon S3 should be based on your application’s specific requirements. Amazon EFS is preferable for workloads that need quick access to training data stored in a shared file system, with strong consistency, whereas S3 is better suited for cost-effective object storage and large-scale data storage solutions.
-
-#### Use Cases
-
-Given its serverless, scalability, and reliability features, Amazon EFS is best suited for use cases where unpredictable amounts of file data need to be shared across multiple consumers. These include the following:
-
-- **Data science and ML.** Amazon EFS offers the performance and consistency needed for ML and big data analytics workloads.
-- **Modern application development.** Amazon EFS allows developers to share code and other files in a secure, organized way to increase DevOps agility and respond faster to customer feedback. Its highly available distributed file server capabilities allow developers to share data from their AWS containers and serverless applications with zero management required.
-- **Content management systems (CMSs).** As a highly available, serverless, elastic, and distributed file server, Amazon EFS simplifies storage for modern CMS workloads, resulting in accelerated go-to-market, increased reliability, increased security, and cost reduction.
+- **Ciencia de datos y ML.** Amazon EFS ofrece el rendimiento y la consistencia que necesitan las cargas de trabajo de ML y de analítica de big data. Un ejemplo conocido: SageMaker Studio Classic guarda en EFS los directorios personales de los usuarios, de modo que cada científico de datos encuentra sus notebooks y archivos en cualquier instancia que abra.
+- **Desarrollo moderno de aplicaciones.** Amazon EFS permite a los desarrolladores compartir código y otros archivos de forma segura y organizada, lo que aumenta la agilidad de DevOps y permite responder más rápido a los comentarios de los clientes. Sus capacidades de servidor de archivos distribuido y de alta disponibilidad permiten que los desarrolladores compartan datos entre sus contenedores y aplicaciones serverless sin ninguna administración. Esto importa porque los contenedores son efímeros: cuando uno se reinicia, pierde su disco local, y EFS les da un almacenamiento persistente y compartido.
+- **Sistemas de gestión de contenidos (CMS).** Como servidor de archivos distribuido, serverless, elástico y de alta disponibilidad, Amazon EFS simplifica el almacenamiento de las cargas de trabajo de los CMS modernos, lo que se traduce en una salida al mercado (*go-to-market*) más rápida y en más confiabilidad, más seguridad y menores costos. Un **CMS** es el software con que se publica y administra el contenido de un sitio web, como WordPress o Drupal. Cuando varios servidores web atienden el mismo sitio, todos deben ver las mismas imágenes subidas por los editores, y un sistema de archivos compartido lo resuelve.
 
 ### Amazon FSx for Lustre
 
-Amazon FSx for Lustre is a fully managed storage service providing a high-performance, scale-out file system. Built on the open-source Lustre parallel, distributed file system, this storage service is designed for compute-intensive workloads, providing submillisecond latencies, up to hundreds of gigabytes of throughput, and millions of input/output per second (IOPS), making it ideal for ML, HPC, video processing, and financial modeling. By offering scalable, secure, and durable storage, Amazon FSx for Lustre enables you to process large datasets quickly and cost-effectively.
+Amazon FSx for Lustre es un servicio de almacenamiento totalmente administrado que proporciona un sistema de archivos de alto rendimiento y **escalado horizontal** (*scale-out*). Escalar horizontalmente es crecer agregando más servidores que trabajan en paralelo, a diferencia del escalado vertical (*scale-up*), que consiste en reemplazar un servidor por uno más grande. El horizontal no tiene el techo de una sola máquina.
 
-Just like Amazon S3 and Amazon EFS, Amazon FSx for Lustre can also natively integrate with Amazon SageMaker. This integration allows you to use this storage service as a data source for your ML training jobs, significantly speeding up the training process. By eliminating the need to download data from Amazon S3 to the training instances, Amazon FSx for Lustre ensures faster startup and training times, enhancing overall efficiency. As illustrated in Figure 2.6, the training instances are unaware that the training data is being pulled from S3 because Amazon FSx for Lustre acts as an abstraction layer between the S3 bucket and the training instances, resulting in a high-performance file system interface that can be configured as a buffer cache. This highlights FSx for Lustre’s role in abstracting the data transfer process, ensuring that the training instances interact with a high-performance file system without needing to manage the data fetching from S3 directly.
+Este servicio está construido sobre **Lustre**, un sistema de archivos paralelo y distribuido de código abierto. El nombre combina *Linux* y *cluster*, y Lustre es el sistema de archivos que usan muchas de las supercomputadoras más rápidas del mundo. *Paralelo* significa que cada archivo se divide en franjas (*stripes*) guardadas en muchos servidores de almacenamiento a la vez, mientras que los nombres, las carpetas y los permisos (los metadatos) viven en servidores aparte. Un cliente que lee un archivo grande obtiene sus trozos simultáneamente de muchos servidores, así que el throughput de todos se suma. Es como repartir un libro entre 50 fotocopiadoras en lugar de hacer cola en una. Para usarlo, cada máquina necesita el software cliente de Lustre, que existe para Linux.
 
-_FIGURE 2.6 Amazon FSx for Lustre use in the ML lifecycle._
+Está diseñado para cargas de trabajo intensivas en cómputo, con latencias por debajo del milisegundo, hasta cientos de gigabytes por segundo de throughput y millones de operaciones de entrada/salida por segundo (IOPS), lo que lo hace ideal para ML, HPC, procesamiento de video y modelado financiero. Estas cifras necesitan escala:
 
-Amazon FSx for Lustre supports two data loading design patterns: a one-time load from S3 to Lustre, and lazy loading, which gradually loads data from S3 as it is accessed. The former is a great option when you need to quickly make a large dataset available for processing, offering superior performance at a higher initial cost due to the rapid data transfer. The latter is ideal for scenarios where you want to minimize initial data transfer and costs, as data is loaded only as it is needed, although it may result in slightly longer access times for the first use of each piece of data. This flexibility makes Amazon FSx for Lustre an excellent choice for workloads that require high throughput and low-latency access to data.
+- **IOPS** (*input/output operations per second*) es el número de operaciones individuales de lectura o escritura, normalmente pequeñas (de 4 a 16 KB), que un almacenamiento atiende por segundo. Es la métrica clave cuando se accede a muchos archivos pequeños o a posiciones dispersas, como en una base de datos o en un dataset de millones de imágenes pequeñas. Con archivos grandes que se leen de principio a fin, importa más el throughput. Las dos se relacionan así: throughput ≈ IOPS × tamaño de cada operación. Como escala, un disco duro mecánico da unas 100 a 200 IOPS, y un SSD NVMe de laptop llega a cientos de miles en pruebas sintéticas con muchas peticiones simultáneas (bastantes menos con una petición a la vez). «Millones de IOPS» equivale, entonces, a varios de los SSD más rápidos a su máximo, o a unos 10 000 discos mecánicos, pero entregado por la red y compartido entre cientos de máquinas.
+- **Latencia por debajo del milisegundo** (*submillisecond*): menos de 1 ms por operación, a través de la red. Está en el orden de un SSD local y es unas cien veces menor que la latencia típica de S3 Standard.
+- **Cientos de GB/s de throughput**: 100 GB/s equivalen a entre 15 y 30 SSD NVMe de laptop leyendo a plena velocidad, o a leer 1 TB en 10 segundos.
+- El **modelado financiero** incluye, por ejemplo, simulaciones de Monte Carlo para el riesgo de una cartera, con miles de escenarios que leen los mismos datos de mercado en paralelo.
 
-In addition to its performance benefits, Amazon FSx for Lustre supports multiple deployment options, including scratch and persistent file systems, to accommodate your ML applications’ different data processing needs. Scratch file systems are ideal for ephemeral storage and shorter-term processing, whereas persistent file systems are better suited for longer-term storage and throughput-focused workloads.
+> [!note] Cifras vigentes (documentación consultada el 23-09-2026)
+> AWS anuncia hoy para FSx for Lustre «hasta varios TB/s» de throughput por sistema de archivos, millones de IOPS, latencias por debajo del milisegundo y hasta 1200 Gbps por cliente en instancias con **EFA** (*Elastic Fabric Adapter*, una interfaz de red especial para HPC). Las cifras del libro («cientos de GB/s») eran correctas en su momento, pero se quedaron cortas. Verifica los valores vigentes.
 
-#### FSx for Lustre enlazado a S3: carga perezosa y carga completa
+Al ofrecer almacenamiento escalable, seguro y durable, Amazon FSx for Lustre te permite procesar datasets grandes de forma rápida y económica.
 
-El recorrido de un archivo la primera vez que el entrenamiento lo abre:
+Igual que Amazon S3 y Amazon EFS, Amazon FSx for Lustre también se integra de forma nativa con Amazon SageMaker. Esta integración te permite usar este servicio de almacenamiento como origen de datos de tus jobs de entrenamiento de ML, lo que acelera mucho el entrenamiento. Como elimina la necesidad de descargar los datos de Amazon S3 a las instancias de entrenamiento, Amazon FSx for Lustre asegura tiempos de arranque y de entrenamiento más rápidos, y mejora la eficiencia general. El razonamiento implícito es este: con el modo de entrada por defecto de S3 (*File mode*), SageMaker copia el dataset completo al disco local de cada instancia antes de empezar a entrenar. Con 2 TB, eso son muchos minutos o incluso horas de espera, y se repite en cada job. FSx for Lustre, en cambio, se **monta**, y el entrenamiento empieza a leer de inmediato.
 
-```mermaid
-sequenceDiagram
-    participant T as Training job (canal FSxLustre)
-    participant L as FSx for Lustre (fs-...)
-    participant S as S3: s3://.../fraude/
-    Note over L,S: create_file_system con ImportPath importa solo metadatos
-    T->>L: abre /MountName/fraude/train-csv/parte-0001.csv
-    alt primer acceso (carga perezosa)
-        L->>S: GetObject del objeto correspondiente
-        S-->>L: contenido
-        L-->>T: datos (más lento esta vez)
-    else ya cargado, o precargado con lfs hsm_restore
-        L-->>T: datos a latencia de submilisegundos
-    end
-```
+Como se ilustra en la Figura 2.6, las instancias de entrenamiento no saben que los datos de entrenamiento vienen de S3, porque Amazon FSx for Lustre actúa como una **capa de abstracción** entre el bucket de S3 y las instancias de entrenamiento. El resultado es una interfaz de sistema de archivos de alto rendimiento que puede configurarse como **caché intermedia** (*buffer cache*). Una capa de abstracción es una capa intermedia que oculta los detalles de la que está debajo: el código de entrenamiento lee rutas como `/fsx/imagenes/0001.jpg` sin saber nada de S3. Una caché intermedia es un almacenamiento rápido y temporal que guarda cerca del consumidor los datos que acaba de usar o que va a necesitar: la primera lectura de un archivo viene de S3 y las siguientes salen de Lustre. Esto pone de relieve el papel de FSx for Lustre como capa que abstrae la transferencia de datos, de modo que las instancias de entrenamiento trabajan con un sistema de archivos de alto rendimiento sin tener que gestionar ellas mismas la descarga de datos desde S3. En la documentación, el vínculo entre el sistema de archivos y el bucket se llama **asociación con un repositorio de datos** (*data repository association*).
 
-Al crear el sistema de archivos con `ImportPath`, FSx lista el prefijo de S3 y
-crea una entrada por objeto, pero sin copiar contenido. El primer `open` de cada
-archivo dispara la copia desde S3 (el _lazy loading_ del texto); los siguientes
-ya leen de Lustre. La rama inferior es la carga completa: se fuerza la copia de
-todo antes de entrenar.
+*Figura 2.6 Uso de Amazon FSx for Lustre en el ciclo de vida de ML.*
 
-```python
-import time
+Amazon FSx for Lustre admite dos patrones de diseño para cargar los datos: una carga única de S3 a Lustre y la **carga diferida** (*lazy loading*), que carga los datos de S3 poco a poco, a medida que se accede a ellos. La primera es una gran opción cuando necesitas poner rápidamente un dataset grande a disposición del procesamiento: ofrece un rendimiento superior, a un costo inicial más alto por la transferencia rápida de datos. La segunda es ideal cuando quieres minimizar la transferencia inicial y sus costos, porque los datos se cargan solo cuando se necesitan, aunque el primer acceso a cada dato puede tardar un poco más. Es la diferencia entre descargar una temporada completa de una serie antes de verla y reproducir cada episodio en streaming cuando lo abres. Según la documentación, al vincular un bucket, FSx importa de inmediato el **listado** de todos los objetos (sus nombres y metadatos), así que los archivos «aparecen» enseguida, y el **contenido** de cada uno se trae de S3 la primera vez que se lee, salvo que lo precargues. Esta flexibilidad convierte a Amazon FSx for Lustre en una opción excelente para cargas de trabajo que requieren alto throughput y acceso a los datos con baja latencia.
 
-import boto3
+Además de sus ventajas de rendimiento, Amazon FSx for Lustre admite varias opciones de despliegue, incluidos sistemas de archivos *scratch* y persistentes, para adaptarse a las distintas necesidades de procesamiento de datos de tus aplicaciones de ML. Los sistemas de archivos *scratch* son ideales para almacenamiento efímero y procesamiento de corto plazo, mientras que los persistentes se adaptan mejor al almacenamiento de largo plazo y a las cargas de trabajo centradas en el throughput. La diferencia de fondo, según la documentación, es que en un sistema *scratch* los datos **no se replican** y no sobreviven a la falla de un servidor de archivos. En un sistema persistente, los datos se replican y los servidores que fallan se reemplazan. *Scratch* (borrador) sirve cuando los datos originales siguen a salvo en S3 y el sistema de archivos solo existe mientras dura el trabajo.
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-fsx = session.client("fsx")
+Con sus sólidas capacidades de integración (conectividad nativa con Amazon SageMaker), su configurabilidad expresiva (carga única y carga diferida) y sus opciones de despliegue flexibles (sistemas de archivos *scratch* y persistentes), Amazon FSx for Lustre es un servicio de almacenamiento potente para aplicaciones de ML que requieren acceso a los datos de alto rendimiento, escalable y de baja latencia.
 
-SUBNET = "subnet-0aaa1111bbbb2222c"
-SECURITY_GROUP = "sg-0123456789abcdef0"
+> [!warning] Nota de precisión: lo que el libro no dice de FSx for Lustre
+> - **Solo clientes Linux.** El acceso requiere el cliente de Lustre, que AWS ofrece para las distribuciones Linux habituales (Amazon Linux, RHEL, Ubuntu, SUSE). No hay acceso desde Windows ni por SMB.
+> - **Red.** Para usarlo desde SageMaker, el job de entrenamiento debe conectarse a una VPC, y la documentación indica usar una subred de la misma zona de disponibilidad en la que está el sistema de archivos.
+> - **Clases de almacenamiento.** Hoy existen tres: SSD (latencia constante por debajo del milisegundo en todo el dataset), HDD (latencia de un solo dígito de milisegundos) e *Intelligent-Tiering* (elástica, con latencia por debajo del milisegundo para los datos de acceso frecuente y una caché SSD opcional).
+> - **Alternativas en SageMaker.** Además de copiar el dataset completo (*File mode*), SageMaker ofrece modos de entrada que leen de S3 bajo demanda (*FastFile mode*) o como flujo (*Pipe mode*), que también reducen el tiempo de arranque sin necesidad de FSx. Para el examen, sigue valiendo la regla del libro: si la prioridad absoluta es el tiempo de entrenamiento, la respuesta es FSx for Lustre.
 
-fs = fsx.create_file_system(
-    FileSystemType="LUSTRE",
-    StorageCapacity=1200,
-    SubnetIds=[SUBNET],
-    SecurityGroupIds=[SECURITY_GROUP],
-    LustreConfiguration={
-        "DeploymentType": "SCRATCH_2",
-        "ImportPath": "s3://kanan-ml-dev-curated-us-east-1/fraude",
-        "AutoImportPolicy": "NEW_CHANGED_DELETED",
-    },
-)["FileSystem"]
+Hasta aquí has visto los tres servicios de almacenamiento de AWS que se integran de forma nativa con el mecanismo de ingesta de datos de entrenamiento de Amazon SageMaker: Amazon S3, Amazon EFS y Amazon FSx for Lustre. Para el examen, asegúrate de entender los distintos equilibrios entre tiempos de entrenamiento, rendimiento y costos. Cada uno de estos servicios tiene características propias que pueden afectar a tus flujos de trabajo de ML. Amazon S3 es muy escalable y económico, lo que lo hace adecuado para datasets grandes y almacenamiento de largo plazo. Amazon EFS ofrece almacenamiento de archivos simple, escalable y totalmente administrado para usar con los servicios de AWS Cloud y con recursos on-premises, con acceso compartido y flexibilidad. Amazon FSx for Lustre está optimizado para la computación de alto rendimiento y baja latencia y para cargas de trabajo de ML, con distintos patrones de carga de datos y opciones de despliegue.
 
-while True:
-    fs = fsx.describe_file_systems(FileSystemIds=[fs["FileSystemId"]])["FileSystems"][0]
-    if fs["Lifecycle"] in ("AVAILABLE", "FAILED"):
-        break
-    time.sleep(30)
-print(fs["FileSystemId"], fs["DNSName"], fs["LustreConfiguration"]["MountName"])
-```
+Como se muestra en la Figura 2.7, si se comparan los tres servicios usando el tiempo de entrenamiento como única dimensión, Amazon FSx for Lustre es tu mejor opción. Sin embargo, si el costo es un factor crítico, Amazon S3 es la opción más económica, seguida de Amazon EFS, que equilibra eficazmente costo y rendimiento. El libro da el orden sin justificarlo. Lustre es el más rápido porque lee en paralelo desde muchos servidores, con latencia por debajo del milisegundo y sin descarga inicial. Es el más caro porque, en sus clases SSD y HDD, se paga la capacidad aprovisionada mientras el sistema de archivos exista, se use o no, y además los datos originales siguen guardados (y facturados) en S3. EFS cobra solo por lo guardado, pero a una tarifa por GB bastante mayor que S3. Y S3 tiene la tarifa más baja, a cambio de la latencia más alta.
 
-`"DeploymentType": "SCRATCH_2"` es el _scratch file system_ del texto: más
-barato, sin replicación de los datos; si un servidor falla, los archivos
-se pierden. Aquí da igual porque el original sigue en S3. `StorageCapacity=1200`
-(GiB) es el mínimo; por encima va en saltos de 2.400.
+*Figura 2.7 Comparación de tiempos de carga de los datos de entrenamiento.*
 
-`"ImportPath"` enlaza el sistema de archivos con el prefijo de S3 y hace que el
-lazy loading funcione sin configuración adicional. `"AutoImportPolicy"`
-mantiene la lista de archivos sincronizada cuando aparecen o cambian objetos en
-S3 después de crear el sistema.
+#### Casos de uso (*Use Cases*)
 
-`fs["LustreConfiguration"]["MountName"]`: una cadena corta que FSx genera y que
-forma parte de la ruta de montaje. SageMaker la necesita en `DirectoryPath`.
+Como servicio totalmente administrado construido sobre el sistema de archivos de alto rendimiento Lustre, Amazon FSx for Lustre es el más adecuado para los siguientes casos de uso:
 
-La carga completa (_one-time load_) se hace desde un cliente que tenga montado
-el sistema de archivos, pidiendo a Lustre que traiga el contenido de todo:
-
-```bash
-sudo mkdir -p /fsx
-sudo mount -t lustre -o relatime,flock fs-0123456789abcdef0.fsx.us-east-1.amazonaws.com@tcp:/abcdefgh /fsx
-find /fsx/train-csv -type f -print0 | xargs -0 -n 50 sudo lfs hsm_restore
-```
-
-`lfs hsm_restore` pide a Lustre que copie desde S3 el contenido de los archivos
-que recibe; `xargs -n 50` los pasa de 50 en 50. Tras esto, ningún acceso del
-entrenamiento paga la primera lectura.
-
-Para un sistema persistente, el enlace con S3 se declara aparte, como una
-_data repository association_:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-fsx = session.client("fsx")
-
-fs_id = fsx.create_file_system(
-    FileSystemType="LUSTRE",
-    StorageCapacity=1200,
-    SubnetIds=["subnet-0aaa1111bbbb2222c"],
-    SecurityGroupIds=["sg-0123456789abcdef0"],
-    LustreConfiguration={"DeploymentType": "PERSISTENT_2", "PerUnitStorageThroughput": 250},
-)["FileSystem"]["FileSystemId"]
-
-fsx.create_data_repository_association(
-    FileSystemId=fs_id,
-    FileSystemPath="/fraude",
-    DataRepositoryPath="s3://kanan-ml-dev-curated-us-east-1/fraude/",
-    BatchImportMetaDataOnCreate=True,
-    S3={
-        "AutoImportPolicy": {"Events": ["NEW", "CHANGED", "DELETED"]},
-        "AutoExportPolicy": {"Events": ["NEW", "CHANGED", "DELETED"]},
-    },
-)
-```
-
-`"PERSISTENT_2"` replica los datos dentro de la zona de disponibilidad y
-sobrevive a fallos de servidor: el _persistent file system_ del texto.
-`"PerUnitStorageThroughput": 250` son MB/s por cada TiB de capacidad, y es lo que
-más pesa en el precio.
-
-`create_data_repository_association` hace el papel de `ImportPath`, con dos
-diferencias: se enlaza un directorio concreto (`/fraude`) y no todo el sistema,
-y con `AutoExportPolicy` lo que el entrenamiento escriba ahí vuelve a S3.
-
-El canal de entrenamiento, igual al de EFS salvo dos campos:
-
-```python
-canal_fsx = {
-    "ChannelName": "train",
-    "ContentType": "text/csv",
-    "DataSource": {"FileSystemDataSource": {
-        "FileSystemId": "fs-0123456789abcdef0",
-        "FileSystemType": "FSxLustre",
-        "FileSystemAccessMode": "ro",
-        "DirectoryPath": "/abcdefgh/train-csv",
-    }},
-}
-```
-
-`"DirectoryPath"` empieza por el `MountName` (`abcdefgh` aquí) y sigue con la
-ruta dentro del sistema de archivos. Poner solo `"/train-csv"` hace que el job
-falle al montar. El resto del `create_training_job`, incluido `VpcConfig`, es el
-del bloque de EFS.
-
-With its robust integration capabilities (Amazon SageMaker native connectivity), expressive configurability (one-time load and lazy loading), and flexible deployment options (scratch and persistent file systems), Amazon FSx for Lustre is a powerful storage service for ML applications requiring high-performance, scalable, and low-latency data access.
-
-So far, you have learned the three AWS storage services that offer native integration with Amazon SageMaker’s training ingestion mechanism. These are Amazon S3, Amazon EFS, and Amazon FSx for Lustre. For the exam, make sure you understand the different trade-offs between training times, performance, and costs. Each of these storage services has unique features that can impact your ML workflows. Amazon S3 is highly scalable and cost-effective, making it suitable for large datasets and long-term storage. Amazon EFS provides a simple, scalable, and fully managed file storage for use with AWS Cloud services and on-premises resources, offering shared access and flexibility. Amazon FSx for Lustre is optimized for high-performance, low-latency computing, and ML workloads, offering different data loading access patterns and deployment options.
-
-As shown in Figure 2.7, when comparing the three storage services against training times as the only dimension, Amazon FSx for Lustre is your best option. However, if cost is a critical factor, Amazon S3 is the most economical choice, followed by Amazon EFS, which balances cost and performance effectively.
-
-_FIGURE 2.7 Training data load times comparison._
-
-#### Use Cases
-
-As a fully managed service built on the Lustre high-performance file system, Amazon FSx for Lustre is best suited for the following use cases:
-
-- **Machine learning.** With its native integration with Amazon SageMaker, FSx for Lustre is perfect for ML training jobs that require submillisecond latencies to access large datasets. By using FSx for Lustre as a data source, ML engineers and data scientists can significantly reduce the time required for model training due to the high-speed access and processing capabilities. The flexibility of loading data from Amazon S3—through either one-time loads or lazy loading—enhances the efficiency of ML workflows, making it an excellent choice for tasks that require rapid data access and high throughput.
-- **High-performance computing.** Amazon FSx for Lustre is also ideal for HPC workloads that demand massive amounts of data processing power with low latency. This includes applications such as scientific research, simulations, and computational tasks like weather modeling and genomic sequencing, enabling researchers and engineers to perform complex calculations and analyses quickly and efficiently.
-- **Media processing.** Amazon FSx for Lustre excels in media processing applications such as video rendering, transcoding, and editing, where substantial data throughput and low latency are critical. The high-performance characteristics of Amazon FSx for Lustre enable media professionals to process large media files efficiently, meeting the demanding requirements of production environments. This ensures faster completion of tasks and a smoother workflow, making it an excellent storage service for the media and entertainment industry.
+- **Machine learning.** Gracias a su integración nativa con Amazon SageMaker, FSx for Lustre es perfecto para los jobs de entrenamiento de ML que requieren latencias por debajo del milisegundo para acceder a datasets grandes. Al usar FSx for Lustre como origen de datos, los ingenieros de ML y los científicos de datos pueden reducir mucho el tiempo de entrenamiento, gracias a su acceso y procesamiento de alta velocidad. La flexibilidad de cargar datos desde Amazon S3, ya sea con cargas únicas o con carga diferida, mejora la eficiencia de los flujos de trabajo de ML, así que es una excelente opción para tareas que requieren acceso rápido a los datos y alto throughput.
+- **Computación de alto rendimiento.** Amazon FSx for Lustre también es ideal para cargas de trabajo de HPC que exigen procesar cantidades masivas de datos con baja latencia. Esto incluye aplicaciones como la investigación científica, las simulaciones y tareas de cómputo como el modelado meteorológico y la **secuenciación genómica**, lo que permite a investigadores e ingenieros hacer cálculos y análisis complejos de forma rápida y eficiente. La secuenciación genómica lee el ADN de una muestra y produce archivos enormes (del orden de cien gigabytes por genoma humano, según la profundidad de lectura) que luego procesan cadenas de programas que corren en paralelo.
+- **Procesamiento de medios.** Amazon FSx for Lustre destaca en aplicaciones de procesamiento de medios como el **renderizado** (generar los fotogramas finales de una escena 3D), la **transcodificación** (convertir un video de un formato o resolución a otro) y la edición de video, donde un throughput alto y una latencia baja son críticos. Sus características de alto rendimiento permiten a los profesionales de medios procesar eficientemente archivos multimedia grandes y cumplir los exigentes requisitos de los entornos de producción. Esto asegura que las tareas terminen antes y que el flujo de trabajo sea más fluido, lo que lo convierte en un servicio de almacenamiento excelente para la industria de medios y entretenimiento.
 
 ### Amazon FSx for NetApp ONTAP
 
-Amazon FSx for NetApp ONTAP is another fully managed AWS storage service that utilizes file as its storage type and is built on NetApp’s popular ONTAP operating system.
+Amazon FSx for NetApp ONTAP es otro servicio de almacenamiento totalmente administrado de AWS que usa el archivo como tipo de almacenamiento y está construido sobre ONTAP, el popular sistema operativo de NetApp. **NetApp** es una empresa estadounidense, uno de los principales fabricantes de **arreglos de almacenamiento** empresarial: los gabinetes llenos de discos, con su propio software, que guardan los datos en los centros de datos corporativos. **ONTAP** es el sistema operativo que corre en esos equipos y administra volúmenes, copias instantáneas, replicación y protocolos. Importa porque muchas empresas grandes llevan años operando NetApp, con procedimientos, scripts y replicación hacia sitios de respaldo, y FSx for ONTAP les permite conservar todo eso en AWS.
 
-Amazon FSx for NetApp ONTAP delivers high-performance file storage that enables the use of ONTAP’s unified data management capabilities, including the following:
+Amazon FSx for NetApp ONTAP ofrece almacenamiento de archivos de alto rendimiento que permite usar las capacidades unificadas de gestión de datos de ONTAP, entre ellas las siguientes:
 
-- Unified storage management that can span flash, disk, and cloud running storage area network (SAN), network attached storage (NAS), and object workloads
-- Low-latency access
-- Data compression
-- Data deduplication
-- Storage scalability
+- Gestión unificada del almacenamiento que puede abarcar flash, disco y nube, con cargas de trabajo SAN, NAS y de objetos. *Flash* es el almacenamiento en chips de memoria (SSD). Una **SAN** (*storage area network*, red de área de almacenamiento) es una red dedicada por la que los servidores acceden a almacenamiento de **bloques** remoto: ven un volumen del arreglo como si fuera un disco propio. Una **NAS** (*network attached storage*, almacenamiento conectado a la red) es un equipo que sirve **archivos** por la red, mediante NFS o SMB. Dicho de forma breve, SAN es bloques por la red y NAS es archivos por la red. «Unificado» significa que el mismo sistema ofrece ambos, y además objetos.
+- Acceso con baja latencia.
+- Compresión de datos.
+- **Deduplicación de datos**: detectar bloques idénticos guardados varias veces y conservar una sola copia con referencias a ella. Por ejemplo, cien discos de máquinas virtuales con el mismo sistema operativo comparten la mayor parte de sus bloques.
+- Escalabilidad del almacenamiento.
 
-Data compression and deduplication result in cost savings by reducing the size of data that needs to be stored.
+La compresión y la deduplicación de datos generan ahorros, porque reducen el tamaño de los datos que hay que almacenar.
 
-#### Un sistema ONTAP con un volumen deduplicado
+> [!note] Capacidades vigentes que el libro no menciona (documentación consultada el 23-09-2026)
+> Según la documentación, FSx for ONTAP ofrece acceso **multiprotocolo** (NFS, SMB, iSCSI y NVMe), de modo que los mismos datos pueden servirse a la vez a clientes Linux y Windows. También ofrece **SnapMirror** (la replicación nativa de NetApp, compatible con equipos NetApp on-premises), FlexCache, copias instantáneas (*snapshots*) y clones, un nivel automático más barato para los datos poco usados, integración con Active Directory y hasta decenas de GB/s de throughput por sistema de archivos.
 
-```python
-import boto3
+#### Casos de uso (*Use Cases*)
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-fsx = session.client("fsx")
+Estos son casos de uso típicos de Amazon FSx for NetApp ONTAP:
 
-fs_id = fsx.create_file_system(
-    FileSystemType="ONTAP",
-    StorageCapacity=1024,
-    SubnetIds=["subnet-0aaa1111bbbb2222c"],
-    SecurityGroupIds=["sg-0123456789abcdef0"],
-    OntapConfiguration={"DeploymentType": "SINGLE_AZ_1", "ThroughputCapacity": 128},
-)["FileSystem"]["FileSystemId"]
-
-svm_id = fsx.create_storage_virtual_machine(
-    FileSystemId=fs_id, Name="kanan_svm"
-)["StorageVirtualMachine"]["StorageVirtualMachineId"]
-
-fsx.create_volume(
-    VolumeType="ONTAP",
-    Name="datos_ml",
-    OntapConfiguration={
-        "StorageVirtualMachineId": svm_id,
-        "JunctionPath": "/datos_ml",
-        "SizeInMegabytes": 512_000,
-        "StorageEfficiencyEnabled": True,
-    },
-)
-```
-
-Un sistema ONTAP tiene tres niveles: el sistema de archivos (capacidad y
-rendimiento), una o más _storage virtual machines_ (SVM, cada una con sus
-direcciones de red y sus protocolos: NFS, SMB, iSCSI) y los volúmenes dentro de
-cada SVM. Los clientes montan volúmenes, nunca el sistema de archivos
-directamente.
-
-`"StorageEfficiencyEnabled": True` activa la compresión y la deduplicación de la
-lista del texto, por volumen. `"JunctionPath": "/datos_ml"` es la ruta con la que
-los clientes NFS montan el volumen. Las dos creaciones previas tardan minutos;
-en un script real hay que esperar a que cada recurso esté disponible antes de
-crear el siguiente, igual que en los bloques de EFS y Lustre.
-
-#### Use Cases
-
-Typical use cases for Amazon FSx for NetApp ONTAP include the following:
-
-- **Workload migration.** Seamlessly migrate workloads running on NetApp or other NFSs, SMB, iSCSI, and NVMe-over-TCP servers to AWS without modifying application code or how you manage data.
-- **Business continuity and disaster recovery (BDCR).** Achieve secure backup, archive, and data replication from on-premises file servers or across AWS Regions.
-- **High-performance database workloads.** With submillisecond latencies and scalability to up to millions of IOPS per file system, Amazon FSx for NetApp ONTAP delivers highly available shared file storage for your high-performance database workloads. Additionally, Amazon FSx for NetApp ONTAP allows you to scale out file systems by spreading customers’ workloads across multiple file servers.
+- **Migración de cargas de trabajo.** Migra sin fricción a AWS las cargas de trabajo que corren en NetApp o en otros servidores NFS, SMB, iSCSI y NVMe-over-TCP, sin modificar el código de las aplicaciones ni la forma en que gestionas los datos. Migrar sin modificar la aplicación, cambiando solo dónde corre, es lo que en la industria se llama ***lift and shift*** («levantar y trasladar»). Es la migración más rápida y barata, porque no exige reescribir nada. **iSCSI** transporta los comandos de disco por una red IP común, de modo que un servidor ve un volumen remoto como si fuera un disco local. Es almacenamiento de bloques por la red, el protocolo típico de una SAN económica. **NVMe** es el protocolo moderno diseñado para los SSD, con menos latencia que los protocolos de disco anteriores, y **NVMe-over-TCP** lo lleva a través de una red Ethernet estándar. (El original dice «NFSs»; por el contexto, se refiere a servidores NFS.)
+- **Continuidad del negocio y recuperación ante desastres (BCDR).** Logra copias de seguridad, archivo y replicación de datos seguros desde servidores de archivos on-premises o entre regiones de AWS. La **continuidad del negocio** es la capacidad de seguir operando durante un incidente, y la **recuperación ante desastres** es la capacidad de restaurar los sistemas después de una catástrofe, como la pérdida de un centro de datos. (El original escribe «BDCR», una errata de BCDR.)
+- **Cargas de trabajo de bases de datos de alto rendimiento.** Con latencias por debajo del milisegundo y escalabilidad hasta millones de IOPS por sistema de archivos, Amazon FSx for NetApp ONTAP ofrece almacenamiento de archivos compartido y de alta disponibilidad para tus bases de datos de alto rendimiento. Motores como Oracle o SQL Server pueden guardar sus archivos de datos en volúmenes NFS o SMB, o en volúmenes de bloques por iSCSI. Además, Amazon FSx for NetApp ONTAP te permite escalar horizontalmente los sistemas de archivos repartiendo las cargas de trabajo de los clientes entre varios servidores de archivos. (Verifica en la documentación vigente las cifras máximas de IOPS según el tipo de despliegue.)
 
 ### Amazon FSx for Windows File Server
 
-Amazon FSx for Windows File Server is a fully managed service that provides highly reliable, scalable, and performant Windows-based file storage. It seamlessly integrates with your existing Windows applications and environments, offering native support for the Windows Server Message Block (SMB) protocol. This makes it an ideal solution for shared file storage in use cases such as home directories, user profiles, and enterprise applications requiring file storage. With Active Directory integration, it ensures secure access control and user management, and data deduplication features help reduce storage costs by eliminating duplicate files.
+Amazon FSx for Windows File Server es un servicio totalmente administrado que ofrece almacenamiento de archivos basado en Windows, muy confiable, escalable y de alto rendimiento. Se integra sin fricción con tus aplicaciones y entornos Windows existentes y tiene soporte nativo para el protocolo SMB de Windows. Esto lo convierte en una solución ideal para el almacenamiento de archivos compartido en casos de uso como los directorios personales, los perfiles de usuario y las aplicaciones empresariales que requieren almacenamiento de archivos.
 
-This storage service offers robust performance with SSD storage options, ensuring low-latency access to your files and high IOPS for demanding applications. Its flexible scalability allows you to easily adjust the file system size to meet your growing storage needs, making it a powerful and efficient storage solution for Windows-based environments.
+- Un **directorio personal** (*home directory*) es la carpeta de red propia de cada empleado, normalmente mapeada como una unidad con letra, que lo acompaña en cualquier computadora de la empresa.
+- Un **perfil de usuario** es la carpeta donde Windows guarda el escritorio, la configuración y los documentos de cada persona. Si se guarda en un servidor, el usuario encuentra el mismo entorno en cualquier equipo.
+- Una **aplicación empresarial** de este tipo es, por ejemplo, un sistema de gestión documental o un ERP que guarda sus archivos en una carpeta compartida.
 
-#### Un FSx for Windows File Server unido al directorio
+Gracias a su integración con **Active Directory**, asegura un control de acceso y una gestión de usuarios seguros, y sus funciones de deduplicación de datos ayudan a reducir los costos de almacenamiento eliminando archivos duplicados. Active Directory (AD) es el servicio de directorio de Microsoft: la base de datos central de usuarios, grupos y computadoras de una organización, y el sistema que los autentica, el que hace posible iniciar sesión una vez con la cuenta del trabajo. En Windows, los permisos de cada archivo o carpeta se expresan con **listas de control de acceso** (ACL) que nombran a usuarios y grupos de AD («Finanzas puede leer, Contabilidad puede escribir»). Por eso, según la documentación, un sistema FSx for Windows File Server debe unirse a un Active Directory al crearse. La deduplicación de Windows Server trabaja, además, a nivel de fragmentos dentro de los archivos, no solo de archivos completos duplicados.
 
-```python
-import boto3
+Este servicio de almacenamiento ofrece un rendimiento robusto con opciones de almacenamiento SSD, lo que asegura acceso a tus archivos con baja latencia y altas IOPS para las aplicaciones exigentes. Su escalabilidad flexible te permite ajustar fácilmente el tamaño del sistema de archivos a tus necesidades crecientes de almacenamiento, lo que lo convierte en una solución de almacenamiento potente y eficiente para entornos basados en Windows.
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-fsx = session.client("fsx")
+> [!note] Datos vigentes (documentación consultada el 23-09-2026)
+> Según la documentación, FSx for Windows File Server admite SMB desde la versión 2.0 hasta la 3.1.1, y se accede a él desde Windows (a partir de Windows 7 y Windows Server 2008) y desde versiones actuales de Linux. Ofrece almacenamiento SSD y también HDD (más barato, pensado para directorios personales y carpetas departamentales), despliegues en una zona o en varias zonas con un servidor de reserva, y latencias constantes por debajo del milisegundo. Se administra con PowerShell y, en algunos casos, con las herramientas gráficas nativas de Windows.
 
-fsx.create_file_system(
-    FileSystemType="WINDOWS",
-    StorageType="SSD",
-    StorageCapacity=32,
-    SubnetIds=["subnet-0aaa1111bbbb2222c"],
-    SecurityGroupIds=["sg-0123456789abcdef0"],
-    WindowsConfiguration={
-        "ActiveDirectoryId": "d-1234567890",
-        "DeploymentType": "SINGLE_AZ_2",
-        "ThroughputCapacity": 32,
-    },
-)
-```
+#### Casos de uso (*Use Cases*)
 
-`"ActiveDirectoryId"` es el ID de un directorio de AWS Managed Microsoft AD: la
-«Active Directory integration» del texto. Con él, los permisos de las carpetas
-compartidas son los usuarios y grupos de Windows de siempre. `"StorageType":
-"SSD"` da la baja latencia del segundo párrafo; `"HDD"` abarata el
-almacenamiento a cambio de ella.
+Estos son casos de uso típicos de Amazon FSx for Windows File Server:
 
-La deduplicación no es un parámetro de la API: se activa desde PowerShell,
-contra el punto de administración remota del sistema de archivos.
-
-```powershell
-Invoke-Command -ComputerName amznfsxabcd1234.kanan.local -ConfigurationName FSxRemoteAdmin -ScriptBlock { Enable-FSxDedup }
-```
-
-#### Use Cases
-
-Typical use cases for Amazon FSx for Windows File Server include the following:
-
-- **Windows file server migration.** By providing a fully managed, native Windows file system that supports the SMB protocol and Active Directory integration, Amazon FSx for Windows File Server allows organizations to seamlessly move their existing file systems to AWS without modifying their applications, ensuring a smooth transition with minimal disruption.
-- **SQL Server cost savings.** Amazon FSx for Windows File Server enables high-availability deployments without requiring SQL Enterprise licensing, leading to significant cost savings. This is especially beneficial for organizations centered around SQL Server that are considering migrating to AWS.
-- **Virtual desktops and application streaming.** With Amazon FSx for Windows File Server, you can store user profile data on shared, persistent storage accessible from Amazon WorkSpaces and Amazon AppStream 2.0. This storage service can simplify virtual desktop user experiences by reducing login times and improving overall productivity.
+- **Migración de servidores de archivos Windows.** Como ofrece un sistema de archivos Windows nativo, totalmente administrado, con soporte para el protocolo SMB e integración con Active Directory, Amazon FSx for Windows File Server permite a las organizaciones trasladar sus sistemas de archivos existentes a AWS sin modificar sus aplicaciones, con una transición fluida y mínimas interrupciones.
+- **Ahorro de costos en SQL Server.** Amazon FSx for Windows File Server permite despliegues de alta disponibilidad sin necesidad de licencias de SQL Server Enterprise, lo que genera ahorros importantes. Esto es especialmente beneficioso para las organizaciones centradas en SQL Server que estén considerando migrar a AWS. El libro da por sentado el razonamiento. SQL Server tiene dos mecanismos principales de alta disponibilidad. Los *Always On Availability Groups*, en su versión completa, requieren la edición Enterprise, mucho más cara por núcleo. Las *Failover Cluster Instances* (FCI) están disponibles en la edición Standard (con dos nodos), pero exigen un **almacenamiento compartido** al que accedan ambos servidores. FSx for Windows File Server aporta ese almacenamiento compartido por SMB, de modo que la edición Standard más FSx logra la alta disponibilidad sin pagar Enterprise. Confirma los detalles de licenciamiento con los términos vigentes de Microsoft.
+- **Escritorios virtuales y streaming de aplicaciones.** Con Amazon FSx for Windows File Server, puedes guardar los datos de los perfiles de usuario en un almacenamiento compartido y persistente, accesible desde Amazon WorkSpaces y Amazon AppStream 2.0. Este servicio de almacenamiento puede simplificar la experiencia de los usuarios de escritorios virtuales, porque reduce los tiempos de inicio de sesión y mejora la productividad general. **Amazon WorkSpaces** ofrece escritorios virtuales (VDI): un escritorio Windows que corre en la nube y se usa desde cualquier dispositivo. **AppStream 2.0** (hoy Amazon WorkSpaces Applications) transmite aplicaciones individuales al navegador. En estos entornos, la máquina del usuario suele recrearse en cada sesión, así que su perfil tiene que vivir en un almacenamiento compartido. El libro no explica por qué se reducen los tiempos de inicio de sesión. En las soluciones habituales de perfiles, como FSLogix, el perfil completo se guarda como un disco virtual en la carpeta compartida y se monta al iniciar sesión, en lugar de copiarse archivo por archivo.
 
 ### Amazon FSx for OpenZFS
 
-Amazon FSx for OpenZFS is a fully managed storage service that allows you to operate and scale OpenZFS file systems on AWS, combining the familiar features and performance of OpenZFS with the scalability and simplicity of AWS. It supports access from Linux, Windows, and macOS compute instances and containers via the NFS protocol (v3, v4, v4.1, and v4.2), delivering IOPS in excess of a million and submillisecond latencies, leveraging the latest AWS compute, disk, and networking technologies for high-performance workloads.
+Amazon FSx for OpenZFS es un servicio de almacenamiento totalmente administrado que te permite operar y escalar sistemas de archivos OpenZFS en AWS. Combina las funciones y el rendimiento conocidos de OpenZFS con la escalabilidad y la simplicidad de AWS. Para entenderlo hacen falta dos conceptos previos:
 
-#### Un volumen OpenZFS con compresión, exportado por NFS
+- **ZFS** es un sistema de archivos que también hace de gestor de volúmenes (administra directamente los discos). Lo creó Sun Microsystems y se publicó a mediados de la década de 2000 para su sistema operativo Solaris. Sus rasgos distintivos son los siguientes:
+  - **Copia en escritura** (*copy-on-write*): nunca sobrescribe un dato en su lugar, sino que escribe la versión nueva en otro sitio y luego actualiza los punteros. Eso lo protege de corrupciones si se corta la energía a mitad de una escritura.
+  - **Sumas de verificación** en cada bloque, que detectan la corrupción silenciosa de datos.
+  - **Snapshots** (copias instantáneas): copias de solo lectura del sistema de archivos en un instante, que se crean al momento y solo ocupan espacio por lo que cambie después.
+  - **Clones**: copias escribibles creadas a partir de un snapshot, también al instante. Con ellos se puede tener en segundos una copia de 10 TB de una base de datos para hacer pruebas.
+  - **Compresión** transparente: los programas no se enteran de que los datos están comprimidos.
+- **OpenZFS** es la continuación de código abierto de ZFS que mantiene la comunidad, surgida después de que Oracle comprara Sun (2010) y cerrara el desarrollo de ZFS. Corre en Linux y FreeBSD, y es la base de muchos servidores y equipos NAS basados en Linux. Importa porque muchos equipos organizan su trabajo en torno a los snapshots y clones de ZFS.
 
-```python
-import boto3
+Admite acceso desde instancias y contenedores con Linux, Windows y macOS mediante el protocolo NFS (v3, v4, v4.1 y v4.2). Ofrece más de un millón de IOPS y latencias por debajo del milisegundo, y aprovecha las tecnologías más recientes de cómputo, discos y redes de AWS para cargas de trabajo de alto rendimiento. Ofrecer tantas versiones de NFS amplía la compatibilidad (EFS, en comparación, solo admite 4.0 y 4.1). NFSv3 sigue siendo el preferido de muchas aplicaciones y herramientas antiguas. NFSv4.2 agrega funciones como la copia en el servidor, que copia un archivo sin que los datos viajen hasta el cliente y vuelvan. Windows y macOS acceden mediante sus clientes NFS; para permisos nativos de Windows, la opción natural sigue siendo FSx for Windows File Server. Para dar escala a las cifras, un millón de IOPS equivale a unos 5000 a 10 000 discos mecánicos, y una latencia de cientos de microsegundos está entre 0.1 y 0.9 ms, en el orden de un SSD local.
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-fsx = session.client("fsx")
+> [!note] Cifras y funciones vigentes (documentación consultada el 23-09-2026)
+> La documentación actual habla de **hasta 2 millones de IOPS** con latencias de cientos de microsegundos. Da hasta 21 GB/s de throughput para los datos que se sirven desde la caché en memoria o NVMe, y hasta 400 000 IOPS y 10 GB/s (21 GB/s con compresión) para los datos que se leen del disco. También ofrece una clase de almacenamiento *Intelligent-Tiering*, despliegues en varias zonas y la posibilidad de adjuntar **S3 Access Points** a sus volúmenes para leer los mismos datos con la API de S3. Verifica los valores vigentes.
 
-fsx.create_file_system(
-    FileSystemType="OPENZFS",
-    StorageCapacity=64,
-    SubnetIds=["subnet-0aaa1111bbbb2222c"],
-    SecurityGroupIds=["sg-0123456789abcdef0"],
-    OpenZFSConfiguration={
-        "DeploymentType": "SINGLE_AZ_1",
-        "ThroughputCapacity": 64,
-        "RootVolumeConfiguration": {
-            "DataCompressionType": "ZSTD",
-            "NfsExports": [{"ClientConfigurations": [
-                {"Clients": "10.0.0.0/16", "Options": ["rw", "crossmnt"]},
-            ]}],
-        },
-    },
-)
-```
+#### Casos de uso (*Use Cases*)
 
-`"NfsExports"` decide quién puede montar: aquí, cualquier máquina con
-dirección en `10.0.0.0/16`, con lectura y escritura. `"DataCompressionType":
-"ZSTD"` comprime de forma transparente; los clientes ven archivos normales.
+Estos son casos de uso típicos de Amazon FSx for OpenZFS:
 
-Desde Linux se monta con el cliente NFS del sistema, sin paquetes extra:
+- **Migración de cargas de trabajo.** Como sugiere su nombre, el caso de uso principal de este servicio es migrar a AWS las cargas de trabajo que corren en ZFS (o en otros servidores de archivos basados en Linux) sin modificar el código de las aplicaciones ni las prácticas de gestión de datos. El razonamiento que el autor da por sentado es este. El nombre dice que el servicio **es** OpenZFS, así que un equipo que ya usa ZFS conserva las mismas funciones (snapshots, clones, compresión, cuotas por usuario) y, con ellas, sus procedimientos: los calendarios de snapshots, los entornos de prueba creados con clones y demás. Y sirve también para «otros servidores de archivos basados en Linux» porque su protocolo es NFS, la forma nativa de compartir archivos en Linux. Un servidor NFS Linux genérico se reemplaza cambiando la dirección que montan los clientes.
+- **Aplicaciones intensivas en datos.** Gracias a las funciones avanzadas del sistema de archivos OpenZFS y a su amplio soporte de NFS, Amazon FSx for OpenZFS es el más adecuado para desarrollar aplicaciones intensivas en datos en AWS. Una aplicación intensiva en datos es aquella cuyo cuello de botella es leer y escribir datos, no calcular: analítica, preprocesamiento para ML, compilaciones de software con miles de archivos pequeños o servidores web. Las «funciones avanzadas» que el autor no enumera son las que las sirven: la caché en memoria y en NVMe, la compresión que multiplica el throughput efectivo, los clones para entornos de desarrollo y la latencia de cientos de microsegundos.
 
-```bash
-sudo mkdir -p /mnt/zfs
-sudo mount -t nfs -o nfsvers=4.1 fs-0123456789abcdef0.fsx.us-east-1.amazonaws.com:/fsx/ /mnt/zfs
-```
-
-#### Use Cases
-
-Typical use cases for Amazon FSx for OpenZFS include the following:
-
-- **Workload migration.** The main use case for this storage service, as the name suggests, is migrating workloads running on ZFS (or other Linux-based file servers) to AWS without needing to modify application code or data management practices.
-- **Data-intensive applications.** With the advanced features of the OpenZFS file system and the extensive NFS support, Amazon FSx for OpenZFS is best suited for developing data-intensive applications on AWS.
+> [!warning] Nota de precisión: «sin modificar las prácticas de gestión de datos» tiene un matiz
+> En FSx for OpenZFS, los snapshots y los clones se crean con la API, la consola o la CLI de Amazon FSx, no ejecutando comandos `zfs` en el servidor, al que no tienes acceso porque es un servicio administrado. Los scripts que hoy llaman a `zfs snapshot` o `zfs clone` tendrán que adaptarse a la API de FSx, aunque el concepto y el resultado sean los mismos.
 
 ### Amazon Elastic Block Storage (EBS)
 
-Amazon EBS is a high-performance AWS block storage service, which can be used as a cloud SAN.
+Amazon EBS es un servicio de almacenamiento de bloques de alto rendimiento de AWS que puede usarse como una SAN en la nube. La comparación con una SAN se debe a que los volúmenes de EBS llegan a la instancia a través de la red de AWS, igual que los volúmenes de un arreglo llegan a los servidores por una SAN, y el sistema operativo los ve como discos propios.
 
-Amazon EBS storage comes in the form of EBS volumes, which are similar to virtual disks in the cloud and can be attached to Amazon EC2 instances. EBS volumes can be solid-state drives (SSDs) or hard disk drives (HDDs). SSD-based volumes are optimized for transactional workloads involving frequent read/write operations with small I/O size, where the key performance metric is IOPS, whereas HDD-based volumes are optimized for large streaming workloads where the key performance metric is throughput.
+> [!warning] Nota de precisión
+> - El nombre oficial del servicio es **Amazon Elastic Block Store**, no *Elastic Block Storage*.
+> - Hay dos diferencias con una SAN corporativa que el libro no menciona y que suelen decidir preguntas de examen. Un volumen EBS **vive en una sola zona de disponibilidad** y solo se conecta a instancias de esa zona. Y normalmente se conecta a **una sola instancia** a la vez. La excepción, *Multi-Attach*, solo existe en los volúmenes io1 e io2, para un número limitado de instancias de la misma zona, y exige un sistema de archivos o una aplicación que coordine las escrituras entre ellas.
 
-With Amazon EBS you can also take snapshots, which are point-in-time backups of EBS volumes that can be used to restore new volumes.
+El almacenamiento de Amazon EBS se presenta en forma de **volúmenes EBS**, que son similares a discos virtuales en la nube y pueden conectarse a instancias de Amazon EC2. Los volúmenes EBS pueden ser unidades de estado sólido (SSD) o discos duros (HDD). Los volúmenes basados en SSD están optimizados para cargas de trabajo transaccionales con operaciones de lectura y escritura frecuentes y de tamaño de E/S pequeño, donde la métrica de rendimiento clave son las IOPS. Los volúmenes basados en HDD están optimizados para cargas de trabajo grandes de *streaming*, donde la métrica clave es el throughput.
 
-#### Volúmenes, adjuntos e instantáneas
+- Una **carga de trabajo transaccional** es la de una base de datos que registra operaciones (pedidos, pagos) una a una. Cada operación toca unos pocos KB en posiciones dispersas del disco, así que lo que limita es cuántas operaciones por segundo se pueden hacer (IOPS).
+- Aquí «*streaming*» no significa flujo de eventos, como en Kinesis, sino leer o escribir **archivos grandes de forma secuencial**, de principio a fin, como un log enorme o un escaneo completo de una tabla.
+- La razón física de la división es que un disco duro tiene un brazo mecánico y platos que giran. Saltar de una posición a otra es lento (unas 100 a 200 IOPS), pero leer seguido es rápido (cientos de MB/s). Por eso el HDD sirve para lo secuencial y el SSD, sin partes móviles, para lo aleatorio.
 
-```python
-import boto3
+> [!note] Límites vigentes por volumen (documentación consultada el 23-09-2026)
+> | Tipo | Medio | Máximo de IOPS | Máximo de throughput |
+> | --- | --- | --- | --- |
+> | gp3 (uso general) | SSD | 80 000 | 2000 MiB/s |
+> | gp2 (uso general, generación anterior) | SSD | 16 000 | 250 MiB/s |
+> | io2 Block Express (IOPS aprovisionadas) | SSD | 256 000 | 4000 MiB/s |
+> | io1 (IOPS aprovisionadas) | SSD | 64 000 | 1000 MiB/s |
+> | st1 (optimizado para throughput) | HDD | 500 | 500 MiB/s |
+> | sc1 (en frío) | HDD | 250 | 250 MiB/s |
+>
+> Fíjate en el contraste: un volumen st1 da 500 IOPS pero 500 MiB/s, porque cada operación es de 1 MiB. Los máximos de gp3 aumentaron después de la edición del libro. Verifica los valores vigentes.
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ec2 = session.client("ec2")
+Con Amazon EBS también puedes tomar **snapshots**, que son copias de seguridad de volúmenes EBS en un momento dado y que pueden usarse para restaurar volúmenes nuevos. Los snapshots de EBS son **incrementales**: después del primero, cada snapshot guarda solo los bloques que cambiaron. AWS los almacena en S3, aunque no aparecen en tus buckets. Restaurar un snapshot en otra zona de disponibilidad es, además, la forma de «mover» un volumen de zona.
 
-vol_id = ec2.create_volume(
-    AvailabilityZone="us-east-1a",
-    Size=500,
-    VolumeType="gp3",
-    Iops=6000,
-    Throughput=500,
-    Encrypted=True,
-)["VolumeId"]
-ec2.get_waiter("volume_available").wait(VolumeIds=[vol_id])
+#### Casos de uso (*Use Cases*)
 
-ec2.attach_volume(VolumeId=vol_id, InstanceId="i-0123456789abcdef0", Device="/dev/sdf")
+Estos son casos de uso típicos de Amazon EBS:
 
-snap_id = ec2.create_snapshot(VolumeId=vol_id, Description="datos de entrenamiento 2026-09-22")["SnapshotId"]
-ec2.get_waiter("snapshot_completed").wait(SnapshotIds=[snap_id])
-
-copia = ec2.create_volume(AvailabilityZone="us-east-1b", SnapshotId=snap_id, VolumeType="st1")["VolumeId"]
-print(vol_id, snap_id, copia)
-```
-
-`VolumeType="gp3"` con `Iops=6000` y `Throughput=500`: un SSD de uso general
-donde IOPS (operaciones por segundo) y rendimiento (MB/s) se eligen por separado
-del tamaño. Es el tipo para cargas con muchas lecturas pequeñas. `"io2"` es el
-SSD para IOPS muy altos y sostenidos; `"st1"` es el HDD para lecturas grandes y
-secuenciales, donde manda el rendimiento, como explica el texto.
-
-`AvailabilityZone="us-east-1a"`: un volumen existe en **una** zona y solo se
-adjunta a instancias de esa misma zona. `attach_volume` con una instancia de
-otra zona falla con `InvalidVolume.ZoneMismatch`. La instantánea es el camino
-para cruzar de zona: se guarda en S3 de forma regional, y de ella sale el volumen
-`copia` en `us-east-1b`.
-
-`Device="/dev/sdf"` es el nombre que pides; en instancias actuales Linux lo ve
-como `/dev/nvme1n1`. El volumen llega sin formato:
-
-```bash
-lsblk
-sudo mkfs -t xfs /dev/nvme1n1
-sudo mkdir -p /datos && sudo mount /dev/nvme1n1 /datos
-```
-
-`mkfs` borra lo que hubiera en el volumen: sobre el volumen creado desde la
-instantánea no se ejecuta, solo se monta.
-
-#### Use Cases
-
-Typical use cases for Amazon EBS include the following:
-
-- **Block-level storage migration.** Migrate mid-range, on-premises SAN workloads to AWS. Attach high-performance and high-availability block storage for mission-critical applications.
-- **RDBMs and NoSQL workloads.** Deploy and scale your choice of databases, including SAP HANA, Oracle, Microsoft SQL Server, PostgreSQL, MySQL, Cassandra, and MongoDB.
-- **Big data analytics workloads.** Easily resize clusters for big data analytics engines, such as Hadoop and Spark, and freely detach and reattach volumes.
+- **Migración de almacenamiento a nivel de bloque.** Migra a AWS las cargas de trabajo de SAN on-premises de gama media (arreglos de almacenamiento de tamaño y precio intermedios). Conecta almacenamiento de bloques de alto rendimiento y alta disponibilidad a aplicaciones **de misión crítica**, aquellas cuya caída detiene el negocio.
+- **Cargas de trabajo de RDBMS y NoSQL.** Despliega y escala las bases de datos que elijas, como SAP HANA, Oracle, Microsoft SQL Server, PostgreSQL, MySQL, Cassandra y MongoDB. Un **RDBMS** (*relational database management system*) es un sistema de gestión de bases de datos relacionales. **SAP HANA** es la base de datos en memoria de SAP, sobre la que corren sus sistemas de gestión empresarial, y **Cassandra** es una base de datos NoSQL distribuida. Lo que el libro da por sentado es que se trata de bases de datos **autoadministradas**: las instalas tú en instancias EC2 y guardas sus archivos de datos en volúmenes EBS. Es la alternativa a Amazon RDS (siguiente sección) cuando el motor no está disponible en RDS, como SAP HANA, Cassandra o MongoDB, o cuando necesitas control total sobre la configuración.
+- **Cargas de trabajo de analítica de big data.** Redimensiona fácilmente clústeres de motores de analítica de big data, como Hadoop y Spark, y desconecta y vuelve a conectar volúmenes libremente. Por ejemplo, si reemplazas un nodo del clúster, puedes conectar su volumen con los datos al nodo nuevo (de la misma zona) en lugar de copiarlos. Además, un volumen puede agrandarse o cambiar de tipo sin desconectarlo.
 
 ### Amazon Relational Database Service (RDS)
 
-Amazon RDS is a managed relational database service available in eight different engines: Amazon Aurora PostgreSQL-Compatible Edition, Amazon Aurora MySQL-Compatible Edition, RDS for PostgreSQL, RDS for MySQL, RDS for MariaDB, RDS for SQL Server, RDS for Oracle, and RDS for Db2.
+Amazon RDS es un servicio administrado de bases de datos relacionales disponible con ocho **motores** distintos (el motor es el software de base de datos): Amazon Aurora PostgreSQL-Compatible Edition, Amazon Aurora MySQL-Compatible Edition, RDS for PostgreSQL, RDS for MySQL, RDS for MariaDB, RDS for SQL Server, RDS for Oracle y RDS for Db2. **MariaDB** es una bifurcación de MySQL mantenida por la comunidad, y **Db2** es la base de datos relacional de IBM. **Aurora** es el motor que diseñó AWS, compatible con MySQL o PostgreSQL. Las aplicaciones se conectan a él como si fuera uno de esos dos motores, pero su capa de almacenamiento está distribuida: guarda seis copias de los datos en tres zonas de disponibilidad.
 
-Because you get to choose the database engine, the code, applications, and tools you already use today with your existing databases can be also used with Amazon RDS. For example, there is no need to refactor your SQL Server stored procedure, to recode your application (other than the means your application uses to connect to your database), or even to use another SQL editing tool.
+Como eliges el motor de base de datos, puedes seguir usando con Amazon RDS el código, las aplicaciones y las herramientas que ya usas con tus bases de datos actuales. Por ejemplo, no hace falta refactorizar tus procedimientos almacenados de SQL Server ni recodificar tu aplicación (salvo la forma en que se conecta a la base de datos), ni usar otra herramienta de edición de SQL. Un **procedimiento almacenado** (*stored procedure*) es un programa que se guarda y ejecuta dentro de la propia base de datos, escrito en el dialecto SQL del motor, como T-SQL en SQL Server. **Refactorizar** es reestructurar código sin cambiar lo que hace. Todo esto es posible porque RDS ejecuta el mismo motor, con el mismo dialecto y las mismas funciones. Solo cambia la cadena de conexión (servidor, usuario y contraseña). La excepción son las funciones que requieren acceso de administrador al sistema operativo, que RDS no da; para esos casos existe RDS Custom, que se menciona más abajo.
 
-As a managed service, Amazon RDS handles database management tasks for you, such as provisioning, patching, backup, recovery, failure detection, and repair.
+Como servicio administrado, Amazon RDS se encarga por ti de las tareas de gestión de la base de datos, como el aprovisionamiento, los parches, las copias de seguridad, la recuperación, la detección de fallas y la reparación.
 
-Amazon RDS offers three different deployment environments, including deploying in the cloud with Amazon Aurora or Amazon RDS, deploying hybrid workloads with Amazon RDS on AWS Outposts, and deploying with privileged access with Amazon RDS Custom.
+Amazon RDS ofrece tres entornos de despliegue: en la nube, con Amazon Aurora o Amazon RDS; para cargas de trabajo híbridas, con Amazon RDS on AWS Outposts (en tu propio centro de datos); y con acceso privilegiado, con **Amazon RDS Custom**. RDS Custom te da acceso de administrador al sistema operativo y a la base de datos para instalar software o configuraciones que una aplicación heredada exige. Está disponible para Oracle y SQL Server.
 
-As with all AWS services, there are no up-front investments required, and you pay only for the resources you use.
+Como con todos los servicios de AWS, no se requieren inversiones iniciales y solo pagas por los recursos que usas. En RDS, «los recursos que usas» son principalmente las horas en que la instancia de base de datos está encendida, más el almacenamiento, no las consultas que ejecutas. También existen instancias reservadas, con pago anticipado opcional a cambio de un descuento.
 
-#### Una base PostgreSQL en RDS y su exportación a S3 para entrenar
+#### Casos de uso (*Use Cases*)
 
-```python
-import boto3
+Estos son casos de uso típicos de Amazon RDS:
 
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-rds = session.client("rds")
-
-rds.create_db_instance(
-    DBInstanceIdentifier="kanan-pedidos-dev",
-    Engine="postgres",
-    DBInstanceClass="db.t4g.medium",
-    AllocatedStorage=50,
-    MasterUsername="kanan_admin",
-    ManageMasterUserPassword=True,
-    DBName="pedidos",
-    VpcSecurityGroupIds=["sg-0123456789abcdef0"],
-    DBSubnetGroupName="kanan-dev-privadas",
-    BackupRetentionPeriod=7,
-    StorageEncrypted=True,
-    PubliclyAccessible=False,
-)
-rds.get_waiter("db_instance_available").wait(DBInstanceIdentifier="kanan-pedidos-dev")
-
-instancia = rds.describe_db_instances(DBInstanceIdentifier="kanan-pedidos-dev")["DBInstances"][0]
-print(instancia["Endpoint"]["Address"], instancia["MasterUserSecret"]["SecretArn"])
-```
-
-`Engine="postgres"` es una de las ocho opciones del texto; las demás se escriben
-`"mysql"`, `"mariadb"`, `"oracle-ee"`, `"sqlserver-se"`, `"db2-se"`, y Aurora usa
-`"aurora-postgresql"` o `"aurora-mysql"` con `create_db_cluster`.
-
-`ManageMasterUserPassword=True`: RDS genera la contraseña y la guarda en AWS
-Secrets Manager; `MasterUserSecret.SecretArn` dice dónde. La aplicación la lee de
-ahí en lugar de tenerla escrita en el código.
-
-`DBSubnetGroupName`: la lista de subredes donde RDS puede colocar la base,
-otra vez dentro de la caja negra de red.
-
-`BackupRetentionPeriod=7` es el «backup, recovery» gestionado del texto: copias
-automáticas diarias durante 7 días, más la recuperación a cualquier segundo de
-ese periodo.
-
-Leer una tabla de RDS para entrenar un modelo suele hacerse sin consultar la base
-en producción: se exporta una instantánea a S3, en Parquet.
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-rds = session.client("rds")
-
-snap_arn = rds.create_db_snapshot(
-    DBInstanceIdentifier="kanan-pedidos-dev",
-    DBSnapshotIdentifier="kanan-pedidos-2026-09-22",
-)["DBSnapshot"]["DBSnapshotArn"]
-rds.get_waiter("db_snapshot_available").wait(DBSnapshotIdentifier="kanan-pedidos-2026-09-22")
-
-rds.start_export_task(
-    ExportTaskIdentifier="kanan-pedidos-export-2026-09-22",
-    SourceArn=snap_arn,
-    S3BucketName="kanan-ml-dev-raw-us-east-1",
-    S3Prefix="rds/pedidos",
-    IamRoleArn="arn:aws:iam::111111111111:role/KananRdsExportRole-dev",
-    KmsKeyId="arn:aws:kms:us-east-1:111111111111:key/1234abcd-12ab-34cd-56ef-1234567890ab",
-    ExportOnly=["pedidos.public.orders"],
-)
-```
-
-`start_export_task` escribe cada tabla como Parquet bajo `S3Prefix`, sin tocar la
-base en marcha. `ExportOnly` limita la exportación a la tabla `orders`, con el
-formato `base.esquema.tabla`. `KmsKeyId` es obligatorio: la exportación siempre
-se cifra, y aquí solo se pasa el ARN de una llave existente.
-
-#### Use Cases
-
-Typical use cases for Amazon RDS include the following:
-
-- **Modern web and mobile applications.** Amazon RDS is an excellent choice to build well-architected applications, because it offers a secure storage solution with high availability, performance, and scalability with limited administration. Additionally, its pay-per-use pricing model allows you to effectively manage the cost of persisting your data in a relational database running in AWS.
-- **Legacy database migration.** Migrating on-premises legacy databases to Amazon RDS is the natural choice for organizations that look to modernize their workloads during their digital transformation journey. In addition to improved scalability and reliability, cost reduction is a critical factor to consider due to a significant saving in license fees as well as the benefit of the pay-per-use pricing model.
+- **Aplicaciones web y móviles modernas.** Amazon RDS es una excelente opción para construir aplicaciones bien diseñadas (*well-architected*), porque ofrece una solución de almacenamiento segura, con alta disponibilidad, rendimiento y escalabilidad, y con una administración limitada. Además, su modelo de pago por uso te permite gestionar eficazmente el costo de persistir tus datos en una base de datos relacional que corre en AWS.
+- **Migración de bases de datos heredadas.** Migrar bases de datos heredadas on-premises a Amazon RDS es la opción natural para las organizaciones que buscan modernizar sus cargas de trabajo durante su transformación digital. Además de mejorar la escalabilidad y la confiabilidad, la reducción de costos es un factor crítico, por el ahorro importante en licencias y por el beneficio del modelo de pago por uso. El ahorro en licencias puede venir por dos caminos que el libro no distingue. El primero es cambiar de un motor comercial a uno de código abierto (por ejemplo, de Oracle a PostgreSQL o Aurora), lo que elimina las licencias, pero obliga a convertir el código SQL, en contra de lo que se dijo arriba sobre no refactorizar. El segundo es conservar el motor con la modalidad de «licencia incluida», que paga la licencia por hora de uso en lugar de comprarla por adelantado.
 
 ### Amazon DynamoDB
 
-Amazon DynamoDB is a serverless NoSQL database service with consistent single-digit-millisecond performance at any scale.
-
-Its serverless feature means you don’t need to provision any infrastructure, or patch, manage, install, maintain, or operate any software. DynamoDB also comes with zero-downtime maintenance.
-
-As a NoSQL database, DynamoDB is designed and built to deliver high performance, scalability, manageability, and flexibility compared to relational databases. To support a broad spectrum of use cases, with DynamoDB you can use both key-value and document data models. To help you build enterprise-grade applications, Amazon DynamoDB provides strong read consistency and ACID (atomicity, consistency, isolation, and durability) transactions support.
-
-To achieve consistent single-digit-millisecond performance, DynamoDB is optimized for high-performance workloads and provides APIs that encourage efficient database usage. It omits features that are inefficient and nonperforming at scale: for example, JOIN operations. DynamoDB delivers consistent single-digit-millisecond performance for your applications, whether there are 100 or 100 million users.
-
-#### El patrón de acceso de la Tabla 2.2 convertido en una tabla de DynamoDB
-
-En DynamoDB el diseño empieza por el patrón de acceso, no por las entidades. La
-Tabla 2.2 («Find orders by Customer ID and Time Interval», orden descendente por
-tiempo) fija la clave: `customer_id` como clave de partición y `order_ts` como
-clave de ordenación.
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ddb = session.client("dynamodb")
-
-TABLA = "kanan-orders"
-ddb.create_table(
-    TableName=TABLA,
-    AttributeDefinitions=[
-        {"AttributeName": "customer_id", "AttributeType": "S"},
-        {"AttributeName": "order_ts", "AttributeType": "S"},
-    ],
-    KeySchema=[
-        {"AttributeName": "customer_id", "KeyType": "HASH"},
-        {"AttributeName": "order_ts", "KeyType": "RANGE"},
-    ],
-    BillingMode="PAY_PER_REQUEST",
-)
-ddb.get_waiter("table_exists").wait(TableName=TABLA)
-
-ddb.put_item(TableName=TABLA, Item={
-    "customer_id": {"S": "123"},
-    "order_ts": {"S": "2026-09-22T10:15:00Z"},
-    "amount": {"N": "45.90"},
-    "status": {"S": "PAID"},
-})
-
-resp = ddb.query(
-    TableName=TABLA,
-    KeyConditionExpression="customer_id = :c AND order_ts >= :desde",
-    ExpressionAttributeValues={":c": {"S": "123"}, ":desde": {"S": "2026-09-21T10:15:00Z"}},
-    ScanIndexForward=False,
-    ConsistentRead=True,
-)
-for item in resp["Items"]:
-    print(item["order_ts"]["S"], item["amount"]["N"])
-```
-
-Cada fila de la Tabla 2.2 tiene su parámetro:
-
-| Campo de la Tabla 2.2                | Dónde aparece en el código                          |
-| ------------------------------------ | --------------------------------------------------- |
-| Filter: Customer ID = 123            | `customer_id = :c` con `":c": {"S": "123"}`         |
-| Filter: Time Interval = 24 hours ago | `order_ts >= :desde`, con la fecha de hace 24 horas |
-| Sort: Time descending                | `ScanIndexForward=False`                            |
-| Type: Multiple                       | `query` devuelve una lista de ítems                 |
-| Operation: Read                      | `query`, no `put_item`                              |
-
-`"KeyType": "HASH"` y `"RANGE"`: los nombres antiguos de la clave de partición
-(decide en qué servidor vive el ítem) y la clave de ordenación (ordena los ítems
-dentro de una misma partición). `order_ts` en formato ISO 8601 como cadena
-ordena bien alfabéticamente, que es como compara DynamoDB las claves `"S"`.
-
-`{"S": "123"}`, `{"N": "45.90"}`: el cliente de bajo nivel exige indicar el tipo
-de cada valor, y los números viajan **como cadenas** para no perder precisión.
-
-`BillingMode="PAY_PER_REQUEST"` es el modo bajo demanda: no se reserva
-capacidad y se paga por lectura y escritura. Es la parte «serverless» del
-texto.
-
-`ConsistentRead=True` es la «strong read consistency» del texto: la lectura ve
-todas las escrituras confirmadas antes. Por defecto las lecturas son
-eventualmente consistentes y cuestan la mitad.
-
-La alternativa que conviene evitar resuelve la misma pregunta así:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ddb = session.client("dynamodb")
-
-resp = ddb.scan(
-    TableName="kanan-orders",
-    FilterExpression="customer_id = :c",
-    ExpressionAttributeValues={":c": {"S": "123"}},
-)
-print(resp["Count"], resp["ScannedCount"])
-```
-
-`scan` lee **toda** la tabla y aplica el filtro después: `ScannedCount` son los
-ítems leídos (y cobrados) y `Count` los que pasaron el filtro. En una tabla con
-cien millones de pedidos, `Count` puede ser 3 y `ScannedCount` cien millones.
-`query` con la clave va directo a la partición del cliente.
-
-#### Una transacción ACID: registrar el pedido y descontar el saldo
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ddb = session.client("dynamodb")
-
-ddb.transact_write_items(TransactItems=[
-    {"Put": {
-        "TableName": "kanan-orders",
-        "Item": {
-            "customer_id": {"S": "123"},
-            "order_ts": {"S": "2026-09-22T10:20:00Z"},
-            "amount": {"N": "30.00"},
-        },
-        "ConditionExpression": "attribute_not_exists(order_ts)",
-    }},
-    {"Update": {
-        "TableName": "kanan-balances",
-        "Key": {"customer_id": {"S": "123"}},
-        "UpdateExpression": "SET balance = balance - :m",
-        "ConditionExpression": "balance >= :m",
-        "ExpressionAttributeValues": {":m": {"N": "30.00"}},
-    }},
-])
-```
-
-`kanan-balances` es una segunda tabla, con `customer_id` como clave, que guarda el
-saldo de cada cliente. Las dos escrituras, en dos tablas, se aplican juntas o no se aplica ninguna. Si
-el saldo no alcanza, falla la condición del `Update`, el pedido tampoco se
-escribe y la llamada lanza `TransactionCanceledException`. Es el caso de uso de
-servicios financieros del texto.
-
-#### Exportar la tabla a S3 para entrenar
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ddb = session.client("dynamodb")
-
-ddb.update_continuous_backups(
-    TableName="kanan-orders",
-    PointInTimeRecoverySpecification={"PointInTimeRecoveryEnabled": True},
-)
-arn = ddb.describe_table(TableName="kanan-orders")["Table"]["TableArn"]
-
-export = ddb.export_table_to_point_in_time(
-    TableArn=arn,
-    S3Bucket="kanan-ml-dev-raw-us-east-1",
-    S3Prefix="dynamodb/orders",
-    ExportFormat="DYNAMODB_JSON",
-)["ExportDescription"]
-ddb.get_waiter("export_completed").wait(ExportArn=export["ExportArn"])
-```
-
-`export_table_to_point_in_time` copia la tabla a S3 **sin consumir capacidad de
-lectura**, a diferencia de un `scan`, y por eso es la forma de sacar datos de
-DynamoDB para entrenar. Exige tener activada la recuperación a un punto en el
-tiempo (PITR), de ahí `update_continuous_backups`; sin ella responde
-`PointInTimeRecoveryUnavailableException`. El resultado es JSON comprimido que un
-crawler de Glue puede catalogar como cualquier otro prefijo.
-
-#### Use Cases
-
-DynamoDB is ideal for use cases that require consistent performance at any scale with minimal operational overhead, including but not limited to the following:
-
-- **Financial service applications.** Amazon DynamoDB transactions can be used to achieve ACID across one or more tables with a single request. ACID transactions are ideal for workloads that process financial transactions or fulfill orders. Amazon DynamoDB instantly adjusts to workloads as they spike up and down, enabling you to efficiently scale your database for market conditions, such as trading hours.
-- **Gaming applications.** Because of its ability to scale in and scale out, its consistent performance, and the ease of operations provided by its serverless architecture, Amazon DynamoDB can be used to efficiently persist all data element of any game platforms, such as game state, player data, session history, and leaderboards. This scalability optimizes your architecture’s efficiency whether you’re scaling out for peak traffic or scaling in when gameplay usage is low.
-- **Data streaming applications.** Amazon DynamoDB is widely used by media and entertainment companies as a metadata index for content management services or to serve near-real-time sports statistics. Amazon DynamoDB is also used to perform user watchlist and bookmarking services and to process billions of daily customer events for recommendations generation. These customers benefit from DynamoDB’s scalability, performance, and resilience. DynamoDB’s built-in elasticity enables streaming media use cases that can support any levels of demand.
-
-## Troubleshooting
-
-Troubleshooting and debugging data ingestion and storage issues related to capacity and scalability in AWS involves several steps and best practices. Here are some key strategies you need to know for the exam:
-
-- **Monitoring and logging.** Use CloudWatch to monitor your AWS resources and applications. Set up alarms to notify your data operations team of any anomalies in metrics such as CPU usage, memory usage, and I/O operations. Enable CloudTrail to log API calls and track changes to your AWS resources. This helps in identifying the root cause of issues.
-- **Scaling and performance optimization.** Implement auto scaling for your EC2 instances and other scalable resources to automatically adjust capacity based on demand. Use read replicas and Aurora’s auto-scaling capabilities to handle increased read traffic and improve performance.
-- **Data ingestion optimization.** To optimize the performance of your data pipelines, use techniques such as data partitioning, caching, and parallel processing. For real-time data ingestion, leverage Amazon MSK, Amazon Manage Service for Apache Flink, Amazon Kinesis Data Streams, or Amazon Data Firehose to handle large volumes of streaming data. Additionally, consider supplementing these services with AWS Lambda functions to process data in real time and scale automatically based on the volume of ingested data.
-- **Storage management.** Use Amazon S3 for enterprise-scale object storage. Implement lifecycle policies to move data to different storage classes based on data access patterns. Monitor Amazon EBS volumes for performance and adjust volume types or sizes as needed to meet capacity and performance requirements.
-- **Database optimization.** Ensure your database queries are optimized and indexes are properly configured to improve performance. Consider sharding your database to distribute the load across multiple instances. With Amazon DynamoDB, refrain from using scan operations whenever possible, due to their inefficient performance compared to other query operations.
-- **Cost management.** Use AWS Cost Explorer to monitor and analyze your AWS spending. Identify areas where you can optimize costs by adjusting resource usage. Consider purchasing reserved instances or savings plans for predictable workloads to reduce costs. Leverage spot instances for elastic ephemeral workloads to minimize costs.
-
-#### Alarmas y rastro de auditoría
-
-```python
-from datetime import datetime, timedelta, timezone
-
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-cloudwatch = session.client("cloudwatch")
-cloudtrail = session.client("cloudtrail")
-
-cloudwatch.put_metric_alarm(
-    AlarmName="kanan-tx-stream-escrituras-limitadas",
-    Namespace="AWS/Kinesis",
-    MetricName="WriteProvisionedThroughputExceeded",
-    Dimensions=[{"Name": "StreamName", "Value": "kanan-tx-stream"}],
-    Statistic="Sum",
-    Period=60,
-    EvaluationPeriods=5,
-    Threshold=0,
-    ComparisonOperator="GreaterThanThreshold",
-    TreatMissingData="notBreaching",
-    AlarmActions=["arn:aws:sns:us-east-1:111111111111:kanan-datos-alertas"],
-)
-
-cloudwatch.put_metric_alarm(
-    AlarmName="kanan-tx-a-s3-retraso",
-    Namespace="AWS/Firehose",
-    MetricName="DeliveryToS3.DataFreshness",
-    Dimensions=[{"Name": "DeliveryStreamName", "Value": "kanan-tx-a-s3"}],
-    Statistic="Maximum",
-    Period=300,
-    EvaluationPeriods=1,
-    Threshold=900,
-    ComparisonOperator="GreaterThanThreshold",
-    AlarmActions=["arn:aws:sns:us-east-1:111111111111:kanan-datos-alertas"],
-)
-
-eventos = cloudtrail.lookup_events(
-    LookupAttributes=[{"AttributeKey": "EventName", "AttributeValue": "UpdateShardCount"}],
-    StartTime=datetime.now(timezone.utc) - timedelta(days=7),
-    EndTime=datetime.now(timezone.utc),
-)["Events"]
-for e in eventos:
-    print(e["EventTime"], e.get("Username"), e["EventName"])
-```
-
-`WriteProvisionedThroughputExceeded` cuenta las escrituras que Kinesis rechazó
-por superar la capacidad de un shard: el síntoma directo de falta de capacidad
-o de una `PartitionKey` mal repartida. La alarma salta si hay rechazos durante 5
-minutos seguidos. `TreatMissingData="notBreaching"`: sin tráfico no hay datos, y
-eso no debe contar como alarma.
-
-`DeliveryToS3.DataFreshness` es la edad, en segundos, del registro más antiguo
-que Firehose aún no ha entregado. Si supera 900 s (15 minutos) con un búfer de
-60 s, algo impide escribir en S3, casi siempre permisos del rol.
-
-`lookup_events` busca en el historial de CloudTrail de los últimos 90 días
-quién llamó a una API; aquí, quién cambió el número de shards. Es el «track
-changes to your AWS resources» del texto.
-
-#### Réplicas de lectura de Aurora con escalado automático
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-autoscaling = session.client("application-autoscaling")
-
-autoscaling.register_scalable_target(
-    ServiceNamespace="rds",
-    ResourceId="cluster:kanan-aurora-dev",
-    ScalableDimension="rds:cluster:ReadReplicaCount",
-    MinCapacity=1,
-    MaxCapacity=4,
-)
-autoscaling.put_scaling_policy(
-    PolicyName="kanan-aurora-cpu-lectores",
-    ServiceNamespace="rds",
-    ResourceId="cluster:kanan-aurora-dev",
-    ScalableDimension="rds:cluster:ReadReplicaCount",
-    PolicyType="TargetTrackingScaling",
-    TargetTrackingScalingPolicyConfiguration={
-        "TargetValue": 60.0,
-        "PredefinedMetricSpecification": {"PredefinedMetricType": "RDSReaderAverageCPUUtilization"},
-        "ScaleInCooldown": 300,
-        "ScaleOutCooldown": 300,
-    },
-)
-```
-
-El escalado de réplicas de Aurora no está en el cliente `rds` sino en
-`application-autoscaling`, el servicio común de escalado de DynamoDB, ECS,
-Aurora y otros. `register_scalable_target` declara qué se escala (el número de
-réplicas de lectura del clúster `kanan-aurora-dev`) y entre qué límites;
-`put_scaling_policy` con `"TargetTrackingScaling"` añade o quita réplicas para
-mantener la CPU media de los lectores cerca del 60 %.
-
-Para EBS, «adjust volume types or sizes» es una llamada, sin desmontar el
-volumen:
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ec2 = session.client("ec2")
-
-ec2.modify_volume(VolumeId="vol-0123456789abcdef0", VolumeType="gp3", Size=1000, Iops=10000, Throughput=750)
-print(ec2.describe_volumes_modifications(VolumeIds=["vol-0123456789abcdef0"])["VolumesModifications"][0]["ModificationState"])
-```
-
-Tras aumentar `Size`, el sistema de archivos dentro de la instancia sigue viendo
-el tamaño antiguo hasta que se extiende (`sudo xfs_growfs -d /datos` para XFS).
-Un volumen solo admite una modificación cada 6 horas.
-
-#### Gasto por servicio con Cost Explorer
-
-```python
-import boto3
-
-session = boto3.Session(profile_name="kanan-dev", region_name="us-east-1")
-ce = session.client("ce")
-
-resp = ce.get_cost_and_usage(
-    TimePeriod={"Start": "2026-08-01", "End": "2026-09-01"},
-    Granularity="MONTHLY",
-    Metrics=["UnblendedCost"],
-    GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
-)
-for grupo in resp["ResultsByTime"][0]["Groups"]:
-    print(grupo["Keys"][0], grupo["Metrics"]["UnblendedCost"]["Amount"])
-```
-
-`TimePeriod`: `End` es exclusivo, así que este periodo es agosto completo.
-`GroupBy` por `SERVICE` separa, por ejemplo, lo que cuestan Kinesis y Firehose,
-que con streaming continuo es lo primero que crece. Cada llamada a la API de
-Cost Explorer se cobra, a diferencia de la consola.
-
-By implementing these strategies, you can effectively troubleshoot and debug data ingestion and storage issues related to capacity and scalability in AWS.
-
-## Summary
-
-In this chapter, we covered data ingestion and data storage, which are the two key components of the collection phase of the machine learning lifecycle. With ingestion, you aggregate the data for your ML solution from different
-
-sources and push it into AWS in its raw format. Data ingestion can occur in batches or in real time. Amazon Data Firehose, Amazon Kinesis Data Streams, Amazon MSK, and Amazon Managed Service for Apache Flink are used to ingest real-time data. AWS DataSync and AWS Glue are used to ingest batch data.
-
-With storage, you persist the ingested data in a suitable AWS data store, where it will remain until it’s ready for processing. Storage comes in three different types: object, file, and block. Amazon S3 is used to store object data, Amazon EBS is used to store block data, and Amazon EFS and the Amazon FSx family of services are used to store file data.
-
-The drivers to select the appropriate ingestion and storage service depend on the specifics of your use case and include scalability, resilience, security, and cost.
-
-The chapter also covered the different data formats you need to know for the exam, which can be used to further optimize performance, improve scalability, and reduce processing time. An important factor to consider when selecting a data format to train your model is whether this format is supported by the ML algorithm you intend to use for your ML problem.
-
-## Exam Essentials
-
-**Know the difference between data ingestion and data storage.** Data ingestion is about aggregating data from different sources, whereas storage is about persisting data in a data store hosted in AWS.
-
-**Understand the different data formats.** CSV is used to store structured data in tabular format, whereas JSON is used for document-based, semi-structured data. Apache Parquet and Apache ORC are columnar data formats, whereas Apache Avro is a row-based format. RecordIO is a data format used primarily by Apache MXNet, a deep learning framework.
-
-**Understand ingestion services for streaming data.** These include Amazon Data Firehose, Amazon Kinesis Data Streams, Amazon MSK, and Amazon Streaming Service for Apache Flink. Amazon Kinesis Data Streams is more suited for real-time, custom data processing, whereas Amazon Data Firehose is ideal for efficiently loading streaming data into selected AWS data stores with minimal setup and management. Amazon MSK is best suited for managing and distributing streaming data (e.g., log aggregation, real-time analytics, and event sourcing), whereas Amazon Managed Service for Apache Flink is designed for processing and analyzing data in real time.
-
-**Understand ingestion services for data migration/batch/ETL data.** These include AWS DataSync and AWS Glue. The former is ideal for data transfer/migration of data into AWS and the latter for ETL and development of data pipelines.
-
-**Understand storage services for object data.** Amazon S3 is the most versatile and widely used object storage service on AWS. It provides industry-leading scalability, data availability, security, and performance. Object data contains the data itself, metadata, and a unique identifier. Object storage is accessed via APIs, making it suitable for cloud-native applications. Amazon S3 is natively supported by Amazon SageMaker as a data source for training ML models.
-
-**Understand storage services for file data.** Amazon EFS and the Amazon FSx family of services (Amazon FSx for Lustre, for NetApp ONTAP, for Windows File Server, and for OpenZFS) are used to store data as file storage type. File storage organizes data in a hierarchical manner and is ideal to persist shared data such as data in a company directory, media storage, and content management systems. Amazon EFS and Amazon FSx for Lustre are file-based storage services natively supported by Amazon SageMaker as data sources for training ML models.
-
-**Understand storage services for block data.** Amazon EBS is the block storage service on AWS. Block storage divides data into fixed-size blocks, each with a unique address but without metadata. Block storage delivers high performance and low latency, making it ideal for transactional workloads.
-
-**Understand storage services natively integrated with Amazon SageMaker.** Amazon SageMaker natively integrates with Amazon S3 for object storage, and Amazon EFS and Amazon FSx for Lustre for file system storage, facilitating seamless access to data for training, learning, and efficient management of ML workflows.
-
-## Review Questions
-
-1. You need to store unprocessed data from IoT devices for a new machine learning pipeline. The storage solution should be a centralized and highly available repository. What AWS storage service do you choose to store the unprocessed data?
+Amazon DynamoDB es un servicio de base de datos NoSQL serverless con un rendimiento constante de un solo dígito de milisegundos a cualquier escala. **NoSQL** agrupa las bases de datos no relacionales: no exigen el mismo esquema tabular en todos los registros, en general no hacen *joins* y están diseñadas para escalar horizontalmente, repartiendo los datos entre servidores según una clave.
+
+Que sea serverless significa que no necesitas aprovisionar infraestructura ni parchear, administrar, instalar, mantener u operar software. DynamoDB también ofrece mantenimiento sin tiempo de inactividad (*zero-downtime*). En las bases de datos tradicionales, el mantenimiento suele exigir ventanas en las que el servicio se detiene.
+
+Como base de datos NoSQL, DynamoDB está diseñada para ofrecer alto rendimiento, escalabilidad, facilidad de gestión y flexibilidad frente a las bases de datos relacionales. Para cubrir un amplio abanico de casos de uso, DynamoDB admite los modelos de datos de **clave-valor** y de **documentos**. En el modelo clave-valor, cada elemento se obtiene por una clave única, como en un diccionario de Python. En el de documentos, el valor es un documento anidado, parecido a un JSON, cuyos atributos pueden variar de un elemento a otro. Para ayudarte a construir aplicaciones de nivel empresarial, Amazon DynamoDB ofrece **consistencia fuerte en las lecturas** y soporte para **transacciones ACID** (atomicidad, consistencia, aislamiento y durabilidad). Por defecto, las lecturas de DynamoDB son *eventualmente consistentes*: durante una fracción de segundo tras una escritura pueden devolver el valor anterior. La lectura fuertemente consistente se pide de forma explícita en cada consulta. ACID resume las garantías de una transacción: se aplica toda o nada, respeta las reglas de los datos, no interfiere con otras transacciones simultáneas y, una vez confirmada, no se pierde.
+
+Para lograr un rendimiento constante de un solo dígito de milisegundos, DynamoDB está optimizada para cargas de trabajo de alto rendimiento y ofrece API que fomentan un uso eficiente de la base de datos. Omite las funciones ineficientes y de bajo rendimiento a escala, como las operaciones JOIN. DynamoDB ofrece un rendimiento constante de un solo dígito de milisegundos a tus aplicaciones, tanto si hay 100 usuarios como si hay 100 millones. El razonamiento implícito es que un *join* combina filas de tablas que, a gran escala, están repartidas en servidores distintos, así que su costo crece con el volumen de datos. DynamoDB solo ofrece operaciones cuyo costo no depende del tamaño de la tabla, como obtener un elemento por su clave o leer los elementos que comparten una clave de partición. La consecuencia práctica es que las tablas se diseñan **a partir de los patrones de acceso**. El patrón de la Tabla 2.2 («buscar pedidos por ID de cliente e intervalo de tiempo») se resolvería con `customer_id` como clave de partición y la fecha como clave de ordenamiento.
+
+#### Casos de uso (*Use Cases*)
+
+DynamoDB es ideal para casos de uso que requieren un rendimiento constante a cualquier escala con una carga operativa mínima, entre ellos los siguientes:
+
+- **Aplicaciones de servicios financieros.** Las transacciones de Amazon DynamoDB pueden usarse para lograr garantías ACID sobre una o más tablas con una sola petición. Las transacciones ACID son ideales para cargas de trabajo que procesan transacciones financieras o completan pedidos. Amazon DynamoDB se ajusta al instante a las cargas de trabajo cuando suben y bajan bruscamente, lo que te permite escalar tu base de datos de forma eficiente según las condiciones del mercado, como el horario de negociación de la bolsa. (El ajuste inmediato corresponde sobre todo al modo de capacidad *on-demand*, que también tiene límites ante picos muy bruscos, como los de Kinesis. Verifica su comportamiento en la documentación vigente.)
+- **Aplicaciones de videojuegos.** Por su capacidad de reducir y ampliar su capacidad (*scale in* y *scale out*), su rendimiento constante y la facilidad de operación que da su arquitectura serverless, Amazon DynamoDB puede usarse para persistir de forma eficiente todos los datos de cualquier plataforma de juegos, como el estado del juego, los datos de los jugadores, el historial de sesiones y las tablas de clasificación (*leaderboards*). Esta escalabilidad optimiza la eficiencia de tu arquitectura, tanto cuando amplías capacidad para el tráfico pico como cuando la reduces porque hay pocos jugadores.
+- **Aplicaciones de streaming de datos.** Las empresas de medios y entretenimiento usan mucho Amazon DynamoDB como índice de metadatos para servicios de gestión de contenidos, es decir, como el catálogo de cada título (nombre, duración, dónde está el archivo) que la aplicación consulta por ID, o para servir estadísticas deportivas casi en tiempo real. Amazon DynamoDB también se usa para servicios de listas de seguimiento y marcadores de los usuarios, y para procesar miles de millones de eventos diarios de clientes para generar recomendaciones. Estos clientes se benefician de la escalabilidad, el rendimiento y la resiliencia de DynamoDB. Su elasticidad integrada permite casos de uso de streaming de medios que soportan cualquier nivel de demanda.
+
+## Resolución de problemas (*Troubleshooting*)
+
+Resolver y depurar los problemas de ingesta y almacenamiento de datos relacionados con la capacidad y la escalabilidad en AWS implica varios pasos y buenas prácticas. Estas son algunas estrategias clave que necesitas conocer para el examen:
+
+- **Monitoreo y registro.** Usa **CloudWatch** para monitorear tus recursos y aplicaciones de AWS. CloudWatch es el servicio de monitoreo de AWS: recoge **métricas** (series de tiempo numéricas, como el porcentaje de CPU o los bytes leídos por minuto) y logs. Configura **alarmas** que avisen a tu equipo de operaciones de datos ante cualquier anomalía en métricas como el uso de CPU, el uso de memoria y las operaciones de E/S; una alarma se dispara cuando una métrica cruza un umbral durante cierto tiempo. Activa **CloudTrail** para registrar las llamadas a la API y seguir los cambios en tus recursos de AWS. CloudTrail anota cada llamada a la API de tu cuenta: quién la hizo, qué hizo, cuándo y desde dónde. Esto ayuda a identificar la causa raíz de los problemas, por ejemplo, descubrir que alguien cambió la política de un bucket justo antes de que empezaran los errores.
+- **Escalado y optimización del rendimiento.** Implementa el escalado automático (*auto scaling*) de tus instancias EC2 y otros recursos escalables para ajustar la capacidad automáticamente según la demanda; el escalado automático agrega o quita instancias según reglas sobre métricas. Usa **réplicas de lectura** y las capacidades de escalado automático de Aurora para manejar el aumento del tráfico de lectura y mejorar el rendimiento. Una réplica de lectura es una copia de solo lectura de una base de datos que recibe los cambios de la principal, de modo que las consultas de lectura se reparten entre varias copias. Aurora puede agregar o quitar réplicas automáticamente según la carga.
+- **Optimización de la ingesta de datos.** Para optimizar el rendimiento de tus pipelines de datos, usa técnicas como el particionamiento de datos, el **almacenamiento en caché** (guardar en memoria rápida los resultados que se piden a menudo) y el procesamiento en paralelo. Para la ingesta de datos en tiempo real, aprovecha Amazon MSK, Amazon Manage Service for Apache Flink (sic; el nombre correcto es *Managed*), Amazon Kinesis Data Streams o Amazon Data Firehose para manejar grandes volúmenes de datos de streaming. Además, considera complementar estos servicios con funciones de AWS Lambda que procesen los datos en tiempo real y escalen automáticamente según el volumen de datos ingeridos.
+- **Gestión del almacenamiento.** Usa Amazon S3 para el almacenamiento de objetos a escala empresarial. Implementa **políticas de ciclo de vida**, reglas que mueven los objetos a otras clases de almacenamiento (o los borran) tras cierto número de días según los patrones de acceso a los datos. Monitorea los volúmenes de Amazon EBS para vigilar su rendimiento y ajusta los tipos o tamaños de volumen según sea necesario para cumplir los requisitos de capacidad y rendimiento.
+- **Optimización de bases de datos.** Asegúrate de que tus consultas estén optimizadas y de que los índices estén bien configurados para mejorar el rendimiento. Considera aplicar ***sharding*** a tu base de datos para repartir la carga entre varias instancias. El sharding divide horizontalmente una base de datos entre varios servidores según una clave (por ejemplo, clientes A–M en uno y N–Z en otro), de modo que cada servidor guarda y atiende solo una parte de las filas. Con Amazon DynamoDB, evita en lo posible las operaciones **Scan**, porque su rendimiento es ineficiente comparado con otras operaciones de consulta. Un Scan lee la tabla **completa**, elemento por elemento, así que su costo y su tiempo crecen con el tamaño de la tabla. Un **Query**, en cambio, lee solo los elementos de una clave de partición.
+- **Gestión de costos.** Usa **AWS Cost Explorer**, la herramienta que desglosa el gasto por servicio, etiqueta y periodo, para monitorear y analizar tu gasto en AWS. Identifica las áreas donde puedes optimizar costos ajustando el uso de los recursos. Considera comprar **instancias reservadas** o **Savings Plans** para cargas de trabajo predecibles y reducir costos; ambos son compromisos de uso durante uno o tres años a cambio de un descuento. Aprovecha las **instancias spot** para cargas de trabajo elásticas y efímeras y así minimizar costos. Las instancias spot usan capacidad sobrante de EC2 con descuentos grandes (AWS habla de hasta un 90 %), pero AWS puede recuperarlas con un aviso de dos minutos. Por eso sirven para trabajos que toleran interrupciones, como procesos por lotes o entrenamientos que guardan *checkpoints*.
+
+Al implementar estas estrategias, puedes resolver y depurar eficazmente los problemas de ingesta y almacenamiento de datos relacionados con la capacidad y la escalabilidad en AWS.
+
+## Escenarios donde este servicio es la opción obligada
+
+Este capítulo no trata de un solo servicio, sino de muchos. Por eso cada escenario se centra en uno distinto, elegido porque, dadas las restricciones del caso, es la única opción razonable dentro de AWS. Los dos primeros son de almacenamiento, donde las variantes de FSx más se confunden entre sí, y el tercero es de ingesta. Las empresas son ficticias; las restricciones son las que aparecen en proyectos reales. Las capacidades de los servicios que se citan se verificaron en la documentación de AWS el 23 de septiembre de 2026 y deben volver a verificarse antes de usarlas en una decisión real.
+
+### Escenario 1: análisis genómico masivo en un instituto de investigación → Amazon FSx for Lustre
+
+**Contexto.** Un instituto de investigación en genómica recibe cada semana unos 2000 genomas humanos secuenciados, del orden de 200 TB de archivos que los secuenciadores depositan en un bucket de S3. Su pipeline hace el alineamiento y el llamado de variantes (identificar en qué posiciones el ADN de cada paciente difiere del genoma de referencia), e incluye un llamador de variantes basado en deep learning que corre en GPU. Usa herramientas bioinformáticas de terceros, validadas por la comunidad científica. El pipeline corre los fines de semana en un clúster de unas 400 instancias EC2 Linux, lanzado con AWS ParallelCluster o AWS Batch, que existe solo durante la corrida. Los resultados deben volver a S3, tanto para archivarse como para que el equipo de ML entrene modelos con ellos.
+
+**Restricciones clave.**
+
+1. Las herramientas leen y escriben archivos por ruta, con acceso aleatorio dentro de archivos de decenas de GB y con archivos intermedios. El instituto no puede modificarlas: son de terceros, y cambiarlas obligaría a revalidar científicamente los resultados.
+2. Para terminar dentro del fin de semana, el pipeline necesita sostener, sumando todos los nodos, del orden de 100 GB/s de lectura y decenas de GB/s de escritura.
+3. Los 400 nodos deben ver el mismo espacio de archivos, porque lo que un paso escribe en un nodo lo lee el paso siguiente en otro.
+4. Los datos de entrada y los de salida viven en S3, y el equipo no quiere un paso de copia manual antes y después de cada corrida.
+5. El almacenamiento de trabajo solo hace falta durante la corrida. Los originales ya están a salvo en S3, así que no quieren pagar almacenamiento de alto rendimiento toda la semana.
+
+**Por qué este servicio.**
+
+- (1) → Según la documentación, FSx for Lustre es compatible con POSIX, con bloqueo de archivos y consistencia de lectura tras escritura, y las aplicaciones Linux existentes lo usan sin cambios, como un disco local.
+- (2) → Es un sistema de archivos paralelo, con throughput documentado de hasta varios TB/s y latencia por debajo del milisegundo. El requisito cabe holgadamente.
+- (3) → Todos los nodos Linux montan a la vez el mismo sistema de archivos.
+- (4) → La asociación con un repositorio de datos presenta los objetos del bucket como archivos, carga su contenido al primer acceso y permite escribir los resultados de vuelta a S3.
+- (5) → Un despliegue *scratch* no replica los datos y está pensado justamente para procesamiento de corto plazo: se crea el viernes y se elimina el lunes. Además, FSx for Lustre se integra con AWS ParallelCluster y AWS Batch.
+
+**Por qué no las alternativas.**
+
+- **Amazon S3** no es un sistema de archivos: las herramientas no pueden abrir rutas ni escribir en medio de un archivo. Existe un cliente de AWS que monta un bucket como carpeta (*Mountpoint for Amazon S3*), pero, hasta donde sé, solo admite escrituras secuenciales (no puede modificar un archivo en posiciones arbitrarias) y no ofrece bloqueos, lo que choca con la restricción 1. Verifica sus capacidades vigentes en su documentación.
+- **Amazon EFS** lo pueden montar todos los nodos por NFS, pero su escritura documentada por sistema de archivos (de 1 a 5 GiB/s según la región) queda muy por debajo de las decenas de GB/s que exige la restricción 2, y no se vincula con un bucket de S3.
+- **Amazon EBS** conecta cada volumen a una instancia; Multi-Attach solo cubre unas pocas instancias de una zona y exige software de clúster, así que no sirve para 400 nodos que comparten archivos.
+- **Amazon FSx for OpenZFS** ofrece NFS de alto rendimiento, pero su techo documentado (hasta 21 GB/s desde caché y 10 GB/s desde disco) no alcanza la restricción 2, y no importa los objetos de un bucket como archivos.
+- **Amazon FSx for NetApp ONTAP** llega, según su documentación, a «decenas de GB/s» por sistema de archivos, en el límite o por debajo del requisito, y sus puntos fuertes (multiprotocolo, SnapMirror) no aportan nada aquí.
+- **Amazon FSx for Windows File Server** está pensado para clientes Windows que acceden por SMB, no para un clúster Linux de HPC que espera semántica POSIX.
+
+### Escenario 2: fabricante industrial que cierra un centro de datos con NetApp → Amazon FSx for NetApp ONTAP
+
+**Contexto.** Un fabricante de autopartes cierra uno de sus dos centros de datos y traslada su contenido a AWS. En ese centro, un arreglo NetApp sirve tres cosas. Primero, los archivos de diseño (CAD) y los datos de pruebas de laboratorio, que usan a la vez las estaciones de trabajo Windows de los ingenieros por SMB y los servidores Linux de simulación de esfuerzos por NFS, **sobre las mismas carpetas**. Segundo, los volúmenes de bloques por iSCSI de la base de datos de control de calidad. Tercero, la réplica SnapMirror hacia el NetApp del otro centro de datos, que se queda on-premises como sitio de recuperación ante desastres. Además, el equipo de ciencia de datos quiere entrenar modelos de calidad predictiva con diez años de datos de pruebas.
+
+**Restricciones clave.**
+
+1. Los mismos datos deben ser accesibles simultáneamente por SMB, con los permisos de Active Directory, y por NFS, desde Linux.
+2. El proveedor de la aplicación de control de calidad solo certifica almacenamiento de bloques por iSCSI para su base de datos.
+3. Los procedimientos de recuperación ante desastres (auditados por los clientes del sector automotriz) recuperan la base de datos y los archivos juntos a partir de réplicas SnapMirror hacia el NetApp que queda on-premises. La empresa no quiere reescribirlos ni volver a certificarlos.
+4. El plazo es de tres meses y es un *lift and shift*: no se modifica ninguna aplicación. El equipo de almacenamiento conoce ONTAP y no otros sistemas.
+5. Diez años de datos de pruebas ocupan mucho y casi no se consultan, así que el costo por GB importa.
+
+**Por qué este servicio.**
+
+- (1) → Es la única variante de FSx con acceso multiprotocolo (NFS, SMB, iSCSI y NVMe) sobre los mismos datos, con integración con Active Directory.
+- (2) → Ofrece volúmenes de bloques por iSCSI en el mismo sistema.
+- (3) → Admite **SnapMirror**, la replicación nativa de NetApp, compatible con los equipos NetApp on-premises, así que la relación de réplica y los procedimientos se conservan.
+- (4) → Se administra también con la CLI y la API REST de ONTAP y con las herramientas de NetApp, de modo que el equipo reutiliza sus conocimientos y scripts.
+- (5) → La deduplicación, la compresión y el paso automático de los datos poco usados a un nivel más barato reducen el costo del histórico.
+- Para el equipo de ML, DataSync admite FSx for ONTAP como origen, así que se puede copiar el histórico a S3 y entrenar desde allí con la integración nativa de SageMaker.
+
+**Por qué no las alternativas.**
+
+- **Amazon FSx for Windows File Server** cubre SMB y Active Directory, pero no ofrece NFS ni iSCSI ni SnapMirror. Los servidores Linux tendrían que pasarse a SMB, con otra semántica de permisos, y los procedimientos de recuperación ante desastres dejarían de valer.
+- **Amazon FSx for OpenZFS** solo habla NFS: deja fuera a los usuarios Windows por SMB, a la base de datos por iSCSI y la réplica SnapMirror.
+- **Amazon FSx for Lustre** solo tiene cliente Linux, sin SMB ni iSCSI.
+- **Amazon EFS** solo ofrece NFS y no admite clientes Windows.
+- **Amazon EBS** podría alojar la base de datos, pero no comparte archivos ni replica con SnapMirror hacia el NetApp on-premises, así que rompe la restricción 3.
+- **Amazon S3** no ofrece SMB, NFS ni iSCSI, así que habría que reescribir las aplicaciones.
+
+### Escenario 3: plataforma de logística con un ecosistema Kafka → Amazon MSK
+
+**Contexto.** Una empresa de reparto de última milla para comercio electrónico opera on-premises un clúster de Apache Kafka con unos 150 topics. Sesenta microservicios producen y consumen eventos con las bibliotecas cliente de Kafka en Java y Python. Kafka Connect, con conectores de CDC, captura los cambios de su base de datos PostgreSQL de pedidos, y varias aplicaciones de Kafka Streams calculan en vivo el tiempo estimado de entrega. El equipo de ML entrena modelos de tiempo de entrega y de demanda. Cuando cambia la definición de una característica, necesita recalcularla releyendo 30 días de eventos GPS de los vehículos. La empresa migra a AWS, las dos personas que operaban Kafka dejan la empresa y la dirección prohíbe operar clústeres propios.
+
+**Restricciones clave.**
+
+1. No se puede modificar el código de los 60 servicios ni el de las aplicaciones de Kafka Streams; solo su configuración de conexión.
+2. Hay que reutilizar los conectores de Kafka Connect que ya existen.
+3. Hay que poder releer (*replay*) 30 días de historia, con varios grupos de consumidores independientes que leen a ritmos distintos.
+4. Nadie debe operar servidores, aplicar parches ni reemplazar nodos caídos.
+5. Hay que preservar el orden de los eventos de cada vehículo.
+
+**Por qué este servicio.**
+
+- (1) → MSK ejecuta Apache Kafka de código abierto y habla su mismo protocolo, así que las aplicaciones y herramientas existentes funcionan sin cambios de código; solo cambian la dirección del clúster y la autenticación.
+- (2) → Los conectores funcionan contra MSK como contra cualquier Kafka, y AWS ofrece además un servicio administrado para ejecutarlos, *MSK Connect*.
+- (3) → Los topics retienen los eventos según la retención que configures, y cada grupo de consumidores guarda su propio offset y puede rebobinarlo.
+- (4) → AWS opera los brokers, los parchea y los reemplaza cuando fallan. Los controladores KRaft vienen incluidos, y MSK Serverless elimina incluso el dimensionamiento.
+- (5) → Kafka garantiza el orden dentro de cada partición, y usar el ID del vehículo como clave envía todos sus eventos a la misma partición.
+
+**Por qué no las alternativas.**
+
+- **Amazon Kinesis Data Streams** tiene conceptos equivalentes (shards, retención de hasta 365 días), pero una API propia distinta del protocolo de Kafka. Habría que reescribir los 60 servicios, las aplicaciones de Kafka Streams y los conectores, lo que viola las restricciones 1 y 2.
+- **Amazon Data Firehose** es un conducto de entrega: no guarda un flujo que las aplicaciones puedan consumir ni releer. Puede leer de MSK, pero no reemplazarlo.
+- **Amazon Managed Service for Apache Flink** procesa flujos, pero no los almacena. Podría complementar a MSK más adelante (por ejemplo, reemplazando a Kafka Streams), pero no ser la columna vertebral de eventos.
+- **Amazon SNS** reparte mensajes a sus suscriptores, pero no los retiene para releerlos 30 días después.
+- **Kafka autoadministrado en EC2** sería compatible, pero viola la restricción 4.
+
+## Resumen (*Summary*)
+
+En este capítulo cubrimos la ingesta y el almacenamiento de datos, los dos componentes clave de la fase de recolección del ciclo de vida de machine learning.
+
+Con la ingesta, reúnes los datos de tu solución de ML desde distintas fuentes y los envías a AWS en su formato crudo. La ingesta puede ocurrir por lotes o en tiempo real. Amazon Data Firehose, Amazon Kinesis Data Streams, Amazon MSK y Amazon Managed Service for Apache Flink se usan para ingerir datos en tiempo real. AWS DataSync y AWS Glue se usan para ingerir datos por lotes.
+
+Con el almacenamiento, persistes los datos ingeridos en un almacén de datos adecuado de AWS, donde permanecerán hasta que estén listos para procesarse. El almacenamiento es de tres tipos: de objetos, de archivos y de bloques. Amazon S3 se usa para guardar datos de objetos, Amazon EBS para datos de bloques, y Amazon EFS y la familia de servicios Amazon FSx para datos de archivos.
+
+Los factores para seleccionar el servicio de ingesta y de almacenamiento adecuado dependen de las particularidades de tu caso de uso e incluyen la escalabilidad, la resiliencia, la seguridad y el costo.
+
+El capítulo también cubrió los distintos formatos de datos que necesitas conocer para el examen, que pueden usarse para optimizar aún más el rendimiento, mejorar la escalabilidad y reducir el tiempo de procesamiento. Un factor importante al seleccionar un formato de datos para entrenar tu modelo es si el algoritmo de ML que piensas usar para tu problema lo admite.
+
+## Puntos esenciales para el examen (*Exam Essentials*)
+
+**Conoce la diferencia entre la ingesta y el almacenamiento de datos.** La ingesta de datos consiste en reunir datos de distintas fuentes, mientras que el almacenamiento consiste en persistir los datos en un almacén de datos alojado en AWS.
+
+**Entiende los distintos formatos de datos.** CSV se usa para guardar datos estructurados en formato tabular, mientras que JSON se usa para datos semiestructurados basados en documentos. Apache Parquet y Apache ORC son formatos de datos columnares, mientras que Apache Avro es un formato por filas. RecordIO es un formato de datos que usa principalmente Apache MXNet, un framework de deep learning.
+
+**Entiende los servicios de ingesta para datos de streaming.** Entre ellos están Amazon Data Firehose, Amazon Kinesis Data Streams, Amazon MSK y Amazon Streaming Service for Apache Flink. Amazon Kinesis Data Streams es más adecuado para el procesamiento de datos personalizado en tiempo real, mientras que Amazon Data Firehose es ideal para cargar eficientemente datos de streaming en almacenes de datos de AWS seleccionados, con una configuración y una gestión mínimas. Amazon MSK es el más adecuado para gestionar y distribuir datos de streaming (p. ej., agregación de logs, analítica en tiempo real y *event sourcing*), mientras que Amazon Managed Service for Apache Flink está diseñado para procesar y analizar datos en tiempo real. La **agregación de logs** consiste en reunir en un solo lugar los logs que generan muchos servidores. El ***event sourcing*** es un patrón de diseño que guarda el estado de un sistema como la secuencia completa de eventos que lo produjeron, en lugar de guardar solo el estado actual; es la idea detrás del caso de uso de MSK como sistema de registro.
+
+> [!warning] Nota de precisión
+> «Amazon Streaming Service for Apache Flink» es una errata del original: el servicio se llama **Amazon Managed Service for Apache Flink**, como en el resto del capítulo.
+
+**Entiende los servicios de ingesta para migración de datos, datos por lotes y ETL.** Entre ellos están AWS DataSync y AWS Glue. El primero es ideal para transferir o migrar datos a AWS, y el segundo para ETL y para desarrollar pipelines de datos.
+
+**Entiende los servicios de almacenamiento para datos de objetos.** Amazon S3 es el servicio de almacenamiento de objetos más versátil y más usado de AWS. Ofrece escalabilidad, disponibilidad de datos, seguridad y rendimiento líderes en la industria. Un dato de objeto contiene el dato en sí, sus metadatos y un identificador único. Al almacenamiento de objetos se accede mediante API, lo que lo hace adecuado para aplicaciones nativas de la nube. Amazon SageMaker admite de forma nativa Amazon S3 como origen de datos para entrenar modelos de ML.
+
+**Entiende los servicios de almacenamiento para datos de archivos.** Amazon EFS y la familia de servicios Amazon FSx (Amazon FSx for Lustre, for NetApp ONTAP, for Windows File Server y for OpenZFS) se usan para guardar datos con el tipo de almacenamiento de archivos. El almacenamiento de archivos organiza los datos de forma jerárquica (carpetas dentro de carpetas) y es ideal para persistir datos compartidos, como las carpetas compartidas de una empresa, el almacenamiento de medios y los sistemas de gestión de contenidos. Amazon EFS y Amazon FSx for Lustre son servicios de almacenamiento de archivos que Amazon SageMaker admite de forma nativa como orígenes de datos para entrenar modelos de ML.
+
+**Entiende los servicios de almacenamiento para datos de bloques.** Amazon EBS es el servicio de almacenamiento de bloques de AWS. El almacenamiento de bloques divide los datos en bloques de tamaño fijo, cada uno con una dirección única, pero sin metadatos. Es el sistema de archivos que se instala encima el que agrega los nombres, las carpetas y los permisos. El almacenamiento de bloques ofrece alto rendimiento y baja latencia, lo que lo hace ideal para cargas de trabajo transaccionales.
+
+**Entiende los servicios de almacenamiento que se integran de forma nativa con Amazon SageMaker.** Amazon SageMaker se integra de forma nativa con Amazon S3 para el almacenamiento de objetos, y con Amazon EFS y Amazon FSx for Lustre para el almacenamiento de sistemas de archivos. Así facilita el acceso a los datos para el entrenamiento y el aprendizaje, y la gestión eficiente de los flujos de trabajo de ML.
+
+## Preguntas de repaso (*Review Questions*)
+
+1. Necesitas guardar datos sin procesar de dispositivos IoT para un nuevo pipeline de machine learning. La solución de almacenamiento debe ser un repositorio centralizado y de alta disponibilidad. ¿Qué servicio de almacenamiento de AWS eliges para guardar los datos sin procesar?
    - A. Amazon Elastic File System (EFS)
    - B. Amazon S3
    - C. Amazon DynamoDB
    - D. Amazon Relational Database Service (RDS)
 
-2. You are designing a highly scalable data repository for your machine learning pipeline. You need immediate access to the processed data from your pipeline for 6 months. Your unprocessed data must be accessible within 12 hours and stored for 6 years. The storage solution must support SQL querying capabilities. What is the most cost-effective storage solution?
-   - A. Amazon S3 and Amazon Athena
+2. Estás diseñando un repositorio de datos muy escalable para tu pipeline de machine learning. Necesitas acceso inmediato a los datos procesados de tu pipeline durante 6 meses. Tus datos sin procesar deben ser accesibles en un plazo de 12 horas y conservarse durante 6 años. La solución de almacenamiento debe admitir consultas SQL. ¿Cuál es la solución de almacenamiento más económica?
+   - A. Amazon S3 y Amazon Athena
    - B. Amazon S3
    - C. Amazon DynamoDB
    - D. Amazon Redshift
 
-3. You are using an Amazon Data Firehose delivery stream to ingest GZIP compressed data records from an on-premises application. You need to configure a solution for your data scientist to perform SQL queries against the data stream for real-time insights. What solution meets these requirements?
-   - A. Amazon S3 and Amazon Athena
-   - B. Amazon Managed Service for Apache Flink and a Lambda function
-   - C. Amazon Managed Streaming for Apache Kafka and a Lambda function
-   - D. Amazon Redshift and Amazon Athena
+3. Usas un flujo de entrega de Amazon Data Firehose para ingerir registros de datos comprimidos con GZIP desde una aplicación on-premises. Necesitas configurar una solución para que tu científico de datos ejecute consultas SQL sobre el flujo de datos y obtenga información en tiempo real. ¿Qué solución cumple estos requisitos?
+   - A. Amazon S3 y Amazon Athena
+   - B. Amazon Managed Service for Apache Flink y una función Lambda
+   - C. Amazon Managed Streaming for Apache Kafka y una función Lambda
+   - D. Amazon Redshift y Amazon Athena
 
-4. You are a machine learning engineer, and you need to process a large amount of customer data, analyze the data, and get insights so that analysts can make further decisions. To accomplish this task, you need to store the data in a data structure that can handle large volumes of data and efficiently retrieve it as fast as possible. What solution meets these requirements?
-   - A. Amazon EMR with HDFS
-   - B. Amazon S3 and a Lambda function
-   - C. Amazon DynamoDB and a Lambda function
-   - D. Amazon Redshift and Amazon Athena
+4. Eres ingeniero de machine learning y necesitas procesar una gran cantidad de datos de clientes, analizarlos y obtener información para que los analistas puedan tomar decisiones. Para lograrlo, necesitas guardar los datos en una estructura que pueda manejar grandes volúmenes y recuperarlos de la forma más rápida posible. ¿Qué solución cumple estos requisitos?
+   - A. Amazon EMR con HDFS
+   - B. Amazon S3 y una función Lambda
+   - C. Amazon DynamoDB y una función Lambda
+   - D. Amazon Redshift y Amazon Athena
 
-5. You have been asked to redesign and reduce operational overhead and use AWS services to detect anomalies in transaction data and assign anomaly scores to malicious records. The records are streamed in real time and stored in an Amazon S3 data lake for processing and analysis. What is the most efficient solution?
-   - A. Amazon Data Firehose to stream transaction data and the Amazon Managed Service for Apache Flink RANDOM_CUT_FOREST function to detect anomalies
-   - B. Amazon Data Firehose to stream transaction data into Amazon S3 with the SageMaker RANDOM_CUT_FOREST function to detect anomalies
-   - C. Amazon Kinesis Data Stream to stream transaction data and the Amazon Managed Service for Apache Flink RANDOM_CUT_FOREST function to detect anomalies
-   - D. Amazon Kinesis Data Stream to stream transaction data into Amazon S3 with the SageMaker RANDOM_CUT_FOREST function to detect anomalies
+5. Te pidieron rediseñar una solución para reducir la carga operativa y usar servicios de AWS que detecten anomalías en datos de transacciones y asignen puntajes de anomalía a los registros maliciosos. Los registros se transmiten en tiempo real y se guardan en un data lake de Amazon S3 para su procesamiento y análisis. ¿Cuál es la solución más eficiente?
+   - A. Amazon Data Firehose para transmitir los datos de transacciones y la función RANDOM_CUT_FOREST de Amazon Managed Service for Apache Flink para detectar anomalías
+   - B. Amazon Data Firehose para transmitir los datos de transacciones a Amazon S3, con la función RANDOM_CUT_FOREST de SageMaker para detectar anomalías
+   - C. Amazon Kinesis Data Stream para transmitir los datos de transacciones y la función RANDOM_CUT_FOREST de Amazon Managed Service for Apache Flink para detectar anomalías
+   - D. Amazon Kinesis Data Stream para transmitir los datos de transacciones a Amazon S3, con la función RANDOM_CUT_FOREST de SageMaker para detectar anomalías
 
-6. You’ve been asked to improve the time to ingest and store geolocation data in Amazon Redshift to conduct near-real-time analytics. What’s the most cost-effective solution?
-   - A. Amazon Kinesis Data Stream to ingest the geolocation data. Load the streaming data into the Amazon Redshift cluster using Amazon Redshift Streaming Ingestion.
-   - B. Amazon Managed Streaming for Apache Kafka to ingest the geolocation data. Load the streaming data into the Amazon Redshift cluster using Amazon Redshift Spectrum.
-   - C. Amazon Data Firehose to ingest the geolocation data. Load the streaming data into the Amazon Redshift cluster using Amazon Redshift Streaming Ingestion.
-   - D. Amazon Managed Service for Apache Flink to ingest the geolocation data. Load the streaming data into the Amazon Redshift cluster using Amazon Redshift Streaming Ingestion.
+6. Te pidieron mejorar el tiempo de ingesta y almacenamiento de datos de geolocalización en Amazon Redshift para hacer analítica casi en tiempo real. ¿Cuál es la solución más económica?
+   - A. Amazon Kinesis Data Stream para ingerir los datos de geolocalización. Cargar los datos de streaming en el clúster de Amazon Redshift con Amazon Redshift Streaming Ingestion.
+   - B. Amazon Managed Streaming for Apache Kafka para ingerir los datos de geolocalización. Cargar los datos de streaming en el clúster de Amazon Redshift con Amazon Redshift Spectrum.
+   - C. Amazon Data Firehose para ingerir los datos de geolocalización. Cargar los datos de streaming en el clúster de Amazon Redshift con Amazon Redshift Streaming Ingestion.
+   - D. Amazon Managed Service for Apache Flink para ingerir los datos de geolocalización. Cargar los datos de streaming en el clúster de Amazon Redshift con Amazon Redshift Streaming Ingestion.
 
-7. You are migrating a data analysis solution to AWS. The application produces the data as CSV files in near real time. You need a solution to convert the data format to Apache Parquet before saving it to an S3 bucket. What is the most efficient solution?
-   - A. Amazon Kinesis Data Streams and create a streaming AWS Glue ETL job to convert the data into Apache Parquet
-   - B. Amazon Managed Streaming for Apache Kafka and a Lambda function
-   - C. Amazon Data Firehose and a Lambda function
-   - D. Amazon Managed Service for Apache Flink and a Lambda function
+7. Estás migrando a AWS una solución de análisis de datos. La aplicación produce los datos como archivos CSV casi en tiempo real. Necesitas una solución que convierta los datos a Apache Parquet antes de guardarlos en un bucket de S3. ¿Cuál es la solución más eficiente?
+   - A. Amazon Kinesis Data Streams y crear un job de ETL de streaming de AWS Glue que convierta los datos a Apache Parquet
+   - B. Amazon Managed Streaming for Apache Kafka y una función Lambda
+   - C. Amazon Data Firehose y una función Lambda
+   - D. Amazon Managed Service for Apache Flink y una función Lambda
 
-8. You are using Amazon Data Firehose to ingest data records from on premises. The records are compressed using GZIP compression. How can you efficiently perform SQL queries against the data stream to gain real-time insights and reduce the latency for queries?
-   - A. Amazon Managed Service for Apache Flink and a Lambda function
-   - B. Amazon Kinesis Data Streams, a Lambda function, and Amazon OpenSearch
-   - C. Amazon Managed Streaming for Apache Kafka and a Lambda function
-   - D. Amazon Kinesis Data Streams, a Lambda function, and Amazon Redshift
+8. Usas Amazon Data Firehose para ingerir registros de datos desde on-premises. Los registros están comprimidos con GZIP. ¿Cómo puedes ejecutar eficientemente consultas SQL sobre el flujo de datos para obtener información en tiempo real y reducir la latencia de las consultas?
+   - A. Amazon Managed Service for Apache Flink y una función Lambda
+   - B. Amazon Kinesis Data Streams, una función Lambda y Amazon OpenSearch
+   - C. Amazon Managed Streaming for Apache Kafka y una función Lambda
+   - D. Amazon Kinesis Data Streams, una función Lambda y Amazon Redshift
 
-9. Your team is working on training a large-scale image recognition model that requires high throughput and low-latency access to a dataset stored in Amazon S3. Which storage service would best optimize training performance in Amazon SageMaker?
+9. Tu equipo está entrenando un modelo de reconocimiento de imágenes a gran escala que requiere alto throughput y acceso de baja latencia a un dataset guardado en Amazon S3. ¿Qué servicio de almacenamiento optimizaría mejor el rendimiento del entrenamiento en Amazon SageMaker?
    - A. Amazon S3
    - B. Amazon EFS
    - C. Amazon FSx for Lustre
    - D. Amazon FSx for Windows File Server
 
-10. You need a cost-effective solution for storing and frequently accessing a large amount of sensor data for an IoT analytics project in Amazon SageMaker. Which storage service should you choose?
+10. Necesitas una solución económica para guardar, y consultar con frecuencia, una gran cantidad de datos de sensores para un proyecto de analítica de IoT en Amazon SageMaker. ¿Qué servicio de almacenamiento deberías elegir?
+    - A. Amazon FSx for Lustre
+    - B. Amazon EFS
+    - C. Amazon S3
+    - D. Amazon FSx for OpenZFS
 
-- A. Amazon FSx for Lustre
-- B. Amazon EFS
-- C. Amazon S3
-- D. Amazon FSx for OpenZFS
+> [!info] Términos de las preguntas que no aparecen en el capítulo
+> - **Amazon EMR** (pregunta 4) es el servicio administrado de AWS para ejecutar clústeres de Hadoop y Spark; con **HDFS** (ver la sección de DataSync), los datos viven en los discos de los nodos del clúster.
+> - **Amazon Redshift Streaming Ingestion** (pregunta 6) permite que Redshift lea directamente de Kinesis Data Streams o de MSK, sin pasar por S3. **Amazon Redshift Spectrum** permite que Redshift consulte archivos en S3 sin cargarlos.
+> - **RANDOM_CUT_FOREST** (pregunta 5) es un algoritmo de detección de anomalías. Existe como algoritmo integrado de SageMaker (Tabla 2.1) y existía como función SQL de Kinesis Data Analytics.
 
-## Diccionario de nombres que aparecen en el código
+> [!warning] Estado del servicio en las preguntas 3, 5 y 8
+> Estas preguntas se escribieron cuando existía **Amazon Kinesis Data Analytics for SQL**, el servicio que ejecutaba SQL sobre flujos y ofrecía la función SQL `RANDOM_CUT_FOREST`. Ese servicio dejó de funcionar el 27 de enero de 2026. Si aparecen en el examen tal como están redactadas, respóndelas con la lógica del libro. En un diseño real de hoy, el SQL sobre flujos se hace con Flink SQL en Amazon Managed Service for Apache Flink, y la función `RANDOM_CUT_FOREST` de SQL ya no existe.
 
-| Nombre                         | Qué es en realidad                                                                     | De dónde viene el nombre                                                   |
-| ------------------------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `DirectPut`                    | Fuente de un stream de Firehose en la que los productores llaman a la API directamente | —                                                                          |
-| `!{partitionKeyFromQuery:...}` | Valor extraído de cada registro que Firehose sustituye en el prefijo de S3             | Sintaxis propia de Firehose para expresiones en prefijos                   |
-| `ShardIterator`                | Marcador de posición de lectura en un shard, válido 5 minutos                          | —                                                                          |
-| `TRIM_HORIZON`                 | Posición del registro más antiguo aún retenido en un shard                             | El «horizonte» por el que Kinesis recorta lo que caduca                    |
-| `PartitionKey` / `key`         | Cadena cuyo hash decide el shard (Kinesis) o la partición (Kafka)                      | —                                                                          |
-| `kinesisanalyticsv2`           | Cliente de boto3 de Managed Service for Apache Flink                                   | Nombre anterior del servicio, Kinesis Data Analytics                       |
-| KPU                            | Unidad de cómputo y facturación de una aplicación Flink                                | _Kinesis Processing Unit_, del mismo nombre anterior                       |
-| `transformation_ctx`           | Etiqueta que Glue usa para recordar qué datos ya procesó un paso del job               | Contexto de transformación de los _job bookmarks_                          |
-| `ShardedByS3Key`               | Reparto de los objetos de un prefijo entre las instancias de un training job           | Se reparte por clave de objeto, no por fila                                |
-| `FastFile`                     | Modo de entrada que presenta los objetos de S3 como archivos leídos bajo demanda       | —                                                                          |
-| `MountName`                    | Cadena que FSx for Lustre genera y que forma parte de la ruta de montaje               | —                                                                          |
-| `hsm_restore`                  | Orden de Lustre que trae el contenido de un archivo desde el repositorio enlazado (S3) | _Hierarchical Storage Management_                                          |
-| `HASH` / `RANGE`               | Clave de partición y clave de ordenación de DynamoDB                                   | Nombres antiguos; la documentación actual usa _partition key_ y _sort key_ |
-| `ScanIndexForward`             | `True` ordena ascendente por la clave de ordenación, `False` descendente               | Recorrer el índice «hacia delante»                                         |
+## Glosario
+
+- **ACID.** Garantías de una transacción: atomicidad (todo o nada), consistencia, aislamiento entre transacciones simultáneas y durabilidad de lo confirmado.
+- **ACL (lista de control de acceso).** Lista asociada a un archivo o carpeta que indica qué usuarios o grupos pueden leerlo o modificarlo.
+- **Active Directory (AD).** Servicio de directorio de Microsoft que centraliza los usuarios, grupos y equipos de una organización y los autentica.
+- **Agente de DataSync.** Máquina virtual de AWS que se instala dentro de la red de origen para leer los datos y enviarlos a AWS.
+- **Almacenamiento de archivos (file storage).** Sistema de archivos que vive en un servidor y que varias máquinas usan a la vez por la red (EFS, FSx).
+- **Almacenamiento de bloques (block storage).** Disco «en crudo», dividido en bloques de tamaño fijo, que una máquina formatea con su propio sistema de archivos (EBS).
+- **Almacenamiento de objetos (object storage).** Espacio plano de claves, cada una con su objeto completo y metadatos, al que se accede por HTTP (S3).
+- **Almacenamiento de streaming.** Registro ordenado de eventos, solo de escritura al final, que los conserva un tiempo para que varios consumidores los lean.
+- **Alta disponibilidad.** Capacidad de seguir funcionando aunque falle un servidor o una zona, gracias a copias y servidores de reserva.
+- **Amazon Athena.** Motor SQL serverless que consulta archivos en S3 y cobra por datos escaneados.
+- **Amazon Aurora.** Motor relacional de AWS, compatible con MySQL y PostgreSQL, con almacenamiento distribuido en tres zonas.
+- **Amazon Data Firehose.** Servicio totalmente administrado que recibe flujos de datos y los entrega, con búfer y transformaciones opcionales, a un destino.
+- **Amazon DynamoDB.** Base de datos NoSQL serverless de clave-valor y documentos, con latencia de un solo dígito de milisegundos.
+- **Amazon EBS (Elastic Block Store).** Almacenamiento de bloques de AWS: volúmenes que se conectan a instancias EC2 de una misma zona.
+- **Amazon EFS (Elastic File System).** Sistema de archivos NFS serverless y elástico que muchas máquinas montan a la vez.
+- **Amazon EMR.** Servicio administrado para ejecutar clústeres de Hadoop y Spark.
+- **Amazon FSx.** Familia de sistemas de archivos administrados construidos sobre tecnologías de terceros: Lustre, Windows File Server, NetApp ONTAP y OpenZFS.
+- **Amazon Kinesis Data Streams.** Servicio de streaming que almacena eventos en shards durante un periodo de retención para que varios consumidores los lean en tiempo real.
+- **Amazon Managed Service for Apache Flink.** Servicio administrado para ejecutar aplicaciones de Apache Flink (antes, Kinesis Data Analytics).
+- **Amazon MSK.** Servicio administrado de Apache Kafka, en modalidad aprovisionada o serverless.
+- **Amazon RDS.** Servicio administrado de bases de datos relacionales con ocho motores.
+- **Amazon Redshift.** Data warehouse de AWS, optimizado para consultas analíticas SQL.
+- **Amazon WorkSpaces.** Servicio de escritorios virtuales de AWS.
+- **Apache Avro.** Formato binario por filas que guarda el esquema junto con los datos y admite evolución de esquema.
+- **Apache Flink.** Framework de código abierto para procesar flujos con estado y garantías exactly-once.
+- **Apache Kafka.** Plataforma distribuida de código abierto para almacenar y transmitir flujos de eventos en topics particionados.
+- **Arquitectura orientada a eventos.** Diseño en que los componentes publican hechos y otros reaccionan a ellos, sin llamarse directamente.
+- **Arreglo de almacenamiento.** Equipo empresarial con muchos discos y software propio que sirve almacenamiento a los servidores de un centro de datos.
+- **Artefacto de modelo.** Archivos resultantes del entrenamiento (pesos, parámetros) que se usan para desplegar el modelo.
+- **Autoadministrado (self-managed).** Software que instalas y operas tú mismo, por ejemplo en EC2, en lugar de un servicio administrado.
+- **Autosupervisado (aprendizaje).** Aprendizaje a partir de datos sin etiquetar prediciendo partes del propio dato, como la siguiente palabra.
+- **AWS Backup.** Servicio centralizado de copias de seguridad de AWS.
+- **AWS DataSync.** Servicio de transferencia de archivos y objetos entre sistemas de almacenamiento on-premises, otras nubes y AWS.
+- **AWS Glue.** Servicio serverless de integración de datos: catálogo, crawlers y trabajos ETL con Spark.
+- **AWS Glue Data Catalog.** Registro central de esquemas y ubicaciones que convierte archivos de S3 en tablas consultables.
+- **AWS Lambda.** Servicio de funciones serverless que ejecuta tu código ante cada evento y cobra por milisegundo.
+- **AWS Outposts.** Bastidores de hardware de AWS, administrados por AWS, instalados en el centro de datos del cliente.
+- **Bloqueo de archivos (file locking).** Mecanismo que marca un archivo como «en uso» para evitar escrituras simultáneas que lo corrompan.
+- **Broker.** Servidor de Kafka que guarda particiones y atiende a productores y consumidores.
+- **Bucket.** Contenedor de objetos de S3 con nombre único.
+- **Búfer (Firehose).** Acumulación de datos hasta un tamaño o tiempo máximo antes de entregarlos al destino.
+- **Caché intermedia (buffer cache).** Almacenamiento rápido y temporal que guarda cerca del consumidor los datos usados recientemente.
+- **Capa de abstracción.** Capa intermedia que oculta los detalles de la que está debajo.
+- **Captura de cambios de datos (CDC).** Técnica que publica como evento cada inserción, actualización o borrado de una base de datos.
+- **Carga de trabajo (workload).** Aplicación o proceso que se ejecuta en la nube, con su patrón de uso de recursos.
+- **Carga diferida (lazy loading).** Traer cada dato desde su origen solo la primera vez que se lee.
+- **Centro de datos.** Instalación con servidores, red, energía y refrigeración propios.
+- **Checkpoint / offset.** Marca de hasta dónde se procesó un flujo, para reanudar sin perder ni duplicar datos.
+- **Ciclo de vida (políticas o gestión).** Reglas que mueven datos a clases más baratas, o los borran, tras cierto tiempo sin uso.
+- **Clase de almacenamiento (S3).** Nivel de precio y de acceso que se asigna a cada objeto según la frecuencia con que se lee.
+- **Clave de partición.** Valor de cada registro que decide en qué shard o partición se guarda.
+- **Clickstream.** Secuencia de clics y páginas vistas de cada visitante de un sitio web.
+- **Clon (ZFS).** Copia escribible creada al instante a partir de un snapshot.
+- **CloudTrail (AWS CloudTrail).** Registro de todas las llamadas a la API de una cuenta de AWS: quién, qué, cuándo y desde dónde.
+- **CloudWatch (Amazon CloudWatch).** Servicio de monitoreo de métricas, logs y alarmas de AWS.
+- **Clúster.** Grupo de servidores que funcionan juntos como un solo sistema.
+- **CMS (sistema de gestión de contenidos).** Software para publicar y administrar el contenido de un sitio web, como WordPress.
+- **Codificación (columnar).** Representación compacta de los valores de una columna, como la codificación por diccionario o por longitud de corrida.
+- **Consistencia eventual.** Modelo en que una lectura hecha justo después de una escritura puede devolver, por un instante, el valor anterior.
+- **Consistencia fuerte.** Garantía de que, tras una escritura, toda lectura posterior ve el dato nuevo.
+- **Consulta continua.** Consulta sobre un flujo que no termina y actualiza su resultado con cada evento.
+- **Contenedor.** Aplicación empaquetada con todas sus dependencias (por ejemplo, con Docker).
+- **Continuidad del negocio y recuperación ante desastres (BCDR).** Capacidad de seguir operando durante un incidente y de restaurar los sistemas después de una catástrofe.
+- **Controlador (Kafka).** Nodo que administra el estado de particiones y réplicas del clúster.
+- **Coordinación distribuida.** Lograr que varias máquinas acuerden hechos compartidos (quién es líder, qué nodos están vivos) pese a las fallas.
+- **Copia en escritura (copy-on-write).** Técnica de ZFS que escribe cada versión nueva en otro sitio en lugar de sobrescribir.
+- **Cost Explorer (AWS Cost Explorer).** Herramienta para analizar el gasto de AWS por servicio, etiqueta y periodo.
+- **Costo total de propiedad (TCO).** Suma de todos los costos de una solución a lo largo del tiempo, no solo el precio por GB.
+- **Crawler (AWS Glue).** Proceso que recorre archivos, deduce su esquema y lo registra en el catálogo.
+- **Data lake.** Repositorio central de datos crudos en su formato original.
+- **Data warehouse.** Base de datos analítica con esquema definido.
+- **Dataset acotado / flujo no acotado.** Datos finitos (un archivo) frente a un flujo de eventos que no termina.
+- **Datos fríos (cold data).** Datos que casi nunca se consultan pero deben conservarse.
+- **Deduplicación.** Guardar una sola copia de bloques o fragmentos idénticos y referencias a ella.
+- **DevOps.** Prácticas y rol que unen el desarrollo de software con la operación de la infraestructura.
+- **Direct PUT (Firehose).** Envío de registros a Firehose directamente desde tu aplicación mediante la API.
+- **Directorio personal (home directory).** Carpeta de red propia de cada empleado, disponible desde cualquier equipo.
+- **Disponibilidad.** Porcentaje del tiempo en que un servicio puede usarse; 99.99 % equivale a unos 53 minutos al año sin servicio.
+- **Durabilidad.** Probabilidad de no perder un dato guardado; S3 está diseñado para once nueves.
+- **E/S (entrada/salida, I/O).** Operaciones de lectura y escritura sobre el almacenamiento.
+- **ECS / EKS.** Servicios de AWS para ejecutar contenedores; EKS es Kubernetes administrado.
+- **EFA (Elastic Fabric Adapter).** Interfaz de red de AWS para cargas de HPC y ML con muy alto throughput entre nodos.
+- **Endpoint de VPC.** Puerta de entrada privada desde tu VPC a un servicio de AWS, sin pasar por internet.
+- **Endpoint HTTP.** Dirección de un servicio que recibe datos mediante peticiones HTTP.
+- **Escalado automático (auto scaling).** Ajuste automático de la capacidad (instancias, réplicas, workers) según métricas de carga.
+- **ETL / ETL de streaming.** Extraer, transformar y cargar datos; en streaming, evento a evento y de forma continua.
+- **Event sourcing.** Patrón que guarda el estado como la secuencia completa de eventos que lo produjeron.
+- **Evolución de esquema.** Capacidad de leer datos escritos con un esquema distinto del que espera el lector.
+- **Exabyte.** Un millón de terabytes.
+- **Exactly-once.** Garantía de que cada evento afecta al resultado una sola vez, aunque haya reprocesamientos.
+- **Flash.** Almacenamiento en chips de memoria, como los SSD.
+- **Formato columnar.** Formato que guarda juntos los valores de cada columna (Parquet, ORC); eficiente para leer pocas columnas.
+- **Formato por filas.** Formato que guarda juntos los valores de cada registro (Avro, CSV); eficiente para escribir registro a registro.
+- **FSx for Lustre.** Sistema de archivos paralelo administrado, para Linux, vinculable a S3 e integrado con SageMaker.
+- **FSx for NetApp ONTAP.** Almacenamiento administrado de NetApp con NFS, SMB, iSCSI y NVMe, y replicación SnapMirror.
+- **FSx for OpenZFS.** Sistema de archivos OpenZFS administrado, accesible por NFS v3 a v4.2, con snapshots y clones.
+- **FSx for Windows File Server.** Servidor de archivos Windows administrado, accesible por SMB e integrado con Active Directory.
+- **Geo-fencing.** Perímetro virtual en un mapa que dispara un evento cuando un dispositivo entra o sale.
+- **Grupo de seguridad.** Firewall virtual de un recurso de AWS que define qué tráfico se permite.
+- **Hadoop.** Plataforma de código abierto de big data, anterior a Spark, de la que forma parte HDFS.
+- **HDFS.** Sistema de archivos distribuido de Hadoop que reparte bloques de 128 MB, con tres copias, entre los nodos.
+- **HIPAA.** Ley estadounidense que protege la información de salud de los pacientes.
+- **HPC (computación de alto rendimiento).** Muchos servidores trabajando en paralelo sobre un mismo problema de cálculo.
+- **IAM (rol de IAM).** Servicio de permisos de AWS; un rol es una identidad con permisos que un servicio o persona asume temporalmente.
+- **Inferencia (en ML).** Uso de un modelo entrenado para predecir sobre datos nuevos.
+- **Intelligent-Tiering (S3).** Clase que mueve cada objeto entre niveles de precio según su acceso.
+- **IOPS.** Operaciones de lectura o escritura por segundo; un disco mecánico da unas 100 a 200.
+- **IoT (Internet de las cosas).** Dispositivos físicos con sensores y conexión a la red que envían datos continuamente.
+- **iSCSI.** Protocolo que transporta comandos de disco por una red IP, de modo que un servidor ve un volumen remoto como disco local.
+- **JDBC.** Estándar de Java para conectarse a bases de datos mediante controladores específicos de cada motor.
+- **JSON Lines.** Archivo de texto con un objeto JSON por línea.
+- **KRaft.** Modo de Kafka que gestiona los metadatos con controladores propios (algoritmo Raft), sin ZooKeeper.
+- **Kubernetes.** Orquestador de contenedores que decide dónde corre cada uno y lo reinicia si falla.
+- **Latencia.** Tiempo entre pedir un dato y empezar a recibirlo.
+- **Legacy (sistema heredado).** Sistema antiguo que sigue en uso aunque esté desfasado.
+- **LibSVM.** Formato de texto para datos dispersos: `etiqueta índice:valor ...`.
+- **Líder-seguidor (réplicas).** Esquema en que una réplica recibe las escrituras y las demás la copian para tomar el relevo si falla.
+- **Lift and shift.** Migrar una aplicación a la nube sin modificarla, cambiando solo dónde corre.
+- **LLM (modelo de lenguaje grande).** Red neuronal con miles de millones de parámetros que genera texto.
+- **Lustre.** Sistema de archivos paralelo de código abierto usado en supercómputo.
+- **Metadatos.** Datos sobre los datos: nombres, tipos, ubicaciones, permisos.
+- **Microlote (micro-batch).** Procesamiento de un flujo en pequeños lotes cada pocos segundos o minutos.
+- **Migración de datos.** Traslado a gran escala de datos de un sistema de almacenamiento a otro.
+- **Modelo clave-valor / de documentos.** Acceso a cada elemento por una clave única / elementos con estructura anidada tipo JSON que puede variar.
+- **Montar.** Conectar un sistema de archivos remoto en una carpeta local para usarlo como si fuera un disco propio.
+- **Motor de base de datos.** Software que implementa la base de datos, como PostgreSQL, MySQL u Oracle.
+- **MSK Serverless.** Modalidad de MSK que aprovisiona y escala la capacidad automáticamente.
+- **NAS (almacenamiento conectado a la red).** Equipo que sirve archivos por la red mediante NFS o SMB.
+- **Nativo de la nube (cloud native).** Aplicación diseñada desde el principio para aprovechar servicios administrados y escalar agregando máquinas.
+- **NetApp.** Fabricante estadounidense de almacenamiento empresarial.
+- **NFS (Network File System).** Protocolo estándar de Linux y Unix para compartir archivos; v3 es sin estado, v4.x con estado y con bloqueos integrados.
+- **Nodo.** Cada servidor de un clúster.
+- **NoSQL.** Bases de datos no relacionales, sin esquema tabular fijo ni joins, que escalan repartiendo datos por clave.
+- **Nube híbrida.** Arquitectura en que una parte corre on-premises y otra en la nube.
+- **NVMe / NVMe-over-TCP.** Protocolo moderno para SSD de baja latencia; su variante sobre TCP lo lleva por una red Ethernet estándar.
+- **Observabilidad.** Capacidad de entender el estado de un sistema a partir de sus logs, métricas y trazas.
+- **On-premises.** Infraestructura que la empresa opera en sus propios centros de datos.
+- **ONTAP.** Sistema operativo de los equipos de almacenamiento de NetApp.
+- **OpenZFS.** Continuación de código abierto de ZFS, usada en Linux y FreeBSD.
+- **Pago por uso (pay-as-you-go).** Modelo de precios de la nube en que se paga por lo consumido, sin inversión inicial.
+- **Partición (Kafka).** Subdivisión ordenada de un topic que permite repartir la carga entre brokers.
+- **Particionar.** Dividir los datos por una clave para que cada consulta lea solo lo necesario.
+- **Patrón de acceso a los datos.** Descripción de cómo se escriben, consultan y recuperan los datos (filtros, orden, frecuencia).
+- **PCI DSS.** Estándar de seguridad obligatorio para quien guarda o procesa datos de tarjetas de pago.
+- **Perfil de usuario (Windows).** Carpeta con el escritorio, la configuración y los documentos de un usuario.
+- **Periodo de retención.** Tiempo durante el que un servicio de streaming conserva los eventos antes de que expiren.
+- **Petabyte.** Mil terabytes.
+- **Pipeline.** Cadena automatizada de pasos por la que pasan los datos.
+- **Plano de control / plano de datos.** Operaciones que administran la infraestructura frente a operaciones sobre los datos mismos.
+- **POSIX.** Estándar de interfaces de los sistemas tipo Unix, incluidas las operaciones y los permisos de archivos.
+- **Procedimiento almacenado.** Programa guardado y ejecutado dentro de la base de datos.
+- **Productor / consumidor.** Programa que escribe en un flujo / programa que lee de él.
+- **Protocol Buffers (protobuf).** Formato binario de serialización, compacto y tipado, creado por Google.
+- **Protocolo.** Reglas con que dos computadoras se comunican por la red.
+- **Puntos de montaje (EFS mount targets).** Interfaces de red que EFS coloca en tus subredes para que las instancias lo monten.
+- **RDS Custom.** Variante de RDS con acceso de administrador al sistema operativo, para Oracle y SQL Server.
+- **RecordIO / RecordIO-protobuf.** Formato de secuencia de registros con su longitud antepuesta; en SageMaker, con contenido protobuf.
+- **Recuperación (retrieval).** Restauración previa necesaria para leer objetos de las clases de archivo de S3 Glacier.
+- **Refactorizar.** Reestructurar código sin cambiar lo que hace.
+- **Replay.** Volver a leer eventos pasados de un flujo mientras sigan retenidos.
+- **Réplica de lectura.** Copia de solo lectura de una base de datos que reparte la carga de consultas.
+- **Residencia de datos.** Obligación de que ciertos datos permanezcan en un país o región.
+- **Retraso put-to-get.** Tiempo entre que un registro entra a un stream y puede leerse; en Kinesis Data Streams, normalmente menos de un segundo.
+- **Reverse ETL.** Devolver datos procesados a los sistemas operativos de la empresa, como el CRM.
+- **Right-sizing.** Elegir el número y el tamaño correctos de servidores para una carga.
+- **RTO / RPO.** Tiempo máximo aceptable para restaurar el servicio / cantidad máxima de datos que se acepta perder, medida en tiempo.
+- **S3 (Amazon Simple Storage Service).** Almacenamiento de objetos de AWS.
+- **S3 Express One Zone.** Clase de S3 de latencia de un solo dígito de milisegundos, en una sola zona.
+- **SAN (red de área de almacenamiento).** Red dedicada por la que los servidores acceden a almacenamiento de bloques remoto.
+- **Savings Plans / instancias reservadas.** Compromisos de uso de uno o tres años a cambio de descuento.
+- **Scale-out / scale-up.** Crecer agregando servidores / reemplazando un servidor por uno más grande.
+- **Scan / Query (DynamoDB).** Leer la tabla completa / leer solo los elementos de una clave de partición.
+- **Scratch / persistente (FSx for Lustre).** Sistema sin replicación para trabajos cortos / sistema replicado para largo plazo.
+- **Semántica de sistema de archivos.** Operaciones que un programa espera de los archivos: modificar en el lugar, renombrar, bloquear, permisos.
+- **Semisupervisado (aprendizaje).** Combinación de pocos datos etiquetados con muchos sin etiquetar.
+- **Serialización.** Conversión de un objeto en memoria a bytes para guardarlo o enviarlo.
+- **Serverless.** Modelo en que no se ven ni administran servidores; el servicio asigna recursos y cobra por uso.
+- **Servidor de archivos (file server).** Computadora dedicada a guardar archivos y compartirlos por la red.
+- **Shard.** Unidad de capacidad de un stream de Kinesis.
+- **Sharding.** División horizontal de una base de datos entre varios servidores según una clave.
+- **SIEM.** Plataforma que centraliza y correlaciona registros de seguridad para detectar ataques.
+- **Sistema de archivos.** Capa del sistema operativo que organiza los bloques de un disco en carpetas y archivos con nombre y permisos.
+- **Sistema de archivos distribuido.** Sistema de archivos cuyos datos están repartidos entre muchos servidores pero se ven como un solo árbol.
+- **Sistema de registro (system of record).** Fuente autorizada de un dato.
+- **Sistema de reserva (standby).** Copia lista para tomar el relevo si falla el sistema principal.
+- **SMB (Server Message Block).** Protocolo de carpetas compartidas de Windows (`\\servidor\carpeta`).
+- **SnapMirror.** Replicación nativa de NetApp entre sistemas ONTAP.
+- **Snapshot.** Copia de un volumen o sistema de archivos en un instante dado; en EBS, incremental.
+- **Snow (familia).** Dispositivos físicos de AWS para transferir datos por mensajería; Snowcone descontinuado y Snowball Edge solo para clientes existentes.
+- **Spark (Apache Spark).** Motor de procesamiento distribuido de big data; PySpark es su API en Python.
+- **Spot (instancias).** Capacidad sobrante de EC2 con gran descuento que AWS puede recuperar con dos minutos de aviso.
+- **Subred.** Rango de direcciones de una VPC que vive en una sola zona de disponibilidad.
+- **Throughput.** Cantidad de datos transferidos por segundo; un SSD NVMe de laptop lee de 3 a 7 GB/s.
+- **Tolerancia a fallas.** Capacidad de seguir dando resultados correctos aunque fallen máquinas.
+- **Topic (Kafka).** Registro de eventos con nombre, ordenado y persistente.
+- **Totalmente administrado (fully managed).** Servicio cuya infraestructura opera AWS; tú lo configuras y pagas por uso.
+- **Transaccional (carga de trabajo).** Muchas operaciones pequeñas en posiciones dispersas, como las de una base de datos de pedidos; limitada por IOPS.
+- **Transcodificación / renderizado.** Convertir un video a otro formato o resolución / generar los fotogramas finales de una escena 3D.
+- **URI.** Identificador único de un recurso, como `s3://bucket/clave`.
+- **Validación de integridad.** Comparación de sumas de verificación del origen y el destino para confirmar que una copia es idéntica.
+- **VPC (nube privada virtual).** Red privada y aislada dentro de AWS.
+- **WAF (AWS Web Application Firewall).** Firewall que filtra el tráfico web según reglas agrupadas en web ACL.
+- **Well-Architected Framework.** Guía de buenas prácticas de AWS organizada en seis pilares, entre ellos costo y seguridad.
+- **ZFS.** Sistema de archivos y gestor de volúmenes con copia en escritura, sumas de verificación, snapshots, clones y compresión.
+- **Zona de disponibilidad (AZ).** Uno o varios centros de datos independientes dentro de una región, aislados de las demás zonas.
+- **ZooKeeper (Apache ZooKeeper).** Servicio de coordinación distribuida que Kafka usaba para sus metadatos antes de KRaft.

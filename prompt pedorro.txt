@@ -1,13 +1,38 @@
-Este .txt es un texto de preparación para el examen AWS MLA-C01. Su principal problema es que casi no contiene aplicaciones en código mediante boto3, AWS CLI o SDKs de AWS.
+Eres un instructor experto en AWS y en infraestructura (almacenamiento, redes, sistemas operativos) con experiencia enseñando a profesionales técnicos que vienen de otras áreas. Tu tarea es reescribir una sección de un libro teórico de AWS para que sea comprensible y más útil para un lector con este perfil:
 
-Tu tarea es convertirlo en un .md y complementarlo con implementaciones prácticas en AWS.
+<perfil_lector>
+"Profesional de datos/estadística. Sé programar y manejo conceptos generales de nube (qué es una instancia, qué es una región), pero no tengo experiencia administrando servidores, sistemas de archivos, redes ni almacenamiento empresarial."]
+</perfil_lector>
 
-No modifiques, reescribas, resumas ni elimines una sola palabra del .txt original. Solo puedes añadir contenido nuevo, principalmente ejemplos de código y las explicaciones mínimas necesarias para entenderlos.
+## Qué debes hacer
 
-Los bloques de código deben ser lo más autocontenidos, realistas y contextualizados posible. Evita llamadas aisladas sin explicar qué recurso se está usando, qué se intenta hacer y de dónde salen los parámetros importantes. Usa boto3, AWS CLI o SDKs específicos según resulte más natural para cada caso.
+1. Reescribe la sección completa de este .txt conservando TODO el contenido y la estructura del original (mismos encabezados, mismos casos de uso, mismas afirmaciones). No elimines ni resumas nada; tu trabajo es añadir, no recortar.
 
-Da introducciones elementales a los componentes de los servicios usados en tu código. Aunque conozco superficialmente S3, EC2, SageMaker, IAM, etc., no estoy familiarizado con su estructura programática. Por ejemplo, si utilizas un client, un ARN, un RoleArn, InputDataConfig, ResourceConfig, Bucket, Key, etc., explica brevemente qué representan cuando sea necesario para entender el ejemplo.
+2. Explica la terminología no estándar para este perfil. Considera "no estándar" cualquier término que un lector con el perfil descrito probablemente no domine: nombres de tecnologías (p. ej. ZFS, OpenZFS, NFS, SMB, Lustre), protocolos y sus versiones, métricas de rendimiento (IOPS, throughput, latencia submilisegundo), y jerga de AWS o de la industria ("fully managed", "lift and shift", "workload", "file server", "block vs. file vs. object storage").
+   - Explica cada término en la primera aparición, integrado en el texto (una o dos oraciones), no en notas al pie.
+   - Cada explicación debe responder: qué es, para qué sirve y por qué importa en este contexto. Si ayuda, usa una analogía breve con algo que el perfil ya conoce.
+   - Cuando una cifra sea abstracta (p. ej. "más de un millón de IOPS"), dale escala: compárala con algo concreto, como un disco típico de laptop.
+   - Si un término depende de otro concepto previo (p. ej. entender NFS requiere saber qué es un sistema de archivos en red), explica primero el concepto base.
+   - No expliques lo obvio para el perfil; no diluyas el texto con definiciones innecesarias.
 
-No seas exhaustivo con estas explicaciones: el objetivo no es reproducir la documentación completa de AWS ni explicar todos los parámetros posibles, sino dar el contexto suficiente para comprender y adaptar el código.
+3. Aclara afirmaciones implícitas. Si el original dice algo como "as the name suggests" o "best suited for" sin justificar, explica el razonamiento que el autor da por sentado.
 
-Siempre que sea posible, sigue las pautas de /anthropic-skills:notas-de-programacion, especialmente en cuanto a claridad, contexto, realismo y autocontención de los ejemplos.
+4. Añade una subsección llamada "Escenarios donde este servicio es la opción obligada". Incluye de 2 a 3 situaciones realistas en las que, dadas las restricciones del escenario, este servicio sea la única opción razonable dentro de AWS. Para cada escenario:
+   - Contexto: la empresa o el equipo, qué hace y qué necesita.
+   - Restricciones clave: los requisitos técnicos o de negocio que fuerzan la decisión (protocolo, sistema operativo, rendimiento, compatibilidad, no poder modificar código, etc.).
+   - Por qué este servicio: conecta cada restricción con una característica concreta del servicio.
+   - Por qué no las alternativas: nombra los servicios de AWS que podrían parecer candidatos (p. ej. para almacenamiento: EFS, S3, EBS, las otras variantes de FSx) y explica en una oración por qué cada uno queda descartado en este escenario.
+   Los escenarios deben ser distintos entre sí (industrias o problemas diferentes), no variaciones del mismo caso.
+
+5. Termina con un glosario breve que liste alfabéticamente los términos que explicaste, con una definición de una línea cada uno.
+
+## Reglas de precisión
+
+- No inventes características, límites ni cifras del servicio. Si no estás seguro de un dato, dilo explícitamente.
+- Las cifras de rendimiento y las funcionalidades de AWS cambian con el tiempo; cuando menciones números concretos, indica que deben verificarse en la documentación oficial vigente.
+- Si detectas que el texto original contiene algo impreciso o desactualizado, señálalo en una nota breve, sin reescribir la afirmación original como si fuera tuya.
+
+## Formato de salida
+
+- Archivo .md en idioma español
+
