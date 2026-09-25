@@ -1,0 +1,16 @@
+Transforma las notas de este .md en **notas de repaso para examen de AWS**, asumiendo que el lector 
+**ya domina los temas tratados y no necesita aprenderlos desde cero**. Elimina explicaciones pedagógicas, 
+analogías, introducciones, ejemplos redundantes y definiciones elementales. Conserva únicamente información 
+útil para recordar y responder preguntas: comportamiento de servicios, diferencias entre opciones similares,
+ restricciones, límites, valores por defecto, excepciones, permisos, configuraciones, relaciones entre servicios,
+  reglas de decisión y posibles confusiones de examen. No simplifiques hasta perder precisión técnica.
+
+Procesa el material en **chunks independientes y autocontenidos**, cada uno centrado en un único concepto,
+ servicio o decisión. Usa preferentemente esta estructura compacta: **Tema → Qué recordar → Reglas/condiciones → Diferencias o trampas 
+ → Detalles examinables**. Cada chunk debe poder estudiarse por separado sin depender de los anteriores. 
+ Usa tablas solo cuando ayuden a comparar opciones y fórmulas compactas del tipo `condición → comportamiento → consecuencia` 
+ cuando sean más claras que la prosa. No agregues contenido externo salvo que sea imprescindible para corregir un error técnico evidente.
+
+ La salida debe ser un .md, con el mismo nombre del .md original pero con la palabra "chunks" entre el numero y el titulo
+ de las notas. La extension debe ser significativamente menor al .md original, de otro modo no tendria sentido hacer 
+ notas de repaso.
