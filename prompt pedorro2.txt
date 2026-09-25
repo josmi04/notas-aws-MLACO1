@@ -1,0 +1,97 @@
+Usa la skill `textos-matematicos` para redactar el resultado.
+
+Tu tarea es transformar una sección de un libro de AWS/ML en unas notas que contengan **exclusivamente el contenido matemático, estadístico y algorítmico independiente de AWS**.
+
+## Restricción temática principal
+
+Elimina todo contenido cuyo propósito sea explicar AWS, cloud computing, infraestructura o la operación de servicios.
+
+Descarta, entre otros:
+
+* configuración y uso de servicios de AWS;
+* SageMaker como plataforma o servicio;
+* S3, EBS, EFS, FSx y demás almacenamiento;
+* IAM, roles, políticas y permisos;
+* VPC, subredes, endpoints y networking;
+* EC2, tipos de instancia y capacidad de cómputo;
+* ECR, ECS, EKS y despliegue de contenedores;
+* CloudWatch y observabilidad;
+* AWS CLI, boto3, SDKs y APIs de AWS;
+* costos, cuotas, disponibilidad, escalabilidad y arquitectura operacional;
+* formatos de configuración específicos de AWS;
+* procedimientos de entrenamiento, inferencia o despliegue que sean específicos de SageMaker u otro servicio.
+
+No expliques estos temas ni siquiera de forma introductoria.
+
+## Qué debes conservar
+
+Conserva únicamente conceptos que tengan existencia independiente de AWS, por ejemplo:
+
+* modelos estadísticos;
+* algoritmos de machine learning;
+* funciones de pérdida;
+* métricas;
+* optimización;
+* regularización;
+* transformaciones de variables;
+* métodos de reducción de dimensionalidad;
+* codificación de características;
+* métodos de imputación;
+* teoría de la información;
+* probabilidad y estadística;
+* álgebra lineal relevante;
+* propiedades matemáticas de algoritmos;
+* criterios de evaluación;
+* métodos numéricos.
+
+Aplica como criterio general:
+
+> Si AWS desapareciera, pero el concepto seguiría siendo objeto de estudio en estadística, matemáticas, optimización o machine learning, consérvalo. Si depende de AWS, elimínalo.
+
+## Transformación del contenido
+
+No conserves necesariamente la estructura del texto original si esta está organizada alrededor de servicios de AWS.
+
+Reorganiza el contenido alrededor de los conceptos matemáticos que sobrevivan al filtrado.
+
+Si AWS aparece únicamente como envoltorio de un concepto matemático, elimina el envoltorio.
+
+Por ejemplo:
+
+* `SageMaker Linear Learner permite regularización L1`
+  → desarrolla únicamente la regularización \(L_1\) y su papel en el modelo correspondiente.
+
+* `SageMaker evalúa el modelo usando RMSE`
+  → conserva únicamente RMSE y su interpretación estadística.
+
+* `El algoritmo X de SageMaker utiliza PCA`
+  → conserva únicamente PCA y la matemática necesaria para entenderlo.
+
+* `El training job usa una instancia ml.m5.xlarge y guarda los artefactos en S3`
+  → elimina el fragmento completo.
+
+## No inventar contenido matemático
+
+No fuerces una interpretación matemática de una sección puramente infraestructural.
+
+Si una sección no contiene contenido matemático, estadístico o algorítmico sustancial, indícalo brevemente como:
+
+> **Sección descartada:** el contenido es exclusivamente de AWS o infraestructura y no contiene material matemático independiente relevante.
+
+## Contexto del lector
+
+El lector es un profesional de estadística/ciencia de datos con formación matemática.
+
+Por tanto, no es necesario explicar conceptos elementales de estadística, probabilidad, cálculo o álgebra lineal salvo que `textos-matematicos` determine que son necesarios como prerrequisitos para desarrollar correctamente un concepto posterior.
+
+## Prioridad
+
+La prioridad absoluta es obtener un texto que pueda leerse como unas notas de matemáticas, estadística o machine learning **sin necesidad de saber qué es AWS**.
+
+AWS debe desaparecer del resultado salvo alguna mención excepcional cuando sea imprescindible para explicar de dónde proviene el concepto que se está extrayendo.
+
+## Formato
+
+* Idioma: español.
+* Salida: `.md`.
+* La redacción, formalización, definiciones, demostraciones, derivaciones y organización matemática quedan a cargo de la skill `textos-matematicos`.
