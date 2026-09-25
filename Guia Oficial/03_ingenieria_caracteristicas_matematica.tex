@@ -8,8 +8,6 @@
 \usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
 \setlength{\emergencystretch}{2em}
-\usepackage{amsmath,amssymb}
-\usepackage[most]{tcolorbox}
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
 \newtheorem{teorema}{Teorema}[section]
@@ -531,8 +529,6 @@ y la \emph{asimetría por cuantiles} $B_u(X)=\dfrac{Q(1-u)+Q(u)-2Q(\tfrac12)}{Q(
 
 \noindent $R_u$ compara la distancia de la mediana al cuantil superior con la distancia al cuantil inferior: $R_u>1$ indica cola derecha más larga, $R_u=1$ simetría en esos cuantiles. Dividiendo numerador y denominador de $B_u$ entre $Q(\frac12)-Q(u)$ se obtiene $B_u=(R_u-1)/(R_u+1)$, que es función creciente de $R_u$ (su derivada es $2/(R_u+1)^2>0$) y toma valores en $(-1,1)$; con $u=\frac14$, $B_u$ es el coeficiente de Bowley. Ambas medidas son invariantes a transformaciones afines crecientes, lo que concuerda con la Proposición~\ref{prop:forma}.
 
-
-
 \begin{lema}[Los cuantiles se transportan]\label{lem:cuantiles}
 \noindent Sea $I$ un intervalo abierto con $\Prob(X\in I)=1$ y $g:I\to\R$ continua y estrictamente creciente. Entonces $Q_{g(X)}(u)=g(Q_X(u))$ para todo $u\in(0,1)$.
 \end{lema}
@@ -821,98 +817,6 @@ Para una única categoría $c$ ($x=e_c$), $\phi(e_c)=\xi(c)\,e_{h(c)}$. Dos cate
 
 \noindent En la implementación, $h$ y $\xi$ son funciones hash deterministas (\texttt{FeatureHasher} usa MurmurHash3: el índice sale del valor absoluto del hash módulo $m$ y el signo, del signo de ese mismo valor). Para analizarlas se modelan como aleatorias: $h$ uniforme e independiente por pares, y los $\xi(i)$ independientes, con $\Prob(\xi(i)=\pm1)=\frac12$ e independientes de $h$. Nada se ajusta con los datos, y por eso no hay diccionario que guardar ni riesgo de fuga en esta etapa.
 
-\begin{tcolorbox}[
-	enhanced,
-	breakable,
-	colback=blue!4,
-	colframe=blue!60!black,
-	boxrule=0.8pt,
-	arc=2mm,
-	left=2mm,
-	right=2mm,
-	top=1.5mm,
-	bottom=1.5mm,
-	title={¿Por qué el \emph{feature hashing} tiene una forma tan fea?},
-	fonttitle=\bfseries,
-	coltitle=white
-	]
-	
-	La expresión
-	\[
-	\phi_j(x)=\sum_{i:\,h(i)=j}\xi(i)x_i
-	\]
-	parece más complicada de lo que realmente es. La idea básica empieza con una sola categoría \(i\in\mathcal U\). La función hash
-	\[
-	h:\mathcal U\to\{1,\dots,m\}
-	\]
-	decide en qué coordenada del nuevo vector se almacenará esa categoría. Así, si \(e_i\) representa únicamente a la categoría \(i\), el hashing con signo la transforma como
-	\[
-	\phi(e_i)=\xi(i)e_{h(i)},
-	\]
-	donde \(\xi(i)\in\{-1,+1\}\). El valor \(h(i)\) no se usa como magnitud numérica de la característica: solo indica la coordenada donde debe colocarse.
-	
-	Para un vector general,
-	\[
-	x=\sum_i x_i e_i,
-	\]
-	se extiende la transformación linealmente:
-	\[
-	\phi(x)
-	=
-	\sum_i x_i\phi(e_i)
-	=
-	\sum_i x_i\xi(i)e_{h(i)}.
-	\]
-	Aquí aparece la suma: una observación puede contener muchas características activas y todas deben contribuir al vector hasheado.
-	
-	Además, distintas categorías pueden colisionar. Si, por ejemplo,
-	\[
-	h(a)=h(c)=h(d)=2,
-	\]
-	entonces las tres contribuciones terminan en la misma coordenada:
-	\[
-	\phi_2(x)
-	=
-	\xi(a)x_a+\xi(c)x_c+\xi(d)x_d.
-	\]
-	En general, la coordenada \(j\) recoge precisamente las características cuyo hash vale \(j\):
-	\[
-	\boxed{
-		\phi_j(x)
-		=
-		\sum_{i:\,h(i)=j}\xi(i)x_i.
-	}
-	\]
-	
-	Por tanto,
-	\[
-	h(i)
-	\]
-	decide \emph{dónde} cae la característica,
-	\[
-	\xi(i)
-	\]
-	decide con qué signo contribuye,
-	\[
-	x_i
-	\]
-	es su valor original, y la suma acumula todas las características que colisionaron en la misma coordenada.
-	
-	Equivalentemente, el procedimiento es una transformación lineal
-	\[
-	\phi(x)=Ax,
-	\]
-	donde cada columna de \(A\) contiene un único elemento no nulo, \(+1\) o \(-1\), situado en la fila indicada por \(h(i)\).
-	
-	En resumen,
-	\[
-	\boxed{
-		\text{``para la coordenada \(j\), suma lo que el hash aventó ahí.''}
-	}
-	\]
-	La notación parece un desmadre; la operación subyacente es bastante simple.
-\end{tcolorbox}
-
 \begin{proposicion}[Colisiones]\label{prop:colisiones}
 \noindent Sean $K$ categorías distintas. (i) Si $K>m$, hay al menos una colisión (principio del palomar). (ii) Bajo el modelo aleatorio, dos categorías fijas colisionan con probabilidad $1/m$, el número esperado de pares que colisionan es $\binom K2/m$ y, si $h$ es además totalmente independiente, la probabilidad de no tener colisiones es $\prod_{i=1}^{K-1}(1-i/m)\le\exp\!\big(-\tfrac{K(K-1)}{2m}\big)$.
 \end{proposicion}
@@ -1023,8 +927,23 @@ usando $1-\cos\alpha=2\sin^2(\alpha/2)$. Entonces $\norm{\psi(m)-\psi(m')}=2\abs
 \noindent Así, la fracción de varianza que un rezago explica linealmente es $\rho(k)^2$, y los rezagos útiles se identifican en el gráfico de autocorrelación. En el modelo más simple la estructura es explícita.
 
 \begin{ejemplo}[Proceso AR(1)]\label{ej:ar1}
-\noindent Sea $y_t=\phi y_{t-1}+\varepsilon_t$ con $\abs\phi<1$ y $\varepsilon_t$ i.i.d.\ de media $0$ y varianza $\sigma^2$, independientes del pasado $y_{t-1},y_{t-2},\dots$, y supongamos la solución estacionaria. Para $h\ge1$, $\gamma(h)=\Cov(\phi y_{t-1}+\varepsilon_t,\,y_{t-h})=\phi\gamma(h-1)+0$, porque $\varepsilon_t$ es independiente de $y_{t-h}$. Iterando, $\gamma(h)=\phi^h\gamma(0)$ y $\rho(h)=\phi^h$. De $\gamma(0)=\Var(\phi y_{t-1}+\varepsilon_t)=\phi^2\gamma(0)+\sigma^2$ se obtiene $\gamma(0)=\sigma^2/(1-\phi^2)$. El residuo de predecir con el primer rezago, $y_t-\phi y_{t-1}=\varepsilon_t$, es independiente de todo el pasado, así que ningún rezago adicional mejora el predictor lineal: aunque $\rho(2)=\phi^2\ne0$, la información del rezago $2$ ya está contenida en el rezago $1$. La autocorrelación \emph{parcial} es la herramienta que distingue esta situación.
+\noindent Sea $y_t=\phi y_{t-1}+\varepsilon_t$ con $\abs\phi<1$ y $\varepsilon_t$ i.i.d.\ de media $0$ y varianza $\sigma^2$, independientes del pasado $y_{t-1},y_{t-2},\dots$, y supongamos la solución estacionaria. Para $h\ge1$, $\gamma(h)=\Cov(\phi y_{t-1}+\varepsilon_t,\,y_{t-h})=\phi\gamma(h-1)+0$, porque $\varepsilon_t$ es independiente de $y_{t-h}$. Iterando, $\gamma(h)=\phi^h\gamma(0)$ y $\rho(h)=\phi^h$. De $\gamma(0)=\Var(\phi y_{t-1}+\varepsilon_t)=\phi^2\gamma(0)+\sigma^2$ se obtiene $\gamma(0)=\sigma^2/(1-\phi^2)$. Obsérvese que $\rho(2)=\phi^2\ne0$ si $\phi\ne0$: el rezago $2$ está correlacionado con $y_t$. La pregunta relevante para construir características es otra: si aporta algo \emph{una vez incluido} el rezago $1$.
 \end{ejemplo}
+
+\begin{definicion}[Autocorrelación parcial de orden $2$]\label{def:pacf}
+\noindent Sea $(y_t)$ estacionaria débil con media $0$ y tal que la matriz de covarianzas $\Gamma=\begin{psmallmatrix}\gamma(0)&\gamma(1)\\\gamma(1)&\gamma(0)\end{psmallmatrix}$ de $(y_{t-1},y_{t-2})$ es invertible. Sean $(a_1^*,a_2^*)$ los coeficientes que minimizan $\E[(y_t-a_1y_{t-1}-a_2y_{t-2})^2]$. La \emph{autocorrelación parcial de orden $2$} es $\alpha(2)=a_2^*$: el peso del rezago $2$ en el mejor predictor lineal que ya usa el rezago $1$.
+\end{definicion}
+
+\noindent La función a minimizar es una cuadrática en $(a_1,a_2)$ con matriz hessiana $2\Gamma$, definida positiva por ser una matriz de covarianzas invertible; su minimizador es único y está caracterizado por anular el gradiente, es decir, por las condiciones de ortogonalidad $\E[(y_t-a_1y_{t-1}-a_2y_{t-2})\,y_{t-k}]=0$ para $k=1,2$ (la derivada respecto de $a_k$ es $-2$ veces esa esperanza).
+
+\begin{proposicion}[El segundo rezago no aporta en un AR(1)]\label{prop:pacf-ar1}
+\noindent En el proceso AR(1) del Ejemplo~\ref{ej:ar1}, $(a_1^*,a_2^*)=(\phi,0)$; en particular $\alpha(2)=0$.
+\end{proposicion}
+\begin{proof}
+\noindent $\Gamma$ es invertible porque su determinante es $\gamma(0)^2-\gamma(1)^2=\gamma(0)^2(1-\phi^2)>0$, usando $\gamma(1)=\phi\gamma(0)$ y $\abs\phi<1$. Con $(a_1,a_2)=(\phi,0)$, el residuo es $y_t-\phi y_{t-1}=\varepsilon_t$, que es independiente de $y_{t-1}$ y de $y_{t-2}$ y tiene media $0$, así que $\E[\varepsilon_ty_{t-k}]=\E[\varepsilon_t]\E[y_{t-k}]=0$ para $k=1,2$. Se cumplen las condiciones de ortogonalidad, que caracterizan al minimizador único.
+\end{proof}
+
+\noindent Así, en un AR(1) la característica $y_{t-2}$ es redundante dada $y_{t-1}$, aunque su correlación con $y_t$ no sea nula: la autocorrelación simple no basta para decidir qué rezagos incluir, y la parcial sí. Es un caso particular del fenómeno de redundancia de la Sección~\ref{sec:redundancia}.
 
 \noindent \emph{Fuga en rezagos.} Un rezago mal alineado ($k=0$) usa el propio $y_t$ y produce un ajuste perfecto que no existe en producción. Lo mismo ocurre, de forma más sutil, con estadísticas calculadas en ventanas centradas o con toda la serie (una media global, una normalización con el máximo de toda la serie), porque incluyen valores posteriores a $t$ y violan la Definición~\ref{def:admisible}.
 
@@ -1047,44 +966,112 @@ usando $1-\cos\alpha=2\sin^2(\alpha/2)$. Entonces $\norm{\psi(m)-\psi(m')}=2\abs
 
 \section{Imágenes}\label{sec:imagenes}
 
-\noindent Una imagen en color de $H\times W$ píxeles es un tensor $I\in\{0,\dots,255\}^{H\times W\times3}$ (intensidades de $8$ bits por canal). Vista como vector de características, su dimensión es $3HW$: con $224\times224$ son $150\,528$ coordenadas, como calcula la guía. La maldición de la dimensionalidad (Sección~\ref{sec:seleccion}) y el hecho de que el significado de una imagen no cambia si el objeto se desplaza unos píxeles hacen que los píxeles crudos sean malas características para modelos genéricos. La historia de la visión por computadora es la de la búsqueda de mejores mapas $\phi$.
+\noindent Esta sección construye con precisión los objetos que la guía menciona de pasada (píxeles, normalización, bordes, redes convolucionales, vectores de características, cuadros delimitadores) y demuestra las propiedades en que se apoya cada técnica.
+
+\subsection{La imagen digital como objeto matemático}\label{sec:imagen-digital}
+
+\noindent \emph{Motivación.} Una fotografía es, físicamente, una función continua que asigna a cada punto de un rectángulo una intensidad de luz en varias bandas de color. Un sensor digital no puede registrar infinitos valores: mide la intensidad solo en una rejilla finita de posiciones (\emph{muestreo}) y redondea cada medición a uno de finitos niveles (\emph{cuantización}). El resultado es un objeto finito, y es ese objeto, no la escena, el que llega al algoritmo.
+
+\begin{definicion}[Imagen digital, píxel, canal]\label{def:imagen}
+\noindent Sean $H,W,C$ enteros positivos y $b$ un entero positivo (la \emph{profundidad} en bits). Sea $\Omega=\{0,\dots,H-1\}\times\{0,\dots,W-1\}$ la \emph{rejilla}. Una \emph{imagen digital} de tamaño $H\times W$ con $C$ canales es una función
+\[
+I:\Omega\times\{1,\dots,C\}\to\{0,1,\dots,2^b-1\}.
+\]
+Un \emph{píxel} es un punto $(u,v)\in\Omega$ ($u$ es la fila, $v$ la columna), y su valor es el vector de sus $C$ intensidades, $\big(I(u,v,c)\big)_{c=1}^{C}$. El \emph{canal} $c$ es la función $(u,v)\mapsto I(u,v,c)$ definida en $\Omega$. Cuando se permiten valores reales (tras normalizar o dentro de una red), $I$ toma valores en $\R$, y el conjunto de tales imágenes es el espacio vectorial $\R^{H\times W\times C}$ con las operaciones punto a punto.
+\end{definicion}
+
+\noindent \emph{Alcance.} Con $C=1$ se tiene una imagen en escala de grises; con $C=3$ y canales rojo, verde y azul, una imagen RGB; las imágenes multiespectrales de drones del documento original tienen $C>3$. Con $b=8$, los valores van de $0$ a $255$, el rango que cita la guía. Un \emph{tensor} de orden $3$ es simplemente un elemento de $\R^{H\times W\times C}$, es decir, un arreglo con tres índices. La definición fija $H$, $W$ y $C$: dos imágenes de tamaños distintos pertenecen a espacios distintos y no pueden compararse ni entrar al mismo modelo sin antes llevarlas a un tamaño común (Sección~\ref{sec:resolucion}).
+
+\medskip
+
+\noindent Para usar una imagen en un modelo tabular hay que escribirla como vector de $\R^p$. La forma estándar es recorrer los índices en un orden fijo.
+
+\begin{proposicion}[Vectorización]\label{prop:vec}
+\noindent La aplicación $\mathrm{vec}:\R^{H\times W\times C}\to\R^{HWC}$ definida por $\mathrm{vec}(I)_{k}=I(u,v,c+1)$ con $k=(uW+v)C+c$, para $u\in\{0,\dots,H-1\}$, $v\in\{0,\dots,W-1\}$, $c\in\{0,\dots,C-1\}$, es una biyección lineal que conserva la norma: $\norm{\mathrm{vec}(I)}^2=\sum_{u,v,c}I(u,v,c)^2$.
+\end{proposicion}
+\begin{proof}
+\noindent Basta ver que $(u,v,c)\mapsto k=(uW+v)C+c$ es una biyección de $\{0,\dots,H-1\}\times\{0,\dots,W-1\}\times\{0,\dots,C-1\}$ sobre $\{0,\dots,HWC-1\}$. Dado $k$ en ese rango, el algoritmo de la división da de forma única $c=k\bmod C$ y $q=\lfloor k/C\rfloor\in\{0,\dots,HW-1\}$; de nuevo de forma única, $v=q\bmod W$ y $u=\lfloor q/W\rfloor\in\{0,\dots,H-1\}$. Recíprocamente, esos $(u,v,c)$ cumplen $(uW+v)C+c=qC+c=k$. Así, $\mathrm{vec}$ solo reordena coordenadas: es lineal, y la suma de cuadrados no cambia al reordenar sumandos.
+\end{proof}
+
+\noindent La dimensión es $p=HWC$: con $224\times224\times3$ son $150\,528$ coordenadas. El resultado siguiente muestra que, además de ser muchas, estas coordenadas tienen una geometría inadecuada para comparar imágenes. Para una imagen de un canal y $(s,t)\in\mathbb{Z}^2$, la \emph{traslación circular} es $(\tau_{s,t}I)(u,v)=I\big((u-s)\bmod H,\,(v-t)\bmod W\big)$: desplaza el contenido $s$ filas hacia abajo y $t$ columnas hacia la derecha, y lo que sale por un borde reaparece por el opuesto.
+
+\begin{proposicion}[La distancia entre píxeles no percibe desplazamientos]\label{prop:dist-pixeles}
+\noindent Sea $\delta\in\R^{H\times W}$ la imagen de un canal que vale $1$ en el píxel $(0,0)$ y $0$ en los demás. Para toda traslación $(s,t)$ con $(s\bmod H,t\bmod W)\ne(0,0)$, se tiene $\norm{\delta-\tau_{s,t}\delta}^2=2$.
+\end{proposicion}
+\begin{proof}
+\noindent $\tau_{s,t}\delta$ vale $1$ solo en el píxel $(s\bmod H,t\bmod W)$, que es distinto de $(0,0)$ por hipótesis. La diferencia $\delta-\tau_{s,t}\delta$ vale $1$ en $(0,0)$, $-1$ en ese otro píxel y $0$ en los demás, así que su norma al cuadrado es $1+1=2$.
+\end{proof}
+
+\noindent Un punto brillante desplazado un píxel está exactamente igual de lejos del original que uno desplazado al extremo opuesto de la imagen. La distancia euclídea entre vectores de píxeles, que usan $k$ vecinos o $k$-medias, no tiene noción de ``el mismo objeto un poco movido''. Las características de las subsecciones siguientes se construyen para remediarlo.
 
 \subsection{Normalización de píxeles}\label{sec:pixeles}
 
-\noindent La normalización habitual $I\mapsto I/255$ es un escalado MinMax con rango \emph{conocido de antemano} $[0,255]$, no estimado: no es una transformación ajustada en el sentido de la Definición~\ref{def:ajustada}, no depende de los datos, no tiene fuga y no sufre el problema de atípicos de la Proposición~\ref{prop:escaladores}(ii), porque ningún píxel puede superar $255$. La estandarización por canal, $(I_{\cdot\cdot c}/255-\mu_c)/\sigma_c$, sí usa parámetros; cuando se usa una red preentrenada, $\mu_c$ y $\sigma_c$ deben ser los del conjunto con que se preentrenó, para que las entradas estén en la escala que la red espera (la misma lógica que la Definición~\ref{def:fuga}: los parámetros de la transformación los fija el entrenamiento).
+\begin{definicion}[Normalización y estandarización por canal]\label{def:norm-pix}
+\noindent La \emph{normalización a $[0,1]$} de una imagen de profundidad $b$ es $I\mapsto I/(2^b-1)$, aplicada a cada valor. La \emph{estandarización por canal} con parámetros $\mu_c\in\R$ y $\sigma_c>0$ es $I(u,v,c)\mapsto\big(I(u,v,c)/(2^b-1)-\mu_c\big)/\sigma_c$.
+\end{definicion}
+
+\begin{proposicion}[Propiedades de la normalización de píxeles]\label{prop:norm-pix}
+\noindent (i) La normalización a $[0,1]$ es el escalador MinMax de la Definición~\ref{def:afin} con $c=0$ y $s=2^b-1$ fijados de antemano; su imagen está contenida en $[0,1]$ para toda imagen posible, y no es una transformación ajustada (no depende de los datos), por lo que no puede producir fuga en el sentido de la Definición~\ref{def:fuga}. (ii) Si $\mu_c$ y $\sigma_c$ son la media y la desviación estándar (poblacional) de los valores normalizados del canal $c$ sobre todos los píxeles de $\Dtr$, el canal $c$ estandarizado tiene media $0$ y desviación estándar $1$ sobre $\Dtr$. (iii) Si una red se entrenó con los parámetros $(\mu_c,\sigma_c)$ y se le aplican otros $(\mu'_c,\sigma'_c)$, la entrada que recibe es la imagen correcta sometida a la transformación afín $x\mapsto\frac{\sigma_c}{\sigma'_c}x+\frac{\mu_c-\mu'_c}{\sigma'_c}$ en cada canal.
+\end{proposicion}
+\begin{proof}
+\noindent (i) Como $0\le I(u,v,c)\le2^b-1$, se tiene $0\le I(u,v,c)/(2^b-1)\le1$; los parámetros $c=0$ y $s=2^b-1$ son constantes. (ii) Es la Proposición~\ref{prop:escaladores}(i) aplicada a la lista de todos los valores normalizados del canal $c$ en $\Dtr$. (iii) Sea $x$ un valor normalizado del canal $c$ y $z=(x-\mu_c)/\sigma_c$ la entrada esperada por la red. Entonces $x=\sigma_cz+\mu_c$, y la entrada recibida es $(x-\mu'_c)/\sigma'_c=\frac{\sigma_c}{\sigma'_c}z+\frac{\mu_c-\mu'_c}{\sigma'_c}$.
+\end{proof}
+
+\noindent La parte (i) explica por qué la normalización de imágenes no tiene la debilidad de MinMax frente a atípicos (Proposición~\ref{prop:escaladores}(ii)): los extremos no se estiman, se conocen. La parte (iii) es la razón de usar, con un modelo preentrenado, las medias y desviaciones del conjunto con que se preentrenó y no las de los datos propios: cualquier otra elección altera sistemáticamente las entradas de la red.
 
 \subsection{Características diseñadas a mano: bordes}\label{sec:bordes}
 
-\noindent Antes de las redes neuronales, las características se diseñaban: detectores de bordes, histogramas de color y de gradientes, o indicadores de partes (el \texttt{windshield\_present} de la guía). El ejemplo más simple muestra la idea matemática. Un borde es un lugar donde la intensidad cambia rápido, es decir, donde el gradiente de la imagen, vista como función $f(u,v)$ muestreada, es grande. La derivada se aproxima con diferencias.
+\noindent \emph{Motivación.} Antes de las redes neuronales, la visión por computadora construía características explícitas con conocimiento del problema. Las más básicas son los bordes, porque el contorno de un objeto suele coincidir con un cambio brusco de intensidad. Formalmente, si la intensidad fuera una función derivable $f(u,v)$ en el plano, un borde sería un lugar donde la norma de su gradiente $\nabla f=(\partial_uf,\partial_vf)$ es grande. La imagen digital solo da valores en la rejilla, así que las derivadas deben aproximarse con diferencias.
 
-\begin{proposicion}[Diferencia central]\label{prop:dif-central}
-\noindent Si $f\in C^3$ en un entorno de $u$, entonces
+\begin{definicion}[Diferencia central]\label{def:dif-central}
+\noindent Para una función $f$ de una variable y $h>0$, la \emph{diferencia central} es $D_hf(u)=\dfrac{f(u+h)-f(u-h)}{2h}$.
+\end{definicion}
+
+\begin{proposicion}[Error de la diferencia central]\label{prop:dif-central}
+\noindent Si $f$ tiene tercera derivada continua en $[u-h,u+h]$, entonces
 \[
-\frac{f(u+h)-f(u-h)}{2h}=f'(u)+\frac{h^2}{12}\big(f'''(\xi_+)+f'''(\xi_-)\big)
+D_hf(u)=f'(u)+\frac{h^2}{12}\big(f'''(\xi_+)+f'''(\xi_-)\big)
 \]
-para ciertos $\xi_\pm$ entre $u-h$ y $u+h$; en particular, el error es $O(h^2)$.
+para ciertos $\xi_+\in(u,u+h)$ y $\xi_-\in(u-h,u)$. En particular, $\abs{D_hf(u)-f'(u)}\le\frac{h^2}{6}\max_{[u-h,u+h]}\abs{f'''}$, y $D_hf(u)=f'(u)$ exactamente si $f$ es un polinomio de grado a lo sumo $2$.
 \end{proposicion}
 \begin{proof}
-\noindent Por el teorema de Taylor con resto de Lagrange, $f(u\pm h)=f(u)\pm hf'(u)+\frac{h^2}2f''(u)\pm\frac{h^3}6f'''(\xi_\pm)$. Restando, los términos de orden $0$ y $2$ se cancelan: $f(u+h)-f(u-h)=2hf'(u)+\frac{h^3}{6}\big(f'''(\xi_+)+f'''(\xi_-)\big)$. Dividiendo entre $2h$ se obtiene la fórmula.
+\noindent Por el teorema de Taylor con resto de Lagrange, $f(u\pm h)=f(u)\pm hf'(u)+\frac{h^2}2f''(u)\pm\frac{h^3}6f'''(\xi_\pm)$. Restando, los términos de orden $0$ y $2$ se cancelan: $f(u+h)-f(u-h)=2hf'(u)+\frac{h^3}{6}\big(f'''(\xi_+)+f'''(\xi_-)\big)$. Dividiendo entre $2h$ se obtiene la fórmula. La cota se sigue de acotar cada $\abs{f'''(\xi_\pm)}$ por el máximo. Si $f$ es un polinomio de grado $\le2$, $f'''\equiv0$ y el error es nulo.
 \end{proof}
 
-\noindent El filtro de Sobel (1968) aplica esta diferencia en una dirección y promedia en la perpendicular para reducir ruido. Su núcleo es el producto exterior
+\noindent La diferencia \emph{hacia adelante} $(f(u+h)-f(u))/h$ tiene error de orden $h$ (el término $\frac h2f''$ no se cancela); la central es preferible porque su error es de orden $h^2$. En una imagen $h=1$ (un píxel), y el error depende de la suavidad de la intensidad. El problema práctico es el ruido: una diferencia amplifica las fluctuaciones aleatorias de cada píxel. Sobel (1968) combinó la diferencia en una dirección con un promedio en la perpendicular.
+
+\begin{definicion}[Filtro de Sobel]\label{def:sobel}
+\noindent Sea $I$ una imagen de un canal. En un píxel interior ($1\le u\le H-2$, $1\le v\le W-2$), las respuestas de Sobel horizontal y vertical son
 \[
-S_u=\begin{pmatrix}1\\2\\1\end{pmatrix}\begin{pmatrix}-1&0&1\end{pmatrix}=\begin{pmatrix}-1&0&1\\-2&0&2\\-1&0&1\end{pmatrix},
+G_v(u,v)=\sum_{a=-1}^{1}\sum_{b=-1}^{1}s(a)\,d(b)\,I(u+a,v+b),\qquad G_u(u,v)=\sum_{a=-1}^{1}\sum_{b=-1}^{1}d(a)\,s(b)\,I(u+a,v+b),
 \]
-es decir, una diferencia central (sin el factor $\frac1{2h}$) en la dirección horizontal compuesta con un suavizado $(1,2,1)$ en la vertical. La magnitud $\sqrt{(S_u*I)^2+(S_v*I)^2}$ es una imagen de bordes. El inconveniente de este enfoque es que cada característica útil para un problema nuevo (parabrisas, faros) debe diseñarse a mano.
-
-\subsection{Convolución y redes convolucionales}\label{sec:cnn}
-
-\noindent \emph{Motivación.} Una red totalmente conectada que reciba los $150\,528$ píxeles y tenga una primera capa de $1000$ neuronas necesita $150\,528\times1000+1000\approx1.5\times10^8$ parámetros, y no sabe que un gato desplazado sigue siendo un gato: cada posición tiene sus propios pesos. LeCun y colaboradores (1989) resolvieron ambos problemas imponiendo que la primera capa aplique el mismo filtro pequeño en todas las posiciones, como el filtro de Sobel, pero con los pesos aprendidos.
-
-\begin{definicion}[Convolución discreta]\label{def:conv}
-\noindent Sea $I:\mathbb Z_H\times\mathbb Z_W\to\R$ una imagen de un canal con índices módulo $H$ y $W$ (relleno circular) y $k$ un núcleo con soporte en $\{-r,\dots,r\}^2$. La convolución (en la convención de las redes neuronales, que no invierte el núcleo) es
-\[
-(k*I)(u,v)=\sum_{a=-r}^r\sum_{b=-r}^rk(a,b)\,I(u+a,v+b).
-\]
-El operador de traslación es $(\tau_{s,t}I)(u,v)=I(u-s,v-t)$.
+con $s(-1)=s(1)=1$, $s(0)=2$ (suavizado) y $d(-1)=-1$, $d(0)=0$, $d(1)=1$ (diferencia). La \emph{magnitud del gradiente} es $G(u,v)=\sqrt{G_u(u,v)^2+G_v(u,v)^2}$. En forma matricial, el núcleo de $G_v$ es el producto exterior $s\,d^\top=\begin{psmallmatrix}-1&0&1\\-2&0&2\\-1&0&1\end{psmallmatrix}$.
 \end{definicion}
+
+\noindent La restricción a píxeles interiores evita tener que decidir qué valor usar fuera de la rejilla; esa decisión (el relleno) se trata en la Definición~\ref{def:relleno}.
+
+\begin{proposicion}[Qué calcula el filtro de Sobel]\label{prop:sobel}
+\noindent (i) Si $I(u,v)=\alpha v+\beta u+\gamma$ en un entorno $3\times3$ del píxel, entonces $G_v(u,v)=8\alpha$ y $G_u(u,v)=8\beta$: el filtro dividido entre $8$ recupera exactamente el gradiente de una intensidad afín. (ii) Si $I(u,v)=\mu+\varepsilon(u,v)$ con $\varepsilon(u,v)$ incorrelacionados de media $0$ y varianza $\sigma^2$, el promedio ponderado $\frac14\sum_as(a)I(u+a,v)$ tiene media $\mu$ y varianza $\frac38\sigma^2$.
+\end{proposicion}
+\begin{proof}
+\noindent (i) Separando las sumas, $G_v(u,v)=\sum_as(a)\sum_bd(b)\big(\alpha(v+b)+\beta(u+a)+\gamma\big)$. Como $\sum_bd(b)=0$, los términos que no dependen de $b$ desaparecen de la suma interior, que vale $\alpha\sum_bd(b)\,b=\alpha(1+1)=2\alpha$. Queda $G_v=2\alpha\sum_as(a)=2\alpha\cdot4=8\alpha$. El cálculo para $G_u$ es el mismo con los papeles de $u$ y $v$ intercambiados. (ii) Los pesos $\frac14(1,2,1)$ suman $1$, así que la media es $\mu$; por incorrelación, la varianza es $\frac1{16}(1^2+2^2+1^2)\sigma^2=\frac6{16}\sigma^2$.
+\end{proof}
+
+\noindent La parte (i) justifica el diseño (la diferencia mide la pendiente sin sesgo en intensidades afines) y la parte (ii) el suavizado (reduce el ruido a menos de la mitad sin cambiar la media). La guía menciona otra clase de características manuales: indicadores como \texttt{windshield\_present}. Formalmente, son funciones $\phi:\R^{H\times W\times C}\to\{0,1\}$ que valen $1$ si un detector encuentra la parte buscada. Su limitación es de fondo: cada problema nuevo exige diseñar sus propios detectores, y el diseño requiere conocimiento del dominio. Las redes convolucionales automatizan ese diseño.
+
+\subsection{Convolución}\label{sec:conv}
+
+\noindent \emph{Motivación.} El filtro de Sobel aplica los mismos $9$ pesos en cada píxel. Esa idea (un filtro pequeño que se desliza) tiene dos virtudes: usa pocos parámetros y trata igual a todas las posiciones. El resultado principal de esta subsección (Teorema~\ref{teo:caract-conv}) muestra que la segunda virtud no es accidental: las operaciones lineales que tratan igual a todas las posiciones son \emph{exactamente} las convoluciones. En esta subsección los índices de fila y columna se toman módulo $H$ y $W$, es decir, $\Omega$ se identifica con $\mathbb{Z}_H\times\mathbb{Z}_W$.
+
+\begin{definicion}[Convolución circular]\label{def:conv}
+\noindent Sea $I\in\R^{H\times W}$ una imagen de un canal y $k:\mathbb Z_H\times\mathbb Z_W\to\R$ un \emph{núcleo}. La convolución (en la convención de las redes neuronales, que no invierte el núcleo) es
+\[
+(k*I)(u,v)=\sum_{(a,b)\in\mathbb Z_H\times\mathbb Z_W}k(a,b)\,I(u+a,v+b).
+\]
+El núcleo tiene \emph{radio} $r$ si $k(a,b)=0$ salvo cuando $a,b\in\{-r,\dots,r\}$ (módulo $H$ y $W$); entonces solo intervienen $(2r+1)^2$ pesos. El operador de traslación es el $\tau_{s,t}$ de la Proposición~\ref{prop:dist-pixeles}.
+\end{definicion}
+
+\noindent La suma sobre todo $\mathbb Z_H\times\mathbb Z_W$ incluye como caso particular los núcleos pequeños ($r=1$ da los núcleos $3\times3$, como el de Sobel). La convolución es lineal en $I$ para $k$ fijo, porque cada valor de salida es una combinación lineal de valores de entrada con coeficientes que no dependen de $I$.
 
 \begin{teorema}[Equivariancia por traslaciones]\label{teo:equiv}
 \noindent Para todo núcleo $k$ y toda traslación, $k*(\tau_{s,t}I)=\tau_{s,t}(k*I)$.
@@ -1094,122 +1081,345 @@ El operador de traslación es $(\tau_{s,t}I)(u,v)=I(u-s,v-t)$.
 \[
 \big(k*(\tau_{s,t}I)\big)(u,v)=\sum_{a,b}k(a,b)\,I(u+a-s,v+b-t)=(k*I)(u-s,v-t)=\big(\tau_{s,t}(k*I)\big)(u,v),
 \]
-donde la segunda igualdad es la definición de $(k*I)$ evaluada en $(u-s,v-t)$.
+donde la segunda igualdad es la definición de $k*I$ evaluada en $(u-s,v-t)$.
 \end{proof}
 
-\begin{corolario}[Invariancia tras promedio global]\label{cor:invariancia}
-\noindent Sea $\Phi(I)=\frac1{HW}\sum_{u,v}\sigma\big((k*I)(u,v)\big)$ con $\sigma:\R\to\R$ cualquier función (una activación). Entonces $\Phi(\tau_{s,t}I)=\Phi(I)$.
-\end{corolario}
+\begin{teorema}[Caracterización de la convolución]\label{teo:caract-conv}
+\noindent Sea $L:\R^{H\times W}\to\R^{H\times W}$ lineal. Entonces $L$ conmuta con todas las traslaciones ($L\tau_{s,t}=\tau_{s,t}L$ para todo $(s,t)$) si y solo si existe un núcleo $k$ tal que $LI=k*I$ para toda $I$.
+\end{teorema}
 \begin{proof}
-\noindent Por el Teorema~\ref{teo:equiv}, $\sigma\big((k*\tau_{s,t}I)(u,v)\big)=\sigma\big((k*I)(u-s,v-t)\big)$. Al sumar sobre todos los $(u,v)\in\mathbb Z_H\times\mathbb Z_W$, el cambio de índices $(u,v)\mapsto(u-s,v-t)$ es una biyección del grupo cíclico, así que la suma no cambia.
+\noindent Si $L$ es una convolución, conmuta con las traslaciones por el Teorema~\ref{teo:equiv}. Recíprocamente, sea $\delta$ la imagen de la Proposición~\ref{prop:dist-pixeles} y $g=L\delta$. La imagen $\tau_{s,t}\delta$ vale $1$ en $(s,t)$ y $0$ en el resto, así que toda imagen se escribe como $I=\sum_{(s,t)}I(s,t)\,\tau_{s,t}\delta$. Por linealidad y conmutación,
+\[
+LI=\sum_{(s,t)}I(s,t)\,L\tau_{s,t}\delta=\sum_{(s,t)}I(s,t)\,\tau_{s,t}g,\quad\text{es decir,}\quad (LI)(u,v)=\sum_{(s,t)}I(s,t)\,g(u-s,v-t).
+\]
+Definiendo $k(a,b)=g(-a,-b)$ y cambiando el índice de suma a $(a,b)=(s-u,t-v)$, que recorre $\mathbb Z_H\times\mathbb Z_W$ cuando $(s,t)$ lo hace, se obtiene $(LI)(u,v)=\sum_{(a,b)}k(a,b)\,I(u+a,v+b)=(k*I)(u,v)$.
 \end{proof}
 
-\noindent La convolución también resuelve el problema de parámetros: una capa con núcleos $3\times3$ de $3$ canales de entrada a $64$ de salida tiene $3\cdot3\cdot3\cdot64+64=1792$ parámetros, independientemente del tamaño de la imagen. Una red convolucional compone capas de convolución, activaciones no lineales y reducciones espaciales (\emph{pooling}); por el Teorema~\ref{teo:equiv} cada capa convolutiva es equivariante, y un promedio global al final produce, como en el Corolario~\ref{cor:invariancia}, características invariantes a traslaciones (exactamente, con relleno circular y sin reducciones intermedias; aproximadamente, en las arquitecturas reales).
+\noindent Una aplicación lineal general de $\R^{H\times W}$ en sí mismo tiene $(HW)^2$ parámetros; el teorema dice que exigir que trate igual todas las posiciones los reduce a los $HW$ valores de $k$, y exigir además que cada salida dependa solo de un entorno (radio $r$) los reduce a $(2r+1)^2$. Traslación y localidad son las dos hipótesis que definen una capa convolucional.
 
 \medskip
 
-\noindent \emph{Las características que extrae la red.} Si $N=g\circ\Phi$ es una red entrenada para clasificar, con $g$ la última capa (lineal seguida de softmax) y $\Phi$ todo lo anterior, el vector $\Phi(I)\in\R^d$ (con $d$ del orden de $10^2$ a $10^3$) es el \emph{vector de características} o \emph{embedding} de la imagen. El entrenamiento obligó a que las clases fueran separables linealmente en ese espacio, porque $g$ es lineal; por eso $\Phi(I)$ suele servir como entrada tabular para otros problemas (\emph{aprendizaje por transferencia}): se ajusta solo un modelo sencillo sobre $\Phi(I)$ con pocos datos etiquetados. Es lo que la guía describe con los modelos preentrenados de SageMaker JumpStart. Frente al diseño manual (Sobel, indicadores de partes), las características aprendidas no requieren conocimiento del dominio para cada problema, pero no son interpretables y exigen una red preentrenada en imágenes parecidas.
+\noindent En la práctica la rejilla no es circular, y hay que decidir qué valores usar fuera de ella.
+
+\begin{definicion}[Relleno y paso]\label{def:relleno}
+\noindent El \emph{relleno circular} usa los índices módulo $H$ y $W$ (Definición~\ref{def:conv}); el \emph{relleno con ceros} define $I(u,v)=0$ fuera de $\Omega$. Una convolución con \emph{paso} $\varsigma\in\{1,2,\dots\}$ conserva solo las salidas en posiciones $(\varsigma u,\varsigma v)$.
+\end{definicion}
+
+\begin{ejemplo}[Relleno con ceros y paso rompen la equivariancia]\label{ej:rompe}
+\noindent Se usan imágenes de una fila y la traslación circular $(\tau x)(v)=x(v-1\bmod W)$. (a) Con $W=3$, relleno con ceros y núcleo $k(-1)=1$, $k(0)=k(1)=0$, se tiene $(k*x)(v)=x(v-1)$ con $x(-1)=0$. Para $x=(0,0,1)$: $k*x=(0,0,0)$, luego $\tau(k*x)=(0,0,0)$; pero $\tau x=(1,0,0)$ y $k*\tau x=(0,1,0)$. (b) Con $W=4$ y paso $2$ sin filtrar, el submuestreo es $S(x)=(x(0),x(2))$. Para $x=(1,0,0,0)$, $S(x)=(1,0)$ y $S(\tau x)=S(0,1,0,0)=(0,0)$, que no es traslación de $(1,0)$ por ningún desplazamiento, porque tiene distinta suma.
+\end{ejemplo}
+
+\noindent Por eso la equivariancia del Teorema~\ref{teo:equiv} es exacta solo con relleno circular y paso $1$; en las redes reales es aproximada, con errores concentrados en los bordes y en las capas con paso.
+
+\subsection{Redes convolucionales y vectores de características}\label{sec:cnn}
+
+\noindent \emph{Motivación.} Un detector de bordes es una convolución fija. LeCun y colaboradores (1989) propusieron aprender los núcleos a partir de datos etiquetados, apilando varias capas para que las primeras detecten patrones simples (bordes) y las siguientes combinaciones de ellos. Para definir estas redes se necesitan cuatro piezas: capa convolucional, activación, reducción espacial y capa de clasificación.
+
+\begin{definicion}[Capa convolucional]\label{def:capa-conv}
+\noindent Una \emph{capa convolucional} de radio $r$ con $C_{\mathrm{in}}$ canales de entrada y $C_{\mathrm{out}}$ de salida tiene parámetros $K(a,b,c,c')$, con $a,b\in\{-r,\dots,r\}$, $c\le C_{\mathrm{in}}$, $c'\le C_{\mathrm{out}}$, y sesgos $\beta_{c'}$. Transforma $I\in\R^{H\times W\times C_{\mathrm{in}}}$ en
+\[
+L(I)(u,v,c')=\beta_{c'}+\sum_{c=1}^{C_{\mathrm{in}}}\sum_{a,b=-r}^{r}K(a,b,c,c')\,I(u+a,v+b,c).
+\]
+\end{definicion}
+
+\noindent Cada canal de salida suma las convoluciones de todos los canales de entrada con núcleos propios, más una constante. Con $C_{\mathrm{in}}=C_{\mathrm{out}}=1$ y $\beta=0$ es la Definición~\ref{def:conv}.
+
+\begin{proposicion}[Número de parámetros]\label{prop:param-conv}
+\noindent Una capa convolucional tiene $(2r+1)^2C_{\mathrm{in}}C_{\mathrm{out}}+C_{\mathrm{out}}$ parámetros, cualquiera que sea $H\times W$. Una capa \emph{densa} $x\mapsto Ax+\beta$ de $\R^p$ en $\R^m$ tiene $pm+m$.
+\end{proposicion}
+\begin{proof}
+\noindent $K$ tiene un valor por cada combinación de $a$ y $b$ ($2r+1$ valores cada uno), $c$ ($C_{\mathrm{in}}$ valores) y $c'$ ($C_{\mathrm{out}}$ valores), y hay un sesgo por canal de salida. La matriz $A$ tiene $pm$ entradas y $\beta$ tiene $m$.
+\end{proof}
+
+\noindent Con $r=1$, $C_{\mathrm{in}}=3$ y $C_{\mathrm{out}}=64$: $9\cdot3\cdot64+64=1792$ parámetros. Una capa densa sobre los $150\,528$ valores de una imagen $224\times224\times3$ con $m=1000$ salidas tiene $150\,528\,000+1000\approx1.5\times10^8$.
+
+\begin{definicion}[Activación, reducción y red convolucional]\label{def:cnn}
+\noindent (i) Una \emph{activación} es una función $\sigma:\R\to\R$ aplicada a cada valor; la más usada es $\mathrm{ReLU}(x)=\max(0,x)$. (ii) La \emph{reducción por promedio} de $2\times2$ con paso $2$ lleva $I\in\R^{H\times W\times C}$ ($H,W$ pares) a $\R^{\frac H2\times\frac W2\times C}$ con $P(I)(u,v,c)=\frac14\sum_{a,b\in\{0,1\}}I(2u+a,2v+b,c)$; la \emph{reducción por máximo} reemplaza el promedio por el máximo. (iii) El \emph{promedio global} es $\mathrm{GAP}:\R^{H\times W\times C}\to\R^C$, $\mathrm{GAP}(I)_c=\frac1{HW}\sum_{(u,v)\in\Omega}I(u,v,c)$. (iv) Una \emph{red convolucional} es una composición $\Phi=\mathrm{GAP}\circ\Lambda_J\circ\dots\circ\Lambda_1$, donde cada $\Lambda_j$ es una capa convolucional seguida de una activación (y, opcionalmente, de una reducción). (v) Un \emph{clasificador} en $K$ clases sobre $\Phi$ es $\hat y(I)=\argmax_k\big(w_k^\top\Phi(I)+\beta_k\big)$, con $w_k\in\R^{d}$ y $d$ la dimensión de $\Phi(I)$; las probabilidades asociadas son $\mathrm{softmax}(z)_k=e^{z_k}/\sum_je^{z_j}$ aplicada al vector de puntuaciones $z_k=w_k^\top\Phi(I)+\beta_k$.
+\end{definicion}
+
+\noindent El vector $\Phi(I)\in\R^d$ es el \emph{vector de características} o \emph{embedding} de la imagen que describe la guía: la salida de la red sin la última capa. La softmax es estrictamente creciente en cada puntuación y sus valores son positivos y suman $1$, así que puede leerse como distribución de probabilidad sobre las clases, y su clase de máxima probabilidad es la de máxima puntuación. Los resultados siguientes establecen qué propiedades tiene $\Phi$ por construcción, antes de cualquier entrenamiento.
+
+\begin{teorema}[Invariancia del vector de características]\label{teo:invariancia-cnn}
+\noindent Sea $\Phi=\mathrm{GAP}\circ\Lambda_J\circ\dots\circ\Lambda_1$ con capas convolucionales de relleno circular y paso $1$, activaciones aplicadas valor a valor y sin reducciones intermedias. Si $\tau_{s,t}$ actúa sobre imágenes de varios canales trasladando cada canal, entonces $\Phi(\tau_{s,t}I)=\Phi(I)$ para toda imagen $I$ y toda traslación.
+\end{teorema}
+\begin{proof}
+\noindent Primero, cada capa convolucional $L$ conmuta con $\tau_{s,t}$: cada canal de salida es una suma de convoluciones de canales de entrada más una constante; las convoluciones conmutan con $\tau_{s,t}$ por el Teorema~\ref{teo:equiv}, la suma de funciones que conmutan con $\tau_{s,t}$ también conmuta (por linealidad de $\tau_{s,t}$), y una imagen constante no cambia al trasladarla. Segundo, una activación aplicada valor a valor conmuta con $\tau_{s,t}$, porque $\sigma\big(I(u-s,v-t,c)\big)$ es tanto $(\sigma\circ\tau_{s,t}I)(u,v,c)$ como $(\tau_{s,t}\,\sigma(I))(u,v,c)$. Tercero, por inducción en $j$, la composición $\Lambda_j\circ\dots\circ\Lambda_1$ conmuta con $\tau_{s,t}$: si $M$ y $N$ conmutan con $\tau_{s,t}$, entonces $MN\tau_{s,t}=M\tau_{s,t}N=\tau_{s,t}MN$. Por último, $\mathrm{GAP}(\tau_{s,t}J)_c=\frac1{HW}\sum_{(u,v)}J(u-s,v-t,c)=\mathrm{GAP}(J)_c$, porque $(u,v)\mapsto(u-s,v-t)$ es una biyección de $\mathbb Z_H\times\mathbb Z_W$ y reordenar una suma no la cambia. Aplicado a $J=\Lambda_J\circ\dots\circ\Lambda_1(I)$ se obtiene el resultado.
+\end{proof}
+
+\noindent El contraste con la Proposición~\ref{prop:dist-pixeles} es total: allí la representación por píxeles no distinguía un desplazamiento pequeño de uno grande; aquí el vector de características es idéntico para todos los desplazamientos. El Ejemplo~\ref{ej:rompe} muestra que las hipótesis de relleno circular y paso $1$ no pueden omitirse; en las redes reales, que usan relleno con ceros y reducciones, la invariancia es solo aproximada.
+
+\begin{proposicion}[Regiones de decisión en el espacio de características]\label{prop:regiones}
+\noindent Para el clasificador de la Definición~\ref{def:cnn}(v), el conjunto $R_k=\{z\in\R^d:w_k^\top z+\beta_k\ge w_j^\top z+\beta_j\ \forall j\}$ de vectores asignados a la clase $k$ (con empates resueltos de cualquier modo fijo) es una intersección de $K-1$ semiespacios, y por tanto convexo. En consecuencia, si el clasificador acierta en todos los registros de $\Dtr$, los vectores $\Phi(I_i)$ de clases distintas quedan separados por hiperplanos: para cada par de clases $k\ne j$, el hiperplano $(w_k-w_j)^\top z+\beta_k-\beta_j=0$ deja todos los vectores de la clase $k$ en el lado no negativo y todos los de la clase $j$ en el no positivo.
+\end{proposicion}
+\begin{proof}
+\noindent La condición $w_k^\top z+\beta_k\ge w_j^\top z+\beta_j$ equivale a $(w_k-w_j)^\top z+(\beta_k-\beta_j)\ge0$, un semiespacio cerrado; $R_k$ es la intersección de estas condiciones para $j\ne k$, y la intersección de convexos es convexa. Si el registro $i$ de clase $k$ está bien clasificado, $\Phi(I_i)\in R_k$ y cumple cada una de las $K-1$ desigualdades; si el registro $l$ de clase $j$ está bien clasificado, cumple $(w_j-w_k)^\top\Phi(I_l)+\beta_j-\beta_k\ge0$, es decir, está en el lado no positivo del mismo hiperplano.
+\end{proof}
+
+\noindent La proposición precisa en qué sentido una red entrenada ``organiza'' sus vectores de características: la última capa es lineal, así que un buen ajuste en entrenamiento implica separación lineal de las clases \emph{de entrenamiento} en el espacio de $\Phi$. No implica nada sobre otras tareas.
+
+\begin{definicion}[Aprendizaje por transferencia]\label{def:transfer}
+\noindent Sea $\Phi$ la parte convolucional de una red entrenada en una tarea de origen (por ejemplo, clasificar un millón de fotografías en mil categorías). Para una tarea nueva con datos $(I_i,y_i)$, el \emph{aprendizaje por transferencia con características fijas} ajusta solo un modelo $g$ (lineal, un árbol, etc.) sobre los pares $(\Phi(I_i),y_i)$, sin modificar $\Phi$. El \emph{ajuste fino} (\emph{fine-tuning}) modifica también los parámetros de $\Phi$, partiendo de los de la tarea de origen.
+\end{definicion}
+
+\noindent La justificación de la transferencia es una \emph{hipótesis}, no un teorema: que los patrones útiles para la tarea de origen (bordes, texturas, partes de objetos) también lo sean para la nueva. Su ventaja cuantificable es el número de parámetros: con características fijas de dimensión $d=2048$ y un clasificador lineal de $K$ clases se estiman $2048K+K$ parámetros (Proposición~\ref{prop:param-conv} con $p=d$, $m=K$), en lugar de los millones de la red completa, lo que permite ajustar con pocos datos. Si la hipótesis falla (imágenes médicas o multiespectrales muy distintas de las fotografías de origen), el error de validación lo revela, y el ajuste fino o el entrenamiento completo son las alternativas. Es lo que la guía describe con los modelos preentrenados de SageMaker JumpStart.
 
 \medskip
 
-\noindent \emph{Reducción de dimensión.} La guía menciona también reducir la resolución y aplicar PCA. Promediar bloques de $2\times2$ píxeles divide la dimensión entre $4$ y es un caso de convolución (núcleo constante $\frac14$) seguida de submuestreo; PCA sobre píxeles o sobre embeddings sigue el Teorema~\ref{teo:pca} y requiere, como siempre, ajustarse con $\Dtr$. Las salidas de un servicio de visión (etiquetas con su confianza, cuadros delimitadores dados por coordenadas normalizadas $(x_0,y_0,\text{ancho},\text{alto})\in[0,1]^4$) son características tabulares directas, a partir de las cuales se derivan otras, como el área relativa $\text{ancho}\times\text{alto}$ o el número de objetos de cada clase.
+\noindent \emph{Contraste.} Los píxeles crudos conservan toda la información pero tienen dimensión enorme y una geometría inadecuada (Proposición~\ref{prop:dist-pixeles}); las características manuales son interpretables y baratas pero exigen diseño por problema; las características aprendidas son invariantes por construcción (Teorema~\ref{teo:invariancia-cnn}) y reutilizables, pero no son interpretables y dependen de la hipótesis de transferencia.
+
+\subsection{Reducción de resolución y de dimensión}\label{sec:resolucion}
+
+\begin{proposicion}[Reducción por promedio]\label{prop:pool}
+\noindent La reducción por promedio $P$ de la Definición~\ref{def:cnn}(ii) es lineal, divide la dimensión entre $4$ y es una convolución con núcleo constante $\frac14$ en $\{0,1\}^2$ seguida de paso $2$. Si los valores de un canal son $\mu+\varepsilon(u,v)$ con errores incorrelacionados de varianza $\sigma^2$, cada valor reducido tiene media $\mu$ y varianza $\sigma^2/4$.
+\end{proposicion}
+\begin{proof}
+\noindent Cada salida es un promedio de cuatro entradas con pesos fijos, luego $P$ es lineal; la dimensión pasa de $HWC$ a $\frac H2\frac W2C$. El promedio de $I(2u+a,2v+b,c)$ sobre $a,b\in\{0,1\}$ es la convolución con ese núcleo evaluada en $(2u,2v)$, que es la definición de paso $2$. La media y la varianza se calculan como en la Proposición~\ref{prop:media-movil}(i) con $w=4$.
+\end{proof}
+
+\noindent Reducir la resolución es la forma de llevar imágenes de distintos tamaños a uno común (Definición~\ref{def:imagen}) y la ``reducción de la resolución'' que la guía menciona como filtro de dimensionalidad; el costo es perder los detalles menores de dos píxeles. PCA sobre los vectores de píxeles o sobre los vectores de características sigue el Teorema~\ref{teo:pca} y debe ajustarse con $\Dtr$.
+
+\subsection{Características producidas por servicios de visión}\label{sec:bbox}
+
+\begin{definicion}[Cuadro delimitador y puntuación de confianza]\label{def:bbox}
+\noindent Un \emph{cuadro delimitador} en coordenadas normalizadas es una cuádrupla $(x_0,y_0,w,h)$ con $x_0,y_0\ge0$, $w,h>0$, $x_0+w\le1$ e $y_0+h\le1$: el rectángulo $[x_0,x_0+w]\times[y_0,y_0+h]$, con las coordenadas horizontal y vertical divididas entre el ancho y el alto de la imagen. Una \emph{detección} es un triple (etiqueta, puntuación de confianza en $[0,1]$, cuadro).
+\end{definicion}
+
+\noindent Las coordenadas normalizadas no dependen de la resolución: si la imagen se reescala por un factor $\lambda>0$ en ambos ejes, las coordenadas en píxeles se multiplican por $\lambda$ y las normalizadas no cambian, porque numerador y denominador se multiplican por $\lambda$. A partir de una lista de detecciones se derivan características tabulares: el número de detecciones de cada etiqueta con confianza mayor que un umbral, el área relativa $wh\in(0,1]$ de un objeto, su centro $(x_0+\frac w2,\,y_0+\frac h2)$. Es el uso que la guía describe para Amazon Rekognition, cuyo ejemplo (``Car, confianza 98\%, en el rectángulo que empieza en $(0.12,0.40)$ con ancho $0.35$ y alto $0.20$'') da área relativa $0.07$ y centro $(0.295,0.50)$.
 
 \section{Texto}\label{sec:texto}
 
-\noindent \emph{Motivación.} Un documento es una cadena de caracteres de longitud variable; un modelo necesita un vector de dimensión fija. El camino que la guía recorre (tokenizar, eliminar palabras vacías, reducir a raíces, formar n-gramas y, finalmente, usar embeddings) reproduce la historia del procesamiento de lenguaje natural: primero representaciones de conteo, dispersas y sin noción de significado, después representaciones densas aprendidas que sí la tienen. Cada paso responde a una limitación demostrable del anterior.
+\noindent \emph{Motivación.} Un documento es una cadena de caracteres de longitud variable; un modelo necesita un vector de dimensión fija. El camino que recorre la guía (tokenizar, eliminar palabras vacías, reducir a raíces, formar n-gramas y usar embeddings) reproduce la historia del procesamiento de lenguaje natural: primero representaciones de conteo, dispersas y sin noción de significado; después representaciones densas aprendidas que sí la tienen. Cada paso responde a una limitación del anterior que aquí se demuestra. Primero hay que fijar qué es un texto.
 
-\subsection{Tokenización y bolsa de palabras}\label{sec:bow}
+\subsection{Cadenas, documentos y corpus}\label{sec:cadenas}
 
-\begin{definicion}[Tokenización, vocabulario y bolsa de palabras]\label{def:bow}
-\noindent Una \emph{tokenización} es una función $\tau$ que asigna a cada documento $d$ una sucesión finita de \emph{tokens} $\tau(d)=(t_1,\dots,t_L)$ en un conjunto $V$, el \emph{vocabulario}. La \emph{bolsa de palabras} de $d$ es el vector de conteos $x(d)\in\N^{V}$ con $x_v(d)=\#\{\ell:t_\ell=v\}$.
+\begin{definicion}[Alfabeto, cadena, documento, corpus]\label{def:cadena}
+\noindent Un \emph{alfabeto} es un conjunto finito no vacío $\Sigma$ (los caracteres Unicode, o los $256$ valores de un byte). Una \emph{cadena} sobre $\Sigma$ es una sucesión finita $s=(\sigma_1,\dots,\sigma_\ell)$ de elementos de $\Sigma$; su \emph{longitud} es $\abs s=\ell$, y la cadena vacía $\varepsilon$ tiene longitud $0$. El conjunto de todas las cadenas es $\Sigma^*=\bigcup_{\ell\ge0}\Sigma^\ell$. La \emph{concatenación} de $s=(\sigma_1,\dots,\sigma_\ell)$ y $s'=(\sigma'_1,\dots,\sigma'_{m})$ es $ss'=(\sigma_1,\dots,\sigma_\ell,\sigma'_1,\dots,\sigma'_m)$. Un \emph{documento} es una cadena, y un \emph{corpus} es una sucesión finita de documentos.
 \end{definicion}
 
-\noindent El vocabulario es un parámetro ajustado: se construye con $\Dtr$, y una palabra que aparezca por primera vez en producción no tiene coordenada (salvo que se use hashing, Sección~\ref{sec:hashing}, que es exactamente la solución que \texttt{HashingVectorizer} aplica a texto). La bolsa de palabras aplicada a un documento de una sola palabra es la codificación one-hot de esa palabra (Definición~\ref{def:onehot}), y hereda sus dos problemas: dimensión $\abs V$ (decenas o cientos de miles) y ausencia de noción de parecido. Tiene además uno propio.
+\noindent La misma construcción se aplica a cualquier conjunto $A$: $A^*$ denota las sucesiones finitas de elementos de $A$. El conjunto $\Sigma^*$ es infinito numerable y no tiene estructura de espacio vectorial (no hay una suma de cadenas con sentido), así que ningún algoritmo de los capítulos anteriores puede recibir un documento directamente. Toda la sección construye aplicaciones de $\Sigma^*$ en algún $\R^p$.
 
-\begin{proposicion}[La bolsa de palabras ignora el orden]\label{prop:bow-orden}
-\noindent Si $\tau(d')$ es una permutación de $\tau(d)$, entonces $x(d)=x(d')$.
+\subsection{Tokens y tokenización}\label{sec:tokens}
+
+\noindent \emph{Motivación.} La unidad mínima de $\Sigma^*$, el carácter, lleva poca información por sí sola (la letra ``e'' no dice nada del tema de un documento), y la unidad máxima, el documento completo, casi nunca se repite. Hace falta una unidad intermedia que se repita entre documentos y tenga significado: la palabra, o un fragmento de palabra. Esa unidad es el token.
+
+\begin{definicion}[Vocabulario, token, tokenización]\label{def:token}
+\noindent Un \emph{vocabulario} es un conjunto finito $V\subset\Sigma^*$ de cadenas no vacías; sus elementos se llaman \emph{tokens} (o tipos de token). Una \emph{tokenización} es una función $\tau:\Sigma^*\to V^*$ que asigna a cada documento una sucesión de tokens $\tau(d)=(t_1,\dots,t_L)$. Cada posición $\ell$ con su token $t_\ell$ es una \emph{ocurrencia}. La tokenización es \emph{sin pérdida} si existe $\rho:V^*\to\Sigma^*$ con $\rho(\tau(d))=d$ para todo $d$.
+\end{definicion}
+
+\noindent La distinción entre token y ocurrencia importa para contar: ``the cat sat on the mat'' tiene $6$ ocurrencias y $5$ tokens distintos, porque ``the'' ocurre dos veces. Una tokenización sin pérdida es inyectiva (si $\tau(d)=\tau(d')$, aplicando $\rho$ se obtiene $d=d'$), así que no confunde documentos distintos.
+
+\begin{ejemplo}[Tokenización por espacios y por caracteres]\label{ej:tokenizadores}
+\noindent (a) La \emph{tokenización por espacios} asigna a $d$ la sucesión, en orden, de sus subcadenas contiguas maximales que no contienen el carácter espacio. Para ``Machine learning is fascinating'' produce las $4$ ocurrencias \texttt{["Machine", "learning", "is", "fascinating"]} de la guía. No es sin pérdida: ``a b'' y ``a\ \ b'' (con dos espacios) tienen la misma tokenización, luego $\tau$ no es inyectiva. Además, ``fun'' y ``fun.'' son tokens distintos, lo que obliga a normalizar la puntuación antes. (b) La \emph{tokenización por caracteres}, con $V=\Sigma$ y $\tau(\sigma_1\cdots\sigma_\ell)=(\sigma_1,\dots,\sigma_\ell)$, es sin pérdida con $\rho$ igual a la concatenación, pero sus tokens tienen poco significado y las sucesiones son largas.
+\end{ejemplo}
+
+\noindent Con tokens de palabra completa y un vocabulario finito aparece un problema estructural. Como $V$ se construye con un corpus de entrenamiento, habrá palabras que no están en él.
+
+\begin{proposicion}[Palabras fuera del vocabulario]\label{prop:oov}
+\noindent Sea $\tau$ una tokenización por palabras con vocabulario finito $V$ que reemplaza cada palabra fuera de $V$ por un token especial \texttt{\textless unk\textgreater}. Entonces $\tau$ no es inyectiva.
 \end{proposicion}
 \begin{proof}
-\noindent $x_v$ cuenta las posiciones con token $v$, y una permutación biyectiva de las posiciones conserva ese número para cada $v$.
+\noindent Supóngase que $\Sigma$ contiene algún carácter $\sigma$ distinto del espacio. Las cadenas $\sigma,\sigma\sigma,\sigma\sigma\sigma,\dots$ son infinitas palabras distintas sin espacios, y $V$ es finito, así que existen dos de ellas, $p\ne p'$, fuera de $V$. Los documentos de una palabra $p$ y $p'$ se tokenizan ambos como $(\texttt{\textless unk\textgreater})$.
 \end{proof}
 
-\noindent ``Dog bites man'' y ``man bites dog'' tienen la misma bolsa de palabras y significados opuestos. Los n-gramas (Sección~\ref{sec:ngramas}) recuperan parte del orden.
+\noindent La solución moderna son los tokens de subpalabra. El algoritmo BPE (\emph{byte pair encoding}) nació como método de compresión (Gage, 1994) y Sennrich, Haddow y Birch (2016) lo adaptaron para construir vocabularios.
 
-\subsection{Palabras vacías, ponderación TF-IDF y reducción a raíces}\label{sec:stop}
-
-\noindent La eliminación de palabras vacías con una lista $S\subset V$ es la proyección que anula las coordenadas de $S$: $x\mapsto(x_v\ind{v\notin S})_{v\in V}$. Reduce la dimensión en $\abs S$ y, en tareas de tópicos, quita coordenadas de mucha varianza y poca información. Pero es una decisión fija e independiente de la tarea, y puede destruir información esencial: si $S$ contiene ``not'', los documentos ``not good'' y ``good'' quedan con la misma representación, y en análisis de sentimiento eso invierte el significado. La guía lo advierte con su ``a menudo''.
-
-\medskip
-
-\noindent Existe una alternativa que decide con los datos cuánto pesa cada palabra. Spärck Jones (1972) observó que una palabra que aparece en casi todos los documentos no sirve para distinguirlos, y propuso ponderar por la rareza.
-
-\begin{definicion}[TF-IDF]\label{def:tfidf}
-\noindent Para una colección de $N$ documentos, sea $\mathrm{df}(v)$ el número de documentos que contienen $v$. La \emph{frecuencia inversa en documentos} es $\idf(v)=\log\frac N{\mathrm{df}(v)}$ y el peso TF-IDF de $v$ en $d$ es $x_v(d)\,\idf(v)$.
+\begin{definicion}[BPE]\label{def:bpe}
+\noindent Sea un corpus de entrenamiento representado como una lista de palabras, cada una escrita como sucesión de símbolos, inicialmente sus caracteres, y sea $V_0=\Sigma$. Para $j=1,\dots,J$: se cuenta, para cada par ordenado de símbolos $(x,y)$, cuántas veces aparecen adyacentes dentro de una palabra; se elige el par $(x_j,y_j)$ más frecuente (con un criterio fijo de desempate); se añade el símbolo concatenado $x_jy_j$ al vocabulario, $V_j=V_{j-1}\cup\{x_jy_j\}$; y se reemplaza cada aparición de $x_j$ seguido de $y_j$ por $x_jy_j$, de izquierda a derecha y sin solapamientos. Para tokenizar un texto nuevo se parte de sus caracteres y se aplican las fusiones $j=1,\dots,J$ en el mismo orden.
 \end{definicion}
 
-\noindent Como $1\le\mathrm{df}(v)\le N$, se tiene $0\le\idf(v)\le\log N$; $\idf$ es decreciente en $\mathrm{df}$ y vale exactamente $0$ para una palabra presente en todos los documentos, porque $\log(N/N)=0$. Así, las palabras vacías más extremas se anulan solas, sin lista, y las intermedias se atenúan en lugar de eliminarse. La transformación \emph{Vectorize} de Data Wrangler produce vectores TF-IDF. Los $\mathrm{df}(v)$ son parámetros ajustados con $\Dtr$. (Las implementaciones usan variantes suavizadas, como $\log\frac{1+N}{1+\mathrm{df}(v)}+1$ en scikit-learn, que evitan divisiones por cero y no anulan del todo el peso.)
+\begin{proposicion}[Propiedades de BPE]\label{prop:bpe}
+\noindent (i) Todo documento sobre $\Sigma$ se tokeniza con $V_J$: no hay palabras fuera del vocabulario. (ii) La tokenización es sin pérdida dentro de cada palabra: la concatenación de los tokens es la palabra original. (iii) Si en la fusión $j$ se reemplazan $f_j\ge1$ apariciones, el número total de ocurrencias del corpus baja exactamente en $f_j$, mientras que $\abs{V_j}\le\abs{V_{j-1}}+1$.
+\end{proposicion}
+\begin{proof}
+\noindent (i) El proceso de tokenización parte de los caracteres, que están en $V_0=\Sigma\subset V_J$, y cada fusión solo produce símbolos de $V_J$; nunca hace falta un símbolo ajeno. (ii) Por inducción en el número de fusiones aplicadas. Antes de la primera, la concatenación de los símbolos es la palabra. Si la concatenación es la palabra antes de una fusión, reemplazar dos símbolos adyacentes $x,y$ por el símbolo $xy$ no cambia la concatenación total, porque la concatenación es asociativa: $(\cdots)\,x\,y\,(\cdots)=(\cdots)\,(xy)\,(\cdots)$. (iii) Cada reemplazo convierte dos ocurrencias en una, así que $f_j$ reemplazos reducen el total en $f_j$. Se añade a lo sumo un símbolo nuevo (ninguno si $x_jy_j$ ya estaba en el vocabulario).
+\end{proof}
 
-\medskip
+\begin{ejemplo}[Dos fusiones]\label{ej:bpe}
+\noindent Sea el corpus de cuatro palabras ``ab'', ``ab'', ``ab'', ``ac'', con $8$ ocurrencias iniciales. Los pares adyacentes son $(a,b)$ con frecuencia $3$ y $(a,c)$ con frecuencia $1$; la primera fusión crea ``ab'' y deja $[ab],[ab],[ab],[a,c]$, con $8-3=5$ ocurrencias. La segunda fusión crea ``ac'' y deja $4$. La palabra frecuente se convirtió en un token en la primera fusión; la rara, en la segunda.
+\end{ejemplo}
 
-\noindent El \emph{stemming} y la \emph{lematización} son funciones $\pi:V\to V'$ que envían cada palabra a una forma base; la bolsa de palabras reducida es $x'_{v'}=\sum_{v:\pi(v)=v'}x_v$. Matemáticamente es la misma operación que el hashing: una aplicación lineal de $\R^V$ en $\R^{V'}$ que suma coordenadas que ``colisionan''. La diferencia es que aquí las colisiones se eligen para que sean deseables (``running'', ``runs'' $\mapsto$ ``run''), mientras que en el hashing son aleatorias. El stemming usa reglas de recorte de sufijos (Porter, 1980), rápidas pero con dos tipos de error: \emph{sobrerreducción}, que une palabras distintas (``universe'' y ``university'' $\mapsto$ ``univers''), y \emph{subreducción}, que no une formas de la misma palabra (``ran'' y ``run'' quedan separados, porque la relación no es un sufijo). La lematización consulta un diccionario y la categoría gramatical (``better'' como adjetivo $\mapsto$ ``good''), con menos errores de ambos tipos y más costo. Ambas reducen $\abs{V'}\le\abs V$ y agrupan conteos, lo que mejora la estimación de palabras raras; ambas pierden información morfológica (tiempo verbal, número) que en algunas tareas importa.
+\noindent La parte (iii) muestra el compromiso que controla $J$: más fusiones dan vocabularios más grandes y sucesiones más cortas. Por eso el número de tokens de un texto no coincide con su número de palabras: una palabra frecuente suele ser un solo token y una rara se parte en varios. La regla que cita la guía (un token equivale a unos $\frac34$ de palabra en inglés) es una observación empírica sobre tokenizadores concretos, no una propiedad matemática, y cambia con el idioma y el vocabulario. En Amazon Bedrock, el costo de un modelo de texto en modalidad bajo demanda es lineal en las ocurrencias: con $T_{\mathrm{in}}$ tokens de entrada, $T_{\mathrm{out}}$ de salida y precios por token $p_{\mathrm{in}},p_{\mathrm{out}}$, el costo es $p_{\mathrm{in}}T_{\mathrm{in}}+p_{\mathrm{out}}T_{\mathrm{out}}$. Con la regla empírica, una página de $500$ palabras son unos $500/0.75\approx667$ tokens. Los modelos que generan imágenes suelen cobrarse por imagen.
+
+\subsection{Bolsa de palabras}\label{sec:bow}
+
+\begin{definicion}[Bolsa de palabras]\label{def:bow}
+\noindent Dada una tokenización con vocabulario $V$, la \emph{bolsa de palabras} de un documento $d$ con $\tau(d)=(t_1,\dots,t_L)$ es el vector de conteos $x(d)\in\N^{V}$ con $x_v(d)=\#\{\ell:t_\ell=v\}$. Equivalentemente, $x(d)=\sum_{\ell=1}^Le_{t_\ell}$, donde $e_v$ es el vector canónico de $v$ (la codificación one-hot de la Definición~\ref{def:onehot}).
+\end{definicion}
+
+\noindent La equivalencia se verifica coordenada a coordenada: la coordenada $v$ de $\sum_\ell e_{t_\ell}$ suma $1$ por cada $\ell$ con $t_\ell=v$. El vocabulario es un parámetro ajustado: se construye con $\Dtr$. La bolsa de palabras es la primera aplicación de esta sección de $\Sigma^*$ en un espacio vectorial, y hereda de one-hot la dimensión $\abs V$ (decenas o cientos de miles) y la dispersión. Tiene además una pérdida de información específica.
+
+\begin{proposicion}[La bolsa de palabras ignora el orden]\label{prop:bow-orden}
+\noindent Si $\tau(d')$ es una permutación de $\tau(d)$, entonces $x(d)=x(d')$. En particular, $x$ no es inyectiva sobre documentos de dos o más tokens distintos.
+\end{proposicion}
+\begin{proof}
+\noindent Si $\tau(d')=(t_{\pi(1)},\dots,t_{\pi(L)})$ con $\pi$ una permutación, $x(d')=\sum_\ell e_{t_{\pi(\ell)}}=\sum_\ell e_{t_\ell}=x(d)$, porque una suma finita no cambia al reordenar sus sumandos.
+\end{proof}
+
+\noindent ``dog bites man'' y ``man bites dog'' tienen la misma bolsa de palabras y significados distintos. Los n-gramas (Sección~\ref{sec:ngramas}) recuperan parte del orden.
+
+\subsection{Palabras vacías y ponderación TF-IDF}\label{sec:stop}
+
+\noindent \emph{Motivación.} Luhn (1958), al construir resúmenes automáticos, observó que las palabras más frecuentes de un texto (artículos, preposiciones, auxiliares) no indican su tema y dominan los conteos. La solución más directa es descartarlas.
+
+\begin{definicion}[Eliminación de palabras vacías]\label{def:stop}
+\noindent Dada una lista $S\subset V$ de \emph{palabras vacías}, su eliminación es la aplicación $P_S:\R^V\to\R^V$, $(P_Sx)_v=x_v\,\ind{v\notin S}$.
+\end{definicion}
+
+\begin{proposicion}[La eliminación es una proyección ortogonal]\label{prop:stop}
+\noindent $P_S$ es lineal, idempotente ($P_S^2=P_S$) y simétrica ($\ip{P_Sx}{y}=\ip{x}{P_Sy}$); es la proyección ortogonal sobre el subespacio de vectores nulos en las coordenadas de $S$.
+\end{proposicion}
+\begin{proof}
+\noindent $P_S$ multiplica cada coordenada por una constante $\ind{v\notin S}\in\{0,1\}$, luego es lineal. Como $\ind{v\notin S}^2=\ind{v\notin S}$, aplicarla dos veces es aplicarla una. $\ip{P_Sx}{y}=\sum_vx_v\ind{v\notin S}y_v=\ip x{P_Sy}$. Una aplicación lineal idempotente y simétrica es la proyección ortogonal sobre su imagen, que es el subespacio indicado.
+\end{proof}
+
+\noindent La proyección reduce la dimensión efectiva en $\abs S$, pero es una decisión fija que no mira la tarea, y puede eliminar información esencial.
+
+\begin{ejemplo}[Negaciones]\label{ej:negacion}
+\noindent Si ``not'' $\in S$, los documentos ``not good'' y ``good'' cumplen $P_Sx(\text{``not good''})=P_Sx(\text{``good''})=e_{\text{good}}$. En análisis de sentimiento, dos textos de polaridad opuesta reciben la misma representación. Es la razón del ``a menudo'' de la guía.
+\end{ejemplo}
+
+\noindent Spärck Jones (1972) propuso en su lugar ponderar cada palabra según su rareza en la colección, decidiendo con los datos cuánto pesa.
+
+\begin{definicion}[TF-IDF]\label{def:tfidf}
+\noindent Sea una colección de $N$ documentos y $\mathrm{df}(v)$ el número de documentos que contienen el token $v$ al menos una vez (se consideran solo los $v$ con $\mathrm{df}(v)\ge1$). La \emph{frecuencia inversa en documentos} es $\idf(v)=\log\frac N{\mathrm{df}(v)}$ y la representación TF-IDF de $d$ es el vector con coordenadas $x_v(d)\,\idf(v)$.
+\end{definicion}
+
+\begin{proposicion}[Propiedades de la IDF]\label{prop:idf}
+\noindent (i) $0\le\idf(v)\le\log N$. (ii) $\idf$ es estrictamente decreciente en $\mathrm{df}(v)$. (iii) $\idf(v)=0$ si y solo si $v$ aparece en todos los documentos. (iv) La variante de scikit-learn, $\log\frac{1+N}{1+\mathrm{df}(v)}+1$, es siempre $\ge1$.
+\end{proposicion}
+\begin{proof}
+\noindent (i) De $1\le\mathrm{df}(v)\le N$ se sigue $1\le N/\mathrm{df}(v)\le N$, y el logaritmo es creciente. (ii) $N/\mathrm{df}$ es estrictamente decreciente en $\mathrm{df}$ y el logaritmo es estrictamente creciente. (iii) $\log(N/\mathrm{df})=0$ si y solo si $\mathrm{df}=N$. (iv) $\mathrm{df}\le N$ implica $\frac{1+N}{1+\mathrm{df}}\ge1$, cuyo logaritmo es $\ge0$.
+\end{proof}
+
+\noindent \emph{Contraste.} Por (iii), las palabras vacías más extremas (presentes en todos los documentos) se anulan sin lista, y por (ii) las intermedias se atenúan en lugar de eliminarse; la decisión depende de la colección y no de una lista fija. Pero TF-IDF sigue siendo una bolsa de palabras reponderada: hereda la Proposición~\ref{prop:bow-orden}, y no resuelve el Ejemplo~\ref{ej:negacion} si ``not'' es frecuente. Los $\mathrm{df}(v)$ son parámetros ajustados con $\Dtr$. La transformación \emph{Vectorize} de Data Wrangler produce vectores TF-IDF.
+
+\subsection{Stemming y lematización}\label{sec:stemming}
+
+\noindent \emph{Motivación.} ``run'', ``runs'' y ``running'' son tokens distintos en la bolsa de palabras, así que un modelo aprende por separado lo que dice cada uno, con menos datos para cada uno. Reducirlos a una forma común agrupa sus conteos.
+
+\begin{definicion}[Normalización morfológica]\label{def:normalizacion}
+\noindent Una \emph{normalización morfológica} es una función $\pi:V\to V'$ que asigna a cada token una forma base. Induce la aplicación lineal $A_\pi:\R^V\to\R^{V'}$, $(A_\pi x)_{v'}=\sum_{v:\,\pi(v)=v'}x_v$. El \emph{stemming} define $\pi$ mediante reglas sobre la cadena (recorte de sufijos), sin diccionario; el más usado es el algoritmo de Porter (1980). La \emph{lematización} asigna a cada token su \emph{lema}, la forma de diccionario de la palabra, usando un diccionario y la categoría gramatical del token en su contexto (formalmente, $\pi$ se define sobre pares (token, categoría)).
+\end{definicion}
+
+\begin{proposicion}[Qué conserva y qué pierde una normalización]\label{prop:normalizacion}
+\noindent (i) $A_\pi$ conserva el número total de ocurrencias: $\sum_{v'}(A_\pi x)_{v'}=\sum_vx_v$. (ii) $\abs{\pi(V)}\le\abs V$. (iii) $A_\pi x=A_\pi y$ si y solo si, para cada $v'$, los conteos de $x$ e $y$ sumados sobre la fibra $\pi^{-1}(v')$ coinciden; en particular, $A_\pi$ es inyectiva si y solo si $\pi$ lo es.
+\end{proposicion}
+\begin{proof}
+\noindent (i) Las fibras $\pi^{-1}(v')$ forman una partición de $V$, así que sumar por fibras y luego sobre $v'$ es sumar sobre $V$. (ii) La imagen de un conjunto finito por una función tiene a lo sumo tantos elementos como el conjunto. (iii) La primera parte es la definición de $A_\pi$ coordenada a coordenada. Si $\pi$ es inyectiva, cada fibra tiene a lo sumo un elemento y $A_\pi$ solo reordena coordenadas. Si $\pi(v)=\pi(w)$ con $v\ne w$, entonces $A_\pi e_v=A_\pi e_w$ con $e_v\ne e_w$.
+\end{proof}
+
+\noindent Matemáticamente, la normalización es la misma operación que el hashing de la Definición~\ref{def:hash} (sin signo): una aplicación lineal que suma coordenadas que ``colisionan''. La diferencia es que aquí las colisiones se eligen con criterio lingüístico para que sean deseables, mientras que en el hashing son arbitrarias. La calidad de $\pi$ se mide contra la función de lema verdadera $\lambda$.
+
+\begin{definicion}[Sobrerreducción y subreducción]\label{def:sobre}
+\noindent Sea $\lambda$ la función que asigna a cada token su lema correcto. Una normalización $\pi$ comete \emph{sobrerreducción} en $v,w$ si $\pi(v)=\pi(w)$ pero $\lambda(v)\ne\lambda(w)$, y \emph{subreducción} si $\lambda(v)=\lambda(w)$ pero $\pi(v)\ne\pi(w)$.
+\end{definicion}
+
+\begin{ejemplo}[Errores del algoritmo de Porter]\label{ej:porter}
+\noindent (Verificado con la implementación de Porter de NLTK.) Sobrerreducción: ``universe'', ``university'' y ``universal'' van todos a ``univers'', y ``organization'' va a ``organ'', la misma forma que ``organ''. Subreducción: ``run'', ``runs'' y ``running'' van a ``run'', pero ``ran'' queda como ``ran'', porque la relación entre ``ran'' y ``run'' no es un sufijo. Además, el stemming puede producir cadenas que no son palabras: ``studies'' $\mapsto$ ``studi''. La lematización, con diccionario y categoría gramatical, lleva ``ran'' a ``run'', ``studies'' a ``study'' y el adjetivo ``better'' a ``good'', y evita las sobrerreducciones anteriores, a costa de un diccionario y de analizar la categoría de cada token.
+\end{ejemplo}
+
+\noindent \emph{Contraste.} Ambas agrupan conteos y reducen la dimensión (Proposición~\ref{prop:normalizacion}), lo que mejora la estimación de las formas raras; ambas pierden la información morfológica que distinguía los tokens de una misma fibra (tiempo verbal, número), que en algunas tareas importa. El stemming es rápido y comete los dos tipos de error; la lematización comete menos y es más lenta.
 
 \subsection{N-gramas}\label{sec:ngramas}
 
-\begin{definicion}[N-gramas]\label{def:ngrama}
-\noindent Para $\tau(d)=(t_1,\dots,t_L)$ y $n\le L$, los \emph{n-gramas} de $d$ son las $L-n+1$ subsucesiones contiguas $(t_\ell,\dots,t_{\ell+n-1})$, $\ell=1,\dots,L-n+1$. La bolsa de n-gramas cuenta sus apariciones en $V^n$.
+\noindent \emph{Motivación.} Shannon (1948) aproximó el inglés mediante modelos en que cada letra o palabra depende de las $n-1$ anteriores, y mostró que al crecer $n$ los textos generados se parecen cada vez más al idioma. Las mismas unidades, secuencias de $n$ tokens consecutivos, sirven como características que conservan el orden local que la bolsa de palabras pierde.
+
+\begin{definicion}[N-grama]\label{def:ngrama}
+\noindent Sea $\tau(d)=(t_1,\dots,t_L)$ y $1\le n\le L$. Los \emph{n-gramas} de $d$ son las sucesiones $(t_\ell,\dots,t_{\ell+n-1})\in V^n$ para $\ell=1,\dots,L-n+1$. La \emph{bolsa de n-gramas} es el vector de conteos de n-gramas, indexado por $V^n$. Con $n=2$ se llaman bigramas.
 \end{definicion}
 
-\noindent En ``Machine learning is fun'' ($L=4$) hay $4-2+1=3$ bigramas, como en la guía. Los bigramas separan los ejemplos de la Proposición~\ref{prop:bow-orden}: ``dog bites man'' contiene $(\text{dog},\text{bites})$ y ``man bites dog'' no; también capturan ``not good'' como unidad. El costo es combinatorio: el espacio de n-gramas posibles tiene $\abs V^n$ elementos, y aunque solo aparece una fracción, la cantidad observada crece rápidamente con $n$ y cada n-grama se observa pocas veces, lo que vuelve a la maldición de la dimensionalidad. En la práctica se usan $n\le3$, a menudo con hashing o con un umbral de frecuencia mínima.
+\begin{proposicion}[Número y poder de separación de los n-gramas]\label{prop:ngramas}
+\noindent (i) Un documento de $L\ge n$ tokens tiene exactamente $L-n+1$ ocurrencias de n-gramas, y el espacio de n-gramas posibles tiene $\abs V^n$ elementos. (ii) Existen documentos con la misma bolsa de palabras y distinta bolsa de bigramas.
+\end{proposicion}
+\begin{proof}
+\noindent (i) El n-grama que empieza en la posición $\ell$ existe si y solo si $\ell+n-1\le L$, es decir, $\ell\in\{1,\dots,L-n+1\}$. Un elemento de $V^n$ es una elección de un token para cada una de $n$ posiciones, con $\abs V$ opciones cada una. (ii) ``dog bites man'' y ``man bites dog'' tienen la misma bolsa de palabras por la Proposición~\ref{prop:bow-orden}. Los bigramas del primero son $(\text{dog},\text{bites})$ y $(\text{bites},\text{man})$; los del segundo, $(\text{man},\text{bites})$ y $(\text{bites},\text{dog})$. El bigrama $(\text{dog},\text{bites})$ tiene conteo $1$ en el primero y $0$ en el segundo.
+\end{proof}
+
+\noindent En ``Machine learning is fun'' ($L=4$) hay $4-2+1=3$ bigramas, como en la guía. Los bigramas también resuelven el Ejemplo~\ref{ej:negacion} si no se eliminan palabras vacías: ``not good'' contiene el bigrama $(\text{not},\text{good})$. El costo está en (i): con $\abs V=5\times10^4$ hay $2.5\times10^9$ bigramas posibles; aunque solo aparezca una fracción, cada uno se observa pocas veces, y se vuelve a la maldición de la dimensionalidad (Sección~\ref{sec:seleccion}). En la práctica se usan $n\le3$, con un umbral de frecuencia mínima o con hashing.
 
 \subsection{Embeddings de palabras}\label{sec:embeddings}
 
-\noindent \emph{Motivación.} Todas las representaciones anteriores tratan las palabras como símbolos sin relación entre sí, como muestra el resultado siguiente, que es la Proposición~\ref{prop:onehot}(i) en este contexto.
+\noindent \emph{Motivación.} Todas las representaciones anteriores tratan los tokens como símbolos sin relación entre sí.
 
-\begin{proposicion}[Ortogonalidad de las representaciones de conteo]\label{prop:ortogonal}
-\noindent Con la codificación one-hot de palabras, la similitud coseno $\cos(e_v,e_{v'})=\ip{e_v}{e_{v'}}/(\norm{e_v}\norm{e_{v'}})$ vale $0$ para todo $v\ne v'$.
+\begin{definicion}[Similitud coseno]\label{def:coseno}
+\noindent Para $a,b\in\R^D$ no nulos, $\cos(a,b)=\ip ab/(\norm a\norm b)\in[-1,1]$, el coseno del ángulo entre ellos (el rango se sigue de la desigualdad de Cauchy--Schwarz).
+\end{definicion}
+
+\begin{proposicion}[Ortogonalidad de las representaciones one-hot]\label{prop:ortogonal}
+\noindent Para tokens $v\ne v'$, $\cos(e_v,e_{v'})=0$.
 \end{proposicion}
 \begin{proof}
-\noindent $\ip{e_v}{e_{v'}}=0$ y $\norm{e_v}=\norm{e_{v'}}=1$.
+\noindent $\ip{e_v}{e_{v'}}=0$ para $v\ne v'$ y $\norm{e_v}=\norm{e_{v'}}=1$.
 \end{proof}
 
-\noindent ``King'' está tan lejos de ``queen'' como de ``banana'', y lo aprendido sobre una palabra no se transfiere a sus sinónimos. La \emph{hipótesis distribucional} (Harris, 1954; Firth, 1957: una palabra se caracteriza por las palabras que la acompañan) sugiere representar cada palabra por sus contextos. Los embeddings son vectores densos $v_w\in\R^D$ con $D$ del orden de $10^2$, aprendidos para que palabras con contextos parecidos tengan vectores cercanos.
+\noindent ``king'' es tan distinto de ``queen'' como de ``banana'', y lo que un modelo aprende sobre una palabra no se transfiere a sus sinónimos. La idea que resolvió el problema es la \emph{hipótesis distribucional} (Harris, 1954; Firth, 1957): palabras que aparecen en contextos parecidos tienen significados parecidos. Es una hipótesis lingüística, no un teorema; lo que sí puede demostrarse es qué representación produce cada método si se la acepta. Para eso hay que precisar qué es un contexto.
 
-\medskip
+\begin{definicion}[Ventana de contexto y conteos de coocurrencia]\label{def:contexto}
+\noindent Sea $c\ge1$ el \emph{radio de la ventana}. En un documento tokenizado $(t_1,\dots,t_L)$, los \emph{contextos} de la ocurrencia en la posición $\ell$ son los tokens $t_{\ell+j}$ con $1\le\abs j\le c$ y $1\le\ell+j\le L$. El multiconjunto $\mathcal D$ de \emph{pares de coocurrencia} contiene un par $(t_\ell,t_{\ell+j})$ por cada ocurrencia y cada uno de sus contextos, en todo el corpus. Se escribe $\#(w,c)$ para el número de pares con palabra $w$ y contexto $c$, $\#(w)=\sum_c\#(w,c)$, $\#(c)=\sum_w\#(w,c)$ y $\abs{\mathcal D}=\sum_{w,c}\#(w,c)$. La \emph{información mutua puntual} empírica, para $\#(w,c)>0$, es
+\[
+\PMI(w,c)=\log\frac{\#(w,c)\,\abs{\mathcal D}}{\#(w)\,\#(c)}=\log\frac{\hat p(w,c)}{\hat p(w)\,\hat p(c)},\qquad \hat p(w,c)=\frac{\#(w,c)}{\abs{\mathcal D}},\ \hat p(w)=\frac{\#(w)}{\abs{\mathcal D}},\ \hat p(c)=\frac{\#(c)}{\abs{\mathcal D}}.
+\]
+\end{definicion}
 
-\noindent \emph{Word2Vec (Mikolov et al., 2013).} En la variante \emph{skip-gram}, cada palabra $w$ tiene un vector $v_w$ y cada palabra de contexto $c$ un vector $u_c$, y se modela $p(c\mid w)=\exp(u_c^\top v_w)/\sum_{c'\in V}\exp(u_{c'}^\top v_w)$, maximizando $\sum\log p(c\mid w)$ sobre los pares (palabra, contexto) observados en ventanas del corpus. El denominador suma sobre todo el vocabulario, lo que hace cada paso de costo $O(\abs V)$; el \emph{muestreo negativo} (SGNS) lo reemplaza por un problema de clasificación binaria: distinguir pares observados de $k$ pares $(w,c_N)$ con $c_N$ muestreado de la distribución unigrama $P(c)=\#(c)/\abs{\mathcal{D}}$, donde $\#(\cdot)$ son conteos y $\abs{\mathcal{D}}$ el número total de pares. Levy y Goldberg (2014) mostraron qué calcula realmente este procedimiento.
+\noindent La igualdad de las dos expresiones de la PMI se obtiene sustituyendo las proporciones empíricas: $\frac{\#(w,c)/\abs{\mathcal D}}{\#(w)\#(c)/\abs{\mathcal D}^2}=\frac{\#(w,c)\abs{\mathcal D}}{\#(w)\#(c)}$. La PMI es el sumando de la información mutua de la Definición~\ref{def:im} para la distribución empírica de pares: es positiva cuando $w$ y $c$ coocurren más de lo que lo harían si fueran independientes.
 
-\begin{teorema}[SGNS factoriza la información mutua puntual desplazada]\label{teo:sgns}
-\noindent Sea $\sigma(x)=1/(1+e^{-x})$. El objetivo esperado de SGNS para un par $(w,c)$, como función de $x=u_c^\top v_w$, es
+\begin{definicion}[Embedding de palabras]\label{def:embedding}
+\noindent Un \emph{embedding} de dimensión $D$ es una función $v:V\to\R^D$, $w\mapsto v_w$, equivalentemente una matriz de $\abs V\times D$ cuyas filas son los $v_w$, con $D$ mucho menor que $\abs V$ (típicamente del orden de $10^2$).
+\end{definicion}
+
+\noindent \emph{Word2Vec} (Mikolov et al., 2013) aprende dos embeddings, $v_w$ para palabras y $u_c$ para contextos. En su variante \emph{skip-gram} modela la probabilidad de un contexto dada una palabra como $p(c\mid w)=\mathrm{softmax}\big((u_{c'}^\top v_w)_{c'\in V}\big)_c=\exp(u_c^\top v_w)/\sum_{c'\in V}\exp(u_{c'}^\top v_w)$ y maximiza $\sum_{(w,c)\in\mathcal D}\log p(c\mid w)$. El denominador suma sobre todo el vocabulario, así que evaluar cada término cuesta del orden de $\abs V$ operaciones. El muestreo negativo lo reemplaza por un problema de clasificación binaria.
+
+\begin{definicion}[Skip-gram con muestreo negativo]\label{def:sgns}
+\noindent Sea $\sigma(x)=1/(1+e^{-x})$ la función logística y $k\ge1$ un entero. Por cada par observado $(w,c)\in\mathcal D$ se muestrean $k$ contextos \emph{negativos} $c_N$ independientes con la distribución unigrama $P(c_N=c)=\#(c)/\abs{\mathcal D}$. El objetivo (SGNS) a maximizar es
+\[
+\sum_{(w,c)\in\mathcal D}\Big(\log\sigma(u_c^\top v_w)+\sum_{\text{negativos }c_N}\log\sigma(-u_{c_N}^\top v_w)\Big).
+\]
+\end{definicion}
+
+\noindent Como $\sigma(x)\in(0,1)$ y $\sigma(-x)=1-\sigma(x)$, $\sigma(u_c^\top v_w)$ se interpreta como la probabilidad de que el par sea observado y no muestreado al azar; el objetivo es la log-verosimilitud de una regresión logística que distingue unos de otros. Levy y Goldberg (2014) mostraron qué calcula este procedimiento.
+
+\begin{teorema}[SGNS factoriza la PMI desplazada]\label{teo:sgns}
+\noindent La esperanza del objetivo de la Definición~\ref{def:sgns}, respecto del muestreo negativo, es $\sum_{w,c}\ell_{wc}(u_c^\top v_w)$ con
 \[
 \ell_{wc}(x)=\#(w,c)\log\sigma(x)+k\,\frac{\#(w)\#(c)}{\abs{\mathcal D}}\log\sigma(-x).
 \]
-Si $\#(w,c)>0$, $\ell_{wc}$ es estrictamente cóncava y se maximiza en
-\[
-x^*=\log\frac{\#(w,c)\,\abs{\mathcal D}}{\#(w)\,\#(c)}-\log k=\PMI(w,c)-\log k.
-\]
-En consecuencia, si la dimensión $D$ es suficiente para que los productos $u_c^\top v_w$ puedan elegirse libremente, el óptimo global cumple $u_c^\top v_w=\PMI(w,c)-\log k$ para todos los pares.
+Si $\#(w,c)>0$, $\ell_{wc}$ es estrictamente cóncava y se maximiza únicamente en $x^*=\PMI(w,c)-\log k$. En consecuencia, si la dimensión $D$ permite elegir los productos $u_c^\top v_w$ de forma independiente para cada par, el máximo de la esperanza del objetivo se alcanza con $u_c^\top v_w=\PMI(w,c)-\log k$ para todo par con $\#(w,c)>0$.
 \end{teorema}
 \begin{proof}
-\noindent El primer término suma $\log\sigma(u_c^\top v_w)$ sobre las $\#(w,c)$ apariciones del par. El segundo es la esperanza de la contribución de los negativos: la palabra $w$ aparece $\#(w)$ veces, en cada una se muestrean $k$ contextos negativos, y cada uno es $c$ con probabilidad $\#(c)/\abs{\mathcal D}$; cada vez que sale $c$ se suma $\log\sigma(-u_c^\top v_w)$. Esto justifica la forma de $\ell_{wc}$.
+\noindent El primer sumando de la Definición~\ref{def:sgns} aporta $\log\sigma(u_c^\top v_w)$ una vez por cada una de las $\#(w,c)$ apariciones del par. Para el segundo, la palabra $w$ aparece como primer elemento de $\#(w)$ pares; en cada uno se muestrean $k$ negativos, y cada negativo es igual a $c$ con probabilidad $\#(c)/\abs{\mathcal D}$. Por linealidad de la esperanza, el número esperado de veces que se suma $\log\sigma(-u_c^\top v_w)$ es $k\#(w)\#(c)/\abs{\mathcal D}$. Agrupando por pares $(w,c)$ se obtiene la expresión con $\ell_{wc}$.
 
 \medskip
 
-\noindent De $\sigma(x)=1/(1+e^{-x})$ se obtiene $\frac{d}{dx}\log\sigma(x)=\frac{e^{-x}}{1+e^{-x}}=\sigma(-x)$ y, por la regla de la cadena, $\frac d{dx}\log\sigma(-x)=-\sigma(x)$. Con $B=k\#(w)\#(c)/\abs{\mathcal D}>0$,
+\noindent De $\sigma(x)=1/(1+e^{-x})$ se obtiene $\frac{d}{dx}\log\sigma(x)=\frac{e^{-x}}{1+e^{-x}}=\sigma(-x)$ y, por la regla de la cadena, $\frac d{dx}\log\sigma(-x)=-\sigma(x)$; además $\sigma'(x)=\sigma(x)\sigma(-x)$. Con $B=k\#(w)\#(c)/\abs{\mathcal D}>0$,
 \[
-\ell_{wc}'(x)=\#(w,c)\,\sigma(-x)-B\,\sigma(x),\qquad \ell_{wc}''(x)=-\big(\#(w,c)+B\big)\sigma(x)\sigma(-x)<0,
+\ell_{wc}'(x)=\#(w,c)\,\sigma(-x)-B\,\sigma(x),\qquad \ell_{wc}''(x)=-\big(\#(w,c)+B\big)\sigma(x)\sigma(-x)<0.
 \]
-usando $\sigma'(x)=\sigma(x)\sigma(-x)$. La concavidad estricta garantiza que un punto crítico es el máximo único. La condición $\ell'_{wc}(x)=0$ equivale a $\sigma(x)/\sigma(-x)=\#(w,c)/B$, y $\sigma(x)/\sigma(-x)=\frac{1+e^{x}}{1+e^{-x}}=e^x$. Luego $x^*=\log\frac{\#(w,c)}{B}=\log\frac{\#(w,c)\abs{\mathcal D}}{k\#(w)\#(c)}$, que es la expresión enunciada. Si los productos pueden elegirse de forma independiente para cada par, el objetivo total, que es la suma de los $\ell_{wc}$, se maximiza maximizando cada sumando.
+La concavidad estricta garantiza que un punto crítico, si existe, es el máximo único. La condición $\ell'_{wc}(x)=0$ equivale a $\sigma(x)/\sigma(-x)=\#(w,c)/B$, y $\frac{\sigma(x)}{\sigma(-x)}=\frac{1+e^{x}}{1+e^{-x}}=e^x$ (multiplicando numerador y denominador por $e^x$). Luego $x^*=\log\frac{\#(w,c)}{B}=\log\frac{\#(w,c)\abs{\mathcal D}}{\#(w)\#(c)}-\log k$. Si los productos pueden elegirse de forma independiente, la suma se maximiza maximizando cada sumando.
 \end{proof}
 
-\noindent La cantidad $\PMI(w,c)=\log\frac{\hat p(w,c)}{\hat p(w)\hat p(c)}$ es la información mutua puntual empírica: el sumando de la información mutua de la Definición~\ref{def:im}. El teorema dice que los embeddings de Word2Vec son una factorización de rango bajo de la matriz de PMI desplazada: dos palabras $w,w'$ con filas de PMI parecidas (contextos parecidos) reciben vectores $v_w,v_{w'}$ con productos parecidos contra todos los contextos, que es la formalización de la hipótesis distribucional.
+\noindent La hipótesis sobre $D$ es fuerte (con $D\ll\abs V$ no se cumple en general): el teorema describe el objetivo al que el entrenamiento se aproxima, y los embeddings reales son una factorización aproximada de rango $D$ de la matriz de PMI desplazada. Aun así, permite dar una versión exacta de la hipótesis distribucional.
 
-\medskip
+\begin{corolario}[Contextos iguales, vectores iguales]\label{cor:contextos}
+\noindent Supóngase que en el óptimo del Teorema~\ref{teo:sgns} dos palabras $w,w'$ tienen las mismas frecuencias condicionales de contexto, es decir, $\#(w,c)/\#(w)=\#(w',c)/\#(w')$ para todo $c$, con $\#(w,c)>0$ si y solo si $\#(w',c)>0$, y que los vectores $u_c$ con $\#(w,c)>0$ generan $\R^D$. Entonces $v_w=v_{w'}$.
+\end{corolario}
+\begin{proof}
+\noindent Por la Definición~\ref{def:contexto}, $\PMI(w,c)=\log\big(\frac{\#(w,c)}{\#(w)}\cdot\frac{\abs{\mathcal D}}{\#(c)}\big)$, que por hipótesis coincide con $\PMI(w',c)$ para todo $c$ con conteo positivo. Por el teorema, $u_c^\top v_w=u_c^\top v_{w'}$, es decir, $u_c^\top(v_w-v_{w'})=0$, para todos esos $c$. Un vector ortogonal a un sistema generador de $\R^D$ es nulo, porque es ortogonal a toda combinación lineal de ese sistema, en particular a sí mismo.
+\end{proof}
 
-\noindent \emph{GloVe (Pennington, Socher y Manning, 2014)} parte directamente de la matriz de coocurrencias $X_{ij}$ y minimiza el error cuadrático ponderado
+\noindent \emph{GloVe} (Pennington, Socher y Manning, 2014) parte de la matriz de coocurrencias $X_{ij}=\#(i,j)$ y define los embeddings como minimizadores del error cuadrático ponderado
 \[
 J=\sum_{i,j:\,X_{ij}>0}f(X_{ij})\big(w_i^\top\tilde w_j+b_i+\tilde b_j-\log X_{ij}\big)^2,\qquad f(x)=\min\big(1,(x/x_{\max})^{\alpha}\big),
 \]
-con $\alpha=3/4$ en el artículo original. El peso $f$ evita que los pares muy frecuentes dominen y anula los pares no observados. Si los sesgos toman los valores $b_i=\log X_{i\cdot}$ y $\tilde b_j=\log X_{\cdot j}-\log X_{\cdot\cdot}$ (con $X_{i\cdot},X_{\cdot j},X_{\cdot\cdot}$ las sumas por fila, columna y total), un ajuste exacto daría $w_i^\top\tilde w_j=\log X_{ij}-\log X_{i\cdot}-\log X_{\cdot j}+\log X_{\cdot\cdot}=\PMI(i,j)$. Las dos técnicas, presentadas en la guía como ``red pequeña'' y ``factorización'', aproximan por tanto el mismo objeto; difieren en la función de pérdida y en el peso que dan a cada par.
+con $w_i,\tilde w_j\in\R^D$, sesgos escalares $b_i,\tilde b_j$ y, en el artículo original, $\alpha=\frac34$. El peso $f$ es creciente y acotado por $1$: impide que los pares muy frecuentes dominen la suma, y los pares no observados no entran (el logaritmo de $0$ no está definido).
+
+\begin{proposicion}[GloVe y la PMI]\label{prop:glove}
+\noindent Si un minimizador de $J$ ajusta exactamente ($J=0$) y sus sesgos son $b_i=\log X_{i\cdot}$ y $\tilde b_j=\log X_{\cdot j}-\log X_{\cdot\cdot}$, con $X_{i\cdot}=\sum_jX_{ij}$, $X_{\cdot j}=\sum_iX_{ij}$ y $X_{\cdot\cdot}=\sum_{i,j}X_{ij}$, entonces $w_i^\top\tilde w_j=\PMI(i,j)$ para todo par con $X_{ij}>0$.
+\end{proposicion}
+\begin{proof}
+\noindent $J=0$ con pesos positivos exige que cada término sea nulo: $w_i^\top\tilde w_j=\log X_{ij}-b_i-\tilde b_j=\log X_{ij}-\log X_{i\cdot}-\log X_{\cdot j}+\log X_{\cdot\cdot}=\log\frac{X_{ij}X_{\cdot\cdot}}{X_{i\cdot}X_{\cdot j}}$, que es la PMI de la Definición~\ref{def:contexto} con $\#(w)=X_{i\cdot}$, $\#(c)=X_{\cdot j}$ y $\abs{\mathcal D}=X_{\cdot\cdot}$.
+\end{proof}
+
+\noindent Así, las dos técnicas que la guía presenta como ``una red pequeña'' y ``una factorización'' aproximan el mismo objeto, la matriz de PMI de las coocurrencias; difieren en la función de pérdida (logística frente a cuadrática) y en el peso de cada par. La guía dice que ``king'' y ``queen'' ``podrían'' quedar cerca: es una observación empírica sobre embeddings entrenados en corpus grandes (medida con la similitud coseno), no una consecuencia de las definiciones; el Corolario~\ref{cor:contextos} es lo que puede garantizarse.
 
 \medskip
 
@@ -1219,29 +1429,28 @@ con $\alpha=3/4$ en el artículo original. El peso $f$ evita que los pares muy f
 \toprule
 Representación & Dimensión & Ventajas y limitaciones\\
 \midrule
-Bolsa de palabras & $\abs V$, dispersa & simple, interpretable; ignora orden (Prop.~\ref{prop:bow-orden}) y similitud (Prop.~\ref{prop:ortogonal})\\
-Palabras vacías / raíces & $\le\abs V$ & reducen dimensión agrupando o quitando coordenadas; errores de sobre y subrreducción; pueden quitar negaciones\\
-TF-IDF & $\abs V$, dispersa & pondera por rareza con los datos; mismas limitaciones de orden y similitud\\
-N-gramas & hasta $\abs V^n$ & recuperan orden local; explosión combinatoria\\
-Embeddings & $D\approx10^2$, densa & similitud semántica (Teo.~\ref{teo:sgns}); requieren corpus grande; un vector por palabra aunque tenga varios sentidos; palabras nuevas sin vector\\
+Bolsa de palabras & $\abs V$, dispersa & simple, interpretable; ignora el orden (Prop.~\ref{prop:bow-orden}) y la similitud (Prop.~\ref{prop:ortogonal})\\
+Sin palabras vacías & $\abs V-\abs S$ & proyección fija (Prop.~\ref{prop:stop}); puede borrar negaciones (Ej.~\ref{ej:negacion})\\
+Stemming / lematización & $\abs{\pi(V)}$ & agrupa conteos (Prop.~\ref{prop:normalizacion}); sobre y subreducción (Ej.~\ref{ej:porter})\\
+TF-IDF & $\abs V$, dispersa & pondera por rareza con los datos (Prop.~\ref{prop:idf}); mismas limitaciones de orden y similitud\\
+N-gramas & hasta $\abs V^n$ & recuperan orden local (Prop.~\ref{prop:ngramas}); explosión combinatoria\\
+Embeddings & $D\approx10^2$, densa & aproximan la PMI (Teo.~\ref{teo:sgns}, Prop.~\ref{prop:glove}); requieren un corpus grande; un vector por palabra aunque tenga varios sentidos; sin vector para palabras fuera de $V$ (Prop.~\ref{prop:oov})\\
 \bottomrule
 \end{tabularx}
 \end{center}
-
-\subsection{Tokenización en modelos fundacionales}\label{sec:bpe}
-
-\noindent Los modelos fundacionales no tokenizan por palabras completas sino por \emph{subpalabras}. El algoritmo BPE (\emph{byte pair encoding}, adaptado a NLP por Sennrich, Haddow y Birch, 2016) parte de los caracteres y repite: contar los pares de símbolos adyacentes más frecuentes en el corpus y fusionar el más frecuente en un símbolo nuevo, hasta alcanzar un tamaño de vocabulario prefijado. Resuelve el problema de las palabras nuevas de los embeddings de palabra: toda cadena se puede escribir con los símbolos iniciales, así que ninguna queda fuera del vocabulario; las palabras frecuentes son un token y las raras se parten en varios. Por eso el número de tokens de un texto no es su número de palabras (la regla aproximada de la guía, un token $\approx\frac34$ de palabra en inglés, depende del tokenizador y del idioma).
-
-\medskip
-
-\noindent El costo de un modelo de texto en Amazon Bedrock en modalidad bajo demanda es lineal en los tokens: si $T_{\mathrm{in}}$ y $T_{\mathrm{out}}$ son los tokens de entrada y de salida y $p_{\mathrm{in}},p_{\mathrm{out}}$ los precios por token, el costo es $p_{\mathrm{in}}T_{\mathrm{in}}+p_{\mathrm{out}}T_{\mathrm{out}}$. Con la regla de $\frac34$, una página de $500$ palabras son unos $500/0.75\approx667$ tokens. Los modelos de imagen suelen cobrarse por imagen y existen modalidades de capacidad reservada, como advierte el documento original.
 
 \section{Desbalance de clases}\label{sec:desbalance}
 
 \noindent \emph{Motivación.} En clasificación binaria con una clase positiva rara (enfermedad, fraude) de proporción $\pi$, los algoritmos que minimizan el error promedio encuentran rentable ignorarla. El resultado siguiente, que la guía ilustra con el $99\%$ de personas sanas, lo hace preciso.
 
+\begin{definicion}[Clasificador, exactitud y sensibilidad]\label{def:exactitud}
+\noindent Un \emph{clasificador} binario es una función $\hat y:\R^p\to\{0,1\}$. Si $(X,Y)$ es un registro aleatorio, su \emph{exactitud} (\emph{accuracy}) es $\Prob(\hat y(X)=Y)$ y su \emph{sensibilidad} (\emph{recall}) es $\Prob(\hat y(X)=1\mid Y=1)$, la fracción de positivos que detecta.
+\end{definicion}
+
+\noindent La exactitud trata igual los dos tipos de error; la sensibilidad mide solo lo que ocurre con la clase positiva.
+
 \begin{proposicion}[Paradoja de la exactitud y umbral de Bayes]\label{prop:paradoja}
-\noindent Sea $\eta(x)=\Prob(Y=1\mid X=x)$ y $\pi=\Prob(Y=1)$. (i) El clasificador constante $\hat y\equiv0$ tiene exactitud $1-\pi$ y sensibilidad (\emph{recall}) $0$. (ii) Si un error sobre la clase $1$ cuesta $w_1>0$ y uno sobre la clase $0$ cuesta $w_0>0$, el clasificador que minimiza el costo esperado predice $1$ si y solo si $\eta(x)>\dfrac{w_0}{w_0+w_1}$. Con $w_0=w_1$ el umbral es $\frac12$.
+\noindent Sea $\eta(x)=\Prob(Y=1\mid X=x)$ y $\pi=\Prob(Y=1)$. (i) El clasificador constante $\hat y\equiv0$ tiene exactitud $1-\pi$ y sensibilidad $0$. (ii) Si un error sobre la clase $1$ cuesta $w_1>0$ y uno sobre la clase $0$ cuesta $w_0>0$, el clasificador que minimiza el costo esperado predice $1$ si y solo si $\eta(x)>\dfrac{w_0}{w_0+w_1}$. Con $w_0=w_1$ el umbral es $\frac12$.
 \end{proposicion}
 \begin{proof}
 \noindent (i) Acierta exactamente cuando $Y=0$, con probabilidad $1-\pi$, y nunca predice $1$. (ii) Condicionando a $X=x$, predecir $1$ tiene costo esperado $w_0(1-\eta(x))$ (se equivoca si $Y=0$) y predecir $0$ tiene costo $w_1\eta(x)$. Conviene predecir $1$ si $w_0(1-\eta(x))<w_1\eta(x)$, es decir, $w_0<(w_0+w_1)\eta(x)$. Minimizar punto a punto minimiza la esperanza total, porque el costo esperado es la integral de los costos condicionales.
@@ -1284,7 +1493,7 @@ Despejando: $\eta_\beta(\eta+\beta-\beta\eta)=\eta$, es decir, $\eta_\beta\beta=
 \noindent \emph{Motivación.} El sobremuestreo aleatorio repite puntos exactos, y un modelo flexible puede aislarlos con regiones diminutas alrededor de cada uno. Chawla, Bowyer, Hall y Kegelmeyer (2002) propusieron generar puntos nuevos entre ejemplos minoritarios cercanos, para que la región de decisión de la clase rara se ensanche en lugar de fragmentarse.
 
 \begin{definicion}[SMOTE]\label{def:smote}
-\noindent Para generar un punto sintético: se elige un ejemplo minoritario $x$, se elige al azar uno $x'$ entre sus $k$ vecinos más cercanos dentro de la clase minoritaria, se toma $u\sim U(0,1)$ independiente y se define $z=x+u(x'-x)$.
+\noindent Sea $M\subset\R^p$ el conjunto finito de ejemplos de la clase minoritaria en $\Dtr$, con $\abs M>k$. Los \emph{$k$ vecinos más cercanos} de $x\in M$ son los $k$ puntos de $M\setminus\{x\}$ con menor distancia euclídea a $x$ (con un criterio fijo de desempate). Para generar un punto sintético: se elige un ejemplo $x\in M$, se elige al azar uno $x'$ entre sus $k$ vecinos más cercanos, se toma $u\sim U(0,1)$ independiente y se define $z=x+u(x'-x)$.
 \end{definicion}
 
 \begin{proposicion}[Propiedades de SMOTE]\label{prop:smote}
@@ -1298,7 +1507,30 @@ Despejando: $\eta_\beta(\eta+\beta-\beta\eta)=\eta$, es decir, $\eta_\beta\beta=
 
 \subsection{Aumento de datos}\label{sec:aumento}
 
-\noindent El aumento de datos que la guía propone para imágenes (volteos, rotaciones, ajustes de color) usa transformaciones que se sabe que no cambian la etiqueta. Por ejemplo, el volteo horizontal es el operador $(FI)(u,v)=I(u,W-1-v)$, que es una permutación de los píxeles y cumple $F\circ F=\mathrm{id}$ (porque $W-1-(W-1-v)=v$). Si $G$ es un conjunto de tales transformaciones que preservan la etiqueta, entrenar con los pares $(gx_i,y_i)$, $g\in G$, equivale a minimizar $\frac1{n\abs G}\sum_i\sum_{g\in G}\ell(f(gx_i),y_i)$, el riesgo promediado sobre las transformaciones. Esto incorpora la invariancia al entrenamiento, del mismo modo que el Corolario~\ref{cor:invariancia} la incorpora a la arquitectura. La hipótesis de invariancia debe verificarse en cada problema: el volteo horizontal preserva ``gato'', pero no el dígito ``$2$'' ni la lateralidad de una radiografía. El aumento de texto (sinónimos, inserciones) descansa en la hipótesis análoga, más frágil. Como indica la guía, el aumento parte de los datos existentes, mientras que los datos sintéticos se generan sin usar el conjunto original.
+\noindent \emph{Motivación.} Cuando recolectar más ejemplos de la clase minoritaria es caro, se pueden fabricar a partir de los existentes, siempre que se sepa que ciertas modificaciones no cambian la clase. Para que ``no cambiar la clase'' sea una condición verificable hay que formularla.
+
+\begin{definicion}[Transformación que preserva la etiqueta]\label{def:preserva}
+\noindent Supóngase que la etiqueta de cada entrada $x$ está determinada por una función $h^*$ (la etiqueta verdadera) definida en un conjunto $\mathcal{X}$ de entradas posibles. Una biyección $g:\mathcal X\to\mathcal X$ \emph{preserva la etiqueta} si $h^*(gx)=h^*(x)$ para todo $x\in\mathcal X$. El \emph{aumento de datos} con un conjunto finito $G$ de tales transformaciones (que contiene la identidad) reemplaza $\Dtr$ por los pares $(gx_i,y_i)$, $g\in G$.
+\end{definicion}
+
+\noindent Para imágenes de la Definición~\ref{def:imagen}, dos transformaciones típicas son el \emph{volteo horizontal} $F$ y la \emph{rotación de $180^\circ$} $R$:
+\[
+(FI)(u,v,c)=I(u,W-1-v,c),\qquad (RI)(u,v,c)=I(H-1-u,W-1-v,c).
+\]
+Ambas son permutaciones de los píxeles, y cumplen $F\circ F=R\circ R=\mathrm{id}$ porque $W-1-(W-1-v)=v$ y lo mismo en filas. Los \emph{ajustes de color} son transformaciones afines por canal, $I(\cdot,\cdot,c)\mapsto a_cI(\cdot,\cdot,c)+b_c$, del tipo de la Proposición~\ref{prop:norm-pix}(iii). Que una de ellas preserve la etiqueta depende del problema.
+
+\begin{ejemplo}[Una rotación que no preserva la etiqueta]\label{ej:seis-nueve}
+\noindent En reconocimiento de dígitos manuscritos, la rotación $R$ lleva la imagen de un ``$6$'' a una imagen que se lee como ``$9$'': $h^*(RI)=9\ne6=h^*(I)$. Aumentar con $R$ enseñaría al modelo etiquetas falsas. El volteo horizontal no preserva la lateralidad de una radiografía, y sí la clase ``gato'' en fotografías.
+\end{ejemplo}
+
+\begin{proposicion}[Riesgo aumentado]\label{prop:aumento}
+\noindent El riesgo empírico sobre los datos aumentados es $\hat R_G(f)=\frac1{n\abs G}\sum_{i=1}^n\sum_{g\in G}\ell(f(gx_i),y_i)$. Si $f$ es invariante ($f(gx)=f(x)$ para todo $g\in G$ y todo $x$), entonces $\hat R_G(f)=\hat R(f)$. Si todo $g\in G$ preserva la etiqueta, cada par aumentado $(gx_i,y_i)$ cumple $y_i=h^*(gx_i)$ siempre que $y_i=h^*(x_i)$.
+\end{proposicion}
+\begin{proof}
+\noindent La primera fórmula es la definición del riesgo empírico sobre los $n\abs G$ pares aumentados. Si $f$ es invariante, cada sumando interior es $\ell(f(x_i),y_i)$, y el promedio sobre $g$ de $\abs G$ términos iguales es ese término. La última afirmación es la Definición~\ref{def:preserva}: $h^*(gx_i)=h^*(x_i)=y_i$.
+\end{proof}
+
+\noindent La proposición muestra qué hace el aumento: no cambia el riesgo de los modelos ya invariantes y penaliza a los que no lo son, de modo que empuja el ajuste hacia la invariancia. Es la vía por los datos hacia la misma propiedad que el Teorema~\ref{teo:invariancia-cnn} obtiene por la arquitectura. Todo descansa en la hipótesis de preservación, que el Ejemplo~\ref{ej:seis-nueve} muestra que puede fallar. El aumento de texto (reemplazo por sinónimos, inserciones) es una función sobre sucesiones de tokens de la Definición~\ref{def:token} con la hipótesis análoga, más frágil: el Ejemplo~\ref{ej:negacion} muestra que cambiar o quitar un solo token puede invertir la etiqueta. Como indica la guía, el aumento parte de los datos existentes, mientras que los datos sintéticos se generan sin usar el conjunto original.
 
 \subsection{Métricas de sesgo previas al entrenamiento}\label{sec:clarify}
 
