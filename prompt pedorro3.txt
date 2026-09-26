@@ -1,4 +1,4 @@
-Transforma las notas de este .md en **notas de repaso para examen de AWS**, asumiendo que el lector 
+Transforma las notas de este .txt en **notas de repaso para examen de AWS**, asumiendo que el lector 
 **ya domina los temas tratados y no necesita aprenderlos desde cero**. Elimina explicaciones pedagógicas, 
 analogías, introducciones, ejemplos redundantes y definiciones elementales. Conserva únicamente información 
 útil para recordar y responder preguntas: comportamiento de servicios, diferencias entre opciones similares,
@@ -11,6 +11,6 @@ Procesa el material en **chunks independientes y autocontenidos**, cada uno cent
  Usa tablas solo cuando ayuden a comparar opciones y fórmulas compactas del tipo `condición → comportamiento → consecuencia` 
  cuando sean más claras que la prosa. No agregues contenido externo salvo que sea imprescindible para corregir un error técnico evidente.
 
- La salida debe ser un .md, con el mismo nombre del .md original pero con la palabra "chunks" entre el numero y el titulo
+ La salida debe ser un .md, con el mismo nombre del .txt original pero con la palabra "chunks" entre el numero y el titulo
  de las notas. La extension debe ser significativamente menor al .md original, de otro modo no tendria sentido hacer 
  notas de repaso.
