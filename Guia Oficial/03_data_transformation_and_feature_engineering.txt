@@ -1,0 +1,1621 @@
+Chapter 3
+Data Transformation and Feature Engineering
+THE AWS CERTIFIED MACHINE LEARNING (ML)
+ENGINEER ASSOCIATE EXAM OBJECTIVES COVERED
+IN THIS CHAPTER MAY INCLUDE, BUT ARE NOT
+LIMITED TO THE FOLLOWING:
+✔ Domain 1: Data Preparation for Machine Learning
+1.2 Transform data and perform feature engineering
+1.3 Ensure data integrity and prepare data for modeling
+Introduction
+In Chapter 2, you learned how to ingest data from different sources and how to
+store this data in AWS. Now that you have collected the data and secured it in
+AWS, your job as a machine learning (ML) engineer is to make it ready to
+train your ML model. This step is illustrated in the Process Data phase of the
+ML lifecycle, as shown in Figure 3.1.
+FIGURE 3.1 The ML lifecycle.
+Your data is usually stored in its raw state in a data lake. A data lake
+architecture can provide a solid foundation on which to build a ML solution
+because it’s designed to store massive amounts of data in a central repository,
+so it’s readily available to be categorized, processed, enriched, and consumed
+by diverse groups within your organization.
+The following are the key characteristics of a data lake:
+Storage at scale. A data lake must be able to accommodate data
+coming in any time, whether it be at predefined time intervals or in real
+time, in small payloads, or in large batches.
+Data movement. Just like a real lake has a river inlet that brings water
+into the lake, and a river outlet that moves water out of the lake, a data
+lake must allow for data movement in and out of the data lake.
+Raw data. Data moved into the data lake may come from different
+sources and may be structured, semi-structured, or unstructured. The
+format of the data is irrelevant during the ingestion and the storage
+phases of the data collection.
+Security. Because sensitive data may be imported into the data lake, it
+is critical that no unauthorized user has access to this data. As a result,
+the data lake must be protected by robust identity and access management
+(IAM) security controls. Encryption in use and in transit is no less
+important than encryption at rest. Therefore, security guardrails should be
+established and enforced to protect the data while it is produced and
+consumed.
+Catalog. Data lakes must allow you to store relational data (e.g.,
+operational databases, line-of-business application data), and
+nonrelational data (e.g., data from mobile apps, IoT devices, and social
+media). They also give you the ability to understand what data is in the
+lake through crawling, cataloging, and indexing of data.
+To create a data lake in AWS, you would typically use a combination of the
+following services: Amazon S3 (for storage), AWS Glue (for cataloging),
+Amazon Athena (for querying), and AWS Lake Formation (for central
+management of IAM, data security, and governance).
+Except for AWS Lake Formation, we already covered these services in the
+previous chapter. For the exam, you need to know that Amazon S3 is the
+preferred storage option with a data lake on AWS because it provides highly
+durable (99.999999999%), highly available, secure storage and seamless
+integration with a number of data processing services and ML platforms on
+AWS. Amazon S3 can be used as a single source of truth storage for most
+AWS ML services. Additionally, with Amazon S3’s Intelligent-Tiering storage
+class, you can reduce storage cost by letting AWS automatically determine
+when to move data to the most suitable storage class.
+AWS Lake Formation nicely supplements the aforementioned AWS services
+by centralizing data permissions, simplifying security management and
+governance at scale, monitoring data access, and ensuring compliance.
+In the upcoming sections, you will learn the techniques that allow you to
+process the data in your data lake and make it suitable to train your ML model,
+resulting in meaningful inferences.
+The ultimate goal of the Process Data phase is to produce quality data to
+effectively train your ML model so it will learn faster from your data and it
+will produce accurate predictions. The higher the quality of your training
+dataset, the more accurate the inferences produced by your ML model.
+Understanding Feature Engineering
+Before deep diving into feature engineering, let’s focus on understanding the
+different types of data:
+Categorical data. Categorical data contains a finite number of distinct
+categories, where each category is represented with a string. Categorical
+data might have a logical order, such as the size of a shirt: Small,
+Medium, Large, X-Large. This type of categorical data is referred to as
+ordinal. Alternatively, categorical data without a logical order is referred
+to as nominal. For example, the 50 US states are categorical nominal
+data.
+Numerical data. Numerical data in ML refers to any type of data that
+can be represented with numbers. This includes discrete data and
+continuous data.
+Discrete data has a countable number of values between any two values.
+A discrete variable is always numeric, such as the number of customer
+complaints or the number of flaws or defects.
+Continuous data has an infinite number of values between any two
+values. A continuous variable can be numeric or date/time, such as the
+length of a part or the date and time a payment is received.
+Textual data. Textual data refers to written content that can be
+processed and analyzed. This can include everything from sentences and
+paragraphs in articles or books to social media posts, reviews, and more.
+It’s used in various natural language processing (NLP) tasks like
+sentiment analysis, language translation, and text classification.
+Image data. Image data consists of pixel values that can be analyzed to
+extract features like edges, shapes, colors, and patterns. Image data is
+often used in computer vision tasks, such as object detection, facial
+recognition, and image classification.
+Time-series data. Time-series data refers to a collection of
+observations or measurements recorded over regular intervals of time. In
+this type of data, each observation is associated with a specific timestamp
+or time period, creating a sequence of data points ordered
+chronologically. The order of the data points is crucial for understanding
+trends, patterns, and variations occurring over that time period.
+The ability to understand the different types of data is a first step toward our
+goal of training an ML model. This is a necessary step considering the fact
+that the data in your data lake is the combination of multiple datasets ingested
+from different data sources. Each dataset may be composed of structured,
+semi-structured, or unstructured data. And even if all your datasets are made
+up of structured data, it is not guaranteed that the schema is the same for all
+the datasets. As a result, this data needs to be properly transformed to be ready
+to be fed to an ML algorithm.
+This is where feature engineering comes into play. Feature engineering is the
+science (and art) of extracting more information from existing data to improve
+your ML model’s prediction power and help your ML model learn faster. You
+are not adding any new data during featuring engineering, but rather, you are
+making the data you already have more useful. By rearranging your data into a
+set of features that can be fed directly into an ML algorithm, your ML model
+will derive better inferences. Feature engineering often relies on domain
+knowledge of the data for your ML model to produce more effective
+outcomes.
+The types of data you just learned (categorical, numerical, textual, image,
+time-series) will determine the most appropriate feature engineering approach.
+Defining Features
+In ML, features are individual measurable properties or characteristics of the
+data you’re analyzing. Every unique attribute of the data is considered a
+feature (also known as an attribute). Think of them as inputs that your model
+uses to make predictions. For example, in a dataset of sales data, features
+might include the date, the number of visitors, and the number of orders
+(sales).
+Figure 3.2 illustrates a simplified dataset of sales data.
+FIGURE 3.2 Example of a dataset.
+Assume your ML model will use this data to predict sales in a given day. At
+first sight, you may have noticed that the first two rows have a number of sales
+significantly higher than the remaining three rows. Further analysis indicated
+that customers are more prone to purchasing during weekends. As a result, it’s
+the day of the week that is influencing purchasing habits. So we can engineer a
+feature that calls out the day of the week and then write a simple script that
+imputes that data automatically, as shown in Figure 3.3.
+FIGURE 3.3 Adding a feature to a dataset.
+This simple example showed how “hidden” information from your dataset can
+help your ML model learn faster. Feature engineering is all about discovering
+where this information is and how to transform your dataset to make the best
+use of it.
+Selecting Features for Model Training
+The following are the main feature engineering areas of focus:
+Feature extraction
+Feature selection
+Feature creation and transformation
+The goal of feature extraction and feature selection is to reduce the
+dimensionality of your dataset. The term dimensionality indicates the number
+of features (or inputs) you have in your dataset. The higher the dimensionality
+of a dataset, the harder the task to effectively train your ML model. Models
+will be challenged to find the patterns you want them to recognize when there
+are many different dimensions of data (many features) to sort through.
+This is why performing feature extraction and selection is important.
+Feature Extraction
+Feature extraction is the process of automatically reducing the dimensionality
+of your dataset by creating new features from existing features. Feature
+extraction is a common process with datasets that have a large number of
+features, most often seen when working with image, audio, or text data.
+Figure 3.4 shows an example of image recognition.
+FIGURE 3.4 Example of image recognition.
+Before the introduction of neural networks, one of the ways to analyze image
+datasets was to extract features from the individual images. If the image is a
+car, you extract some of the useful aspects of the image like the windshield,
+headlight, turn signals, and tires as independent features. So instead of having
+raw pixels making up your dataset, you have features or columns such as
+windshield_present and headlight_present in your dataset, as
+displayed in Figure 3.5. These features will make it easier for the ML
+algorithm to learn from the image data and eventually start to recognize faces.
+FIGURE 3.5 Extracting features from an image.
+In most cases, the data itself will help you determine what specific feature
+extraction technique to use.
+For image data, it might be extracting key features like we saw earlier. In NLP,
+it could be extracting useful features like the most popular words from text
+other than articles or prepositions.
+Feature Selection
+Feature selection is another technique to reduce the dimensionality of your
+dataset and is commonly used in conjunction with feature extraction.
+Feature selection ranks the dataset existing features according to their
+predictive significance and selects only the ones that are most relevant based
+on the ranking.
+Because your dataset contains raw data stored in a data lake, some features
+will likely be more important than others with respect to the model accuracy.
+Some features will also be redundant due to data correlation to other features.
+In the example in Figure 3.6, revenue shifts in parallel to sales, so it is not
+likely to provide much more insight to the model than it’s already getting from
+the sales data.
+FIGURE 3.6 Performing feature selection.
+The features that are irrelevant to the problem need to be removed. Feature
+selection addresses these problems by filtering out irrelevant or redundant
+features from your dataset. As a result, only a subset of features that are most
+useful to the problem is made available to your ML algorithm.
+Filtering algorithms may use a statistical measure to help identify features that
+have a strong relationship with the target variable. In the example, the target
+variable we want our ML model to predict is sales for a given day, so net
+profits from sales are probably not relevant to that prediction. As a result, we
+can remove that feature.
+Remember, ML algorithms are not only used for typical structured datasets.
+Often, we’re dealing with unstructured datasets in the form of images, audio,
+or video, for instance. These types of data formats require filtering techniques
+to reduce the dimensionality of the dataset.
+Feature Creation and Transformation
+Unlike feature extraction and selection, feature creation and transformation is
+not a dimensionality reduction technique. Instead, feature creation and
+transformation is the process of generating new features from existing
+features. For example, say we have “date” as a feature, and it’s formatted as a
+two-digit day, two-digit month, and two-digit year (dd-mm-yy).
+You might find that combining the day, month, and year into one feature is not
+very helpful for your predictions. Instead, you could generate three different
+features, one for day, one for month, and one for year, and this way potentially
+discover a meaningful relationship between one of these features and the
+target variable you want your ML model to predict.
+Using Amazon SageMaker Feature Store
+Because features are inputs (or variables) to ML models during training,
+wouldn’t it be nice to have a central location where you could select, refine,
+store, and manage all the features of your dataset?
+This is where Amazon SageMaker Feature Store comes into play. Amazon
+SageMaker Feature Store is a fully managed repository to store, share, and
+manage features for ML models. For example, in an application that
+recommends books for a given topic, features could include book affinity to
+the topic, book ratings, and book publishing date.
+Features are constantly used by multiple teams (data scientists as well as data
+and ML engineers), and feature quality is critical to the accuracy of your ML
+model. Also, when features used to train models offline in batch are made
+available for real-time inference, it’s hard to keep the two feature stores
+synchronized. Amazon SageMaker Feature Store provides a secured and
+unified store to process, standardize, and use features at scale across the ML
+lifecycle.
+In the next section, we will cover the preprocessing work that is necessary
+prior to feature engineering. This work starts by transforming your dataset to
+address inconsistency data issues, such as managing outliers, inputting missing
+data, and removing duplication.
+Data Cleaning and Transformation
+Data cleaning is a fundamental preprocessing step that ensures your dataset is
+in the best possible shape for feature engineering.
+With an effective data cleaning approach, you set the stage for feature
+engineering by transforming “dirty” data into a structured, accurate, and
+reliable foundation. This allows you to focus on creating and selecting the
+most relevant and powerful features for your ML model.
+Here’s how it provides the necessary groundwork:
+Managing missing values. This step addresses any gaps in your
+dataset, whether by imputing missing values, deleting incomplete
+records, or otherwise managing them. Clean data ensures that the features
+you engineer do not suffer from bias or inaccuracies caused by gaps in
+the data.
+Detecting and treating outliers. By identifying and managing outliers,
+you can prevent them from skewing the feature distribution and
+impacting model performance. Clean data provides a more realistic
+representation of the data distribution, which is crucial for effective
+feature engineering.
+Performing deduplication. Removing duplicate records and redundant
+data points helps streamline the dataset, making feature engineering more
+efficient and less prone to overfitting.
+Reformatting and standardization. Ensuring uniform data types,
+units, and formats allows for more straightforward feature creation. For
+example, standardizing date formats and measurement units ensures
+consistency and comparability across features.
+Removing noise and errors. Data cleaning involves identifying and
+correcting errors or inconsistencies within the data. This ensures that the
+features you create are based on accurate and reliable data, leading to
+more robust models.
+Managing Missing Values
+It is not uncommon that your dataset has missing data. For example, some
+columns in your dataset may be missing values due to a data collection error,
+or maybe the data was simply unavailable from your data source.
+Missing data can make it difficult for the selected ML algorithm to accurately
+interpret the relationship between the related feature and the target variable.
+Therefore, it is important to deal with the issue.
+Unfortunately, most ML algorithms cannot deal with missing values
+automatically. Human knowledge is required to replace missing values with
+something meaningful and relevant to the problem.
+The approaches to address missing data vary based on the amount of missing
+data. The main techniques are as follows:
+Collect. If the amount of missing data is substantial and multiple
+features are impacted, you should try to recollect the data. However, the
+data ingestion process can be expensive and time-consuming. In this
+case, you need to determine what the trade-offs are among the cost of
+recollecting data, the cost of having a low-performance ML model, and
+alternatives such as imputation or dropping.
+Impute. If you are dealing with a small number of missing values,
+which are randomly distributed throughout the features of your dataset,
+this could be due to a failure in the data ingestion process. In this case,
+imputation is likely a good option. With imputation, you populate the
+missing data with the mean, the median, or the most frequent value
+observed for your feature. If the data distribution for your feature is
+normal, then use the mean; otherwise, use the median or the most
+frequent value.
+Drop. If the amount of missing data is substantial but is limited to the
+same feature, you may consider dropping the entire feature. You have to
+be careful, though, because when you drop too many features, you may
+not have enough data to feed the ML model.
+With Amazon SageMaker, you can use Python libraries like SimpleImputer
+from sklearn to fill in missing values. The following snippet shows how this
+function works:
+from sklearn.impute import SimpleImputer
+import numpy as np
+    
+# Create a sample dataset
+A = np.array([[1, 2], [None, 4], [5, None]])
+    
+# Create a SimpleImputer object
+imputer = SimpleImputer(strategy=‘mean’)
+    
+# Fit and transform the data
+B = imputer.fit_transform(A)
+     
+print(B)
+The following input array
+[[1, 2], [None, 4], [5, None]]
+has been transformed into this:
+[[1, 2], [3, 4], [5, 3]]
+AWS Glue DataBrew can also be used to fill missing values using a number of
+built-in transformations.
+Detecting and Treating Outliers
+An outlier is a data point in your dataset distinct from all other data points for
+having a significant deviation from the mean.
+What does “significantly” mean, exactly? Although the answer depends on the
+type of data and its probability distribution, the general consensus is that a
+data point is considered an outlier if it lies more than three standard deviations
+away from the mean. This is based on the properties of the normal
+distribution, where approximately 99.7% of data lies within three standard
+deviations from the mean.
+ML algorithms are very sensitive to the distribution and the range of the
+values of your features. Because outliers drift from the pattern of all other data
+points, they have a tendency to mislead the ML algorithm during training.
+For example, consider the following dataset:
+[x,y] = [[4, 11], [3.8, 12], [4.5, 12.5], [8, 8], [9, 
+8.5], [9.5, 7.5], [13, 5], [14, 4.7], [13.7, 6], [25, 23]]
+In this example, assume x indicates your water consumption rate per day,
+whereas y indicates the energy consumption rate per day. These numbers are
+just for illustration purposes.
+As you can see in Figure 3.7, this dataset is distributed in three groups.
+FIGURE 3.7 Example of an outlier.
+One data point clearly stands out and is acting as an outlier.
+Although some outliers are caused by artificial errors, others just appear in
+your dataset as a result of natural phenomena. A natural outlier is not the result
+of some artificial error but instead is reflective of some truth in the data.
+Your job as an ML engineer is to determine whether an outlier should stay in
+your dataset or needs to be changed or removed. You make this decision by
+leveraging statistical techniques that help you understand how relevant the
+outlier is with respect to the other data points in your dataset.
+It is important to distinguish between noise and outliers. The former denotes a
+group of erroneous data points, whereas the latter refers to data points that
+significantly deviate from the mean of your dataset. In the rest of the chapters,
+you will learn how to leverage the extensive ecosystem of AWS ML services
+to determine what “significantly” means.
+The treatment of outliers relies on three main approaches:
+Delete. If outliers are due to noise or artificial errors, you can simply
+delete them from your dataset without impacting the quality and the
+accuracy of your ML model.
+Logarithmic transform. By replacing the outlier with its logarithm in
+a given base (e.g., base , base 2, base 10, and so on), you are
+compressing the range of values for a feature, resulting in a reduction of
+the extreme variation between the values. As a result, the outlier won’t be
+too far off from the other values for that feature. For example, the
+logarithm base 10 (
+) of 1000 is 3. That’s because 
+,
+which brings it closer to other smaller values without losing its
+significance.
+Impute. Just as for missing values, you could use the mean of the
+feature, for instance, and impute that value to replace the outlier value.
+This would be an excellent approach if the outlier was caused by artificial
+errors.
+Outliers often create a skewed distribution, as shown in Figure 3.7. Log
+transformation can help normalize this distribution, making it more
+symmetrical and improving the performance of your ML model.
+Figure 3.8 illustrates the same dataset after representing the ordinate axis y
+using a logarithmic scale. The outlier data point [25, 23] has x = 25 and y
+= 23. Because 
+, you can see how this data point
+no longer deviates significantly from the mean.
+FIGURE 3.8 Outlier treatment with logarithmic transformation.
+For the exam, you need to know the AWS services that help you detect and
+treat outliers, which are Amazon SageMaker Data Wrangler and AWS Glue
+DataBrew.
+You can use Amazon SageMaker Jupyter notebooks to load your dataset using
+Python libraries like pandas.
+To determine which outlier detection algorithm to use, you need to analyze the
+histogram for each feature. Figure 3.9 illustrates the histograms for our dataset
+generated using the following Python snippet:
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+     
+# Load dataset
+data = np.array([[4, 11], [3.8, 12], [4.5, 12.5], [8, 8], 
+[9, 8.5], [9.5, 7.5], [13, 5], [14, 4.7], [13.7, 6], [25, 
+23]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+      
+# Plot histograms
+plt.figure(figsize=(12, 5))
+     
+plt.subplot(1, 2, 1)
+sns.histplot(df[‘Feature1’], kde=True)
+plt.title(‘Water Usage Distribution (m³/day)’)
+     
+plt.subplot(1, 2, 2)
+sns.histplot(df[‘Feature2’], kde=True)
+plt.title(‘Energy Usage Distribution (kWh/day)’)
+    
+plt.show()
+FIGURE 3.9 Histograms for water and energy usage.
+In Figure 3.9, the histograms show a right-skewed data distribution for both
+features. A right-skewed data distribution means that the majority of our data
+points are clustered toward the lower end of the range, with a long tail
+extending to the right. This tail represents a small number of data points that
+have much higher values than the rest of the dataset. Essentially, most values
+are low, and only a few are exceptionally high, which is exactly our scenario
+with the data point [25, 23] representing the highest value pair.
+For skewed data, the interquartile range (IQR) method is often considered one
+of the best approaches for detecting outliers. The IQR is less affected by
+skewness and provides a robust measure to identify extreme values.
+Assuming 
+ and 
+ denote the first and the third quartiles of our dataset,
+here’s a quick overview of how it works:
+Compute 
+ and 
+.
+Compute 
+. 
+Any data point whose value is smaller than 
+ or greater than 
+ is considered an outlier.
+In our example, we can leverage the built-in quantile method, available
+from the DataFrame class in both the numpy and pandas libraries, to detect
+outliers from the dataset, as illustrated in the following snippet:
+import numpy as np
+import pandas as pd
+    
+# Load dataset
+data = np.array([[4, 11], [3.8, 12], [4.5, 12.5], [8, 8], 
+[9, 8.5], [9.5, 7.5], [13, 5], [14, 4.7], [13.7, 6], [25, 
+23]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+    
+# Calculate IQR
+Q1 = df.quantile(0.25)
+Q3 = df.quantile(0.75)
+IQR = Q3 - Q1
+     
+# Define outlier conditions
+outliers = ((df < (Q1 - 1.5 * IQR)) | (df > (Q3 + 1.5 * 
+IQR))).any(axis=1)
+df[‘Outlier’] = outliers
+     
+print(“Original Data with Outlier Flags:”)
+print(df)
+    
+# Treat outliers by removing them
+df_cleaned = df[~df[‘Outlier’]].drop(columns=‘Outlier’)
+    
+print(“\nCleaned Data without Outliers:”)
+print(df_cleaned)
+This program produces the output shown in Figure 3.10, where you can see
+how the script detected the data point [25, 23] as an outlier and
+subsequently removed it.
+FIGURE 3.10 Detecting and treating outliers.
+For normally distributed data, the Z-score method is highly effective for
+detecting outliers. Here’s a quick rundown:
+Compute the mean 
+ of your dataset.
+Compute the standard deviation  of your dataset.
+For each data point , the Z-score 
+.
+Because a normal distribution is characterized by the following,
+One standard deviation covers around 68% of the data.
+Two standard deviations covers around 95% of the data.
+Three standard deviations covers around 99.7% of the data.
+data points with Z-scores greater than 3 or less than –3 are considered outliers.
+In other words, it is statistically safe to assume the 0.3% data points whose Z-
+score is greater than 3 or less than –3 are far enough from the mean to be
+considered outliers.
+The Z-score outlier detection method can also be calculated programmatically.
+The following snippet shows you how:
+import numpy as np
+import pandas as pd
+from scipy import stats
+     
+# Load dataset
+data = np.array([[4, 11], [3.8, 12], [4.5, 12.5], [8, 8], 
+[9, 8.5], [9.5, 7.5], [13, 5], [14, 4.7], [13.7, 6], [25, 
+23]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+     
+# Detect outliers using Z-score
+z_scores = np.abs(stats.zscore(df))
+outliers = (z_scores > 3).any(axis=1)
+df[‘Outlier’] = outliers
+      
+print(“Original Data with Outlier Flags:”)
+print(df)
+     
+# Treat outliers by removing them
+df_cleaned = df[~df[‘Outlier’]].drop(columns=‘Outlier’)
+     
+print(“\nCleaned Data without Outliers:”)
+print(df_cleaned)
+The preceding code produces the output represented in Figure 3.11.
+FIGURE 3.11 Failing outlier detection.
+As you can see, the Z-score method failed to detect the outlier [25, 23].
+This is because the distribution of data points in our dataset is not normal, but
+it’s right-skewed.
+With AWS Glue DataBrew, you can also detect outliers in your data and
+handle them using various transformations. This approach includes replacing,
+removing, rescaling, or flagging outliers using the methods you just learned,
+i.e., Z-score and IQRs.
+Performing Deduplication
+Deduplication is the process to remove duplicate data points from your
+dataset. Deduplication is not just about tidying up your data—it’s about
+making your models more accurate, more performant, and more reliable.
+From a data quality standpoint, duplicate data can skew the results and lead to
+inaccurate predictions. Removing duplicates ensures that the data used to train
+models is clean and accurate.
+Model performance and reliability are key factors to be accounted for in the
+model evaluation and deployment phases of the ML lifecycle. Duplicates can
+cause overfitting, where the model learns noise rather than the signal. Clean,
+deduplicated data helps create more generalizable models.
+From a reliability standpoint, duplicates can introduce bias, particularly if
+certain entries are repeated more often than others, leading to imbalanced
+training data.
+As a result, an effective deduplication strategy is critical to ensuring the
+quality of your ML model training data.
+For simplicity and ease of use, AWS Glue DataBrew is probably your best bet
+for removing duplicates from your dataset. AWS Glue DataBrew offers a
+straightforward, visual interface to clean and prepare your data without the
+need for complex code. AWS Glue DataBrew is user-friendly and efficient,
+making data cleaning tasks like removing duplicates quick and hassle-free.
+Standardizing and Reformatting
+By implementing standardization, you are preventing features with large
+values from disproportionately impacting the model compared to features with
+smaller values. This technique is particularly important for ML algorithms that
+are sensitive to feature scales, like linear regression and support vector
+machines, which will be covered in the next chapter.
+Reformatting in ML means restructuring your data into a consistent and
+suitable format for analysis. It includes converting data types, harmonizing
+formats, and ensuring all data entries follow the same structure.
+To perform standardization and reformatting with AWS, you can use Amazon
+SageMaker and AWS Glue. The main steps are outlined here:
+Load data. You can use SageMaker notebooks to load your dataset
+from an S3 bucket, as shown in the following snippet:
+import pandas as pd
+data = pd.read_csv(‘your_dataset.csv’)
+Standardize data.  You can use the StandardScaler class from the
+sklearn. preprocessing module to standardize your features, as
+shown in the following snippet:
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+data_scaled = scaler.fit_transform(data)
+More normalization and standardization techniques will be covered in the
+upcoming sections.
+Export data. You can save the standardized dataset to S3.
+Create AWS Glue job.  Create an AWS Glue job to reformat the data
+as needed.
+Load clean data.  Use the cleaned and standardized data to train your
+ML model.
+Removing Noise and Errors
+Natural noise and artificial errors were briefly introduced earlier. Because the
+primary goal of feature engineering is to produce the best possible amount of
+training data for your ML model, one of the key aspects of this process is the
+ability to handle noise and errors.
+By creating new features or transforming existing ones, you make the training
+data more informative and relevant for your ML model. This process helps
+improve model accuracy, efficiency, and generalization, which will result in an
+increased predictive power of your model.
+A model trained on noisy data often learns specific quirks or errors present in
+the training dataset rather than the underlying patterns. This leads to
+overfitting, where the model performs very well on training data but poorly on
+new, unseen data. By properly handling noise and errors, you help ensure the
+model generalizes better to real-world scenarios. We will cover in detail
+methods to address overfitting in Chapter 5.
+Feature Engineering Techniques
+In the previous section, the methods to clean your dataset were introduced.
+Data cleaning is a preliminary step toward preparing your training data for
+your model.
+The objective of the next step is effectively transforming the raw data into
+meaningful features that improve the performance of your ML model. This is
+feature engineering’s main focus. Ultimately, after feature engineering, your
+ML model will be ready for training.
+Mastering feature engineering is crucial to demonstrate your expertise in
+building and deploying scalable and efficient ML solutions on AWS. The
+upcoming sections will cover the feature engineering techniques you need to
+know for the exam.
+We will start with techniques for structured data, and then we will proceed
+with techniques for unstructured data in the form of images, text, and time-
+series.
+Techniques for Structured Data
+With structured data, you can use a number of feature extraction techniques to
+reduce the dimensionality of your dataset. One of the things you should be
+careful of when you use feature extraction is that when you put this model into
+production or automate the pipeline, these features can be replicated easily but
+still reduce the high dimensions in the data.
+Feature Engineering for Numerical Data
+Numerical data is ultimately the type of data you want to feed your ML model.
+Whether your data is categorical, textual, or image, your feature engineering
+outcomes will need to be in the form of a distinct and well-organized set of
+numbers that can be used to train your ML algorithm.
+The way you engineer these set of numbers into meaningful features may have
+a significant impact on your model performance and accuracy.
+In the upcoming sections, we will dive into the feature engineering concepts
+previously introduced.
+Normalization
+Normalization is an approach to feature engineering that brings numerical data
+for all your features into a consistent scale, usually between 0 and 1. This has
+several key benefits:
+Equal weighting. Normalization ensures that no single feature
+dominates the model due to its scale. This is particularly important for
+ML algorithms that are sensitive to the scale of your data, such as k-
+nearest neighbors (k-NN) and neural networks, which compute distances
+between data points.
+Faster convergence. In gradient descent optimization, normalized data
+helps the ML algorithm converge faster by ensuring that all features
+contribute equally to the gradient. This leads to more efficient training
+and better performance for your ML model.
+Enhanced interpretability. Normalized data makes it easier to
+interpret feature importance and model coefficients, as all features are on
+a comparable scale.
+This technique is useful when you want your data to be on a common scale but
+it doesn’t necessarily need to be centered around zero.
+As a result of normalization, ML models perform better when all features of
+your dataset are on the same scale. Normalization can lead to higher accuracy
+and stability, especially in distance-based algorithms.
+Normalization is typically implemented with the MinMax scaler function,
+which will be covered in detail in the upcoming “Scaling” section.
+Standardization
+Standardization transforms features to have a mean of 0 and a standard
+deviation of 1. It’s used when you want to ensure that your feature data is
+centered around the mean ( ) and scaled according to the standard deviation (
+).
+This technique is ideal for ML algorithms that assume normally distributed
+data, such as linear regression, logistic regression, or algorithms that use
+gradient descent.
+You implement standardization by using the Z-score function.
+Z-score. This solution transforms the feature dataset to have a mean of
+0 and a standard deviation of 1 with the following formula:
+where
+ is your feature data point.
+ is the mean of your feature dataset.
+ is the standard deviation of your feature dataset.
+The resulting standard deviation is 1 because of the nature of the
+transformation.
+When you subtract the mean ( ) from each data point ( ), you center the data
+around 0. Each data point is adjusted relative to the average value of the
+dataset.
+Dividing by the standard deviation ( ) scales the data points relative to the
+spread of the data. This step ensures that the variance (which is the square of
+the standard deviation) of the standardized data becomes 1.
+Scaling
+Scaling is the general term for adjusting the range or distribution of features.
+Because normalization’s main concern is the range of the transformed dataset
+(scale 0 to 1 for all features), whereas standardization is focused on
+distribution (0 as mean , and 1 as standard deviation  of the transformed
+dataset), these two techniques you just learned are part of scaling.
+If your feature data is not normally distributed, you need techniques that
+handle skewness or outliers differently from Z-score standardization. The ones
+you need to know for the exam are as follows:
+Robust scaling. Robust scaling centers the feature dataset by
+subtracting the median and scales it according to the IQR. This makes it
+particularly useful for datasets with outliers, as it ensures the central
+tendency and spread are robust to them. As a result, this standardization
+technique is less sensitive to outliers and works well with skewed data.
+You can use the RobustScaler class from the sklearn.preprocessing
+module to scale your features with this technique, as shown in the following
+example:
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import RobustScaler
+     
+# Load dataset
+data = np.array([[4, 11], [3.8, 12], [4.5, 12.5], [8, 8], 
+[9, 8.5], [9.5, 7.5], [13, 5], [14, 4.7], [13.7, 6], [25, 
+23]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+     
+# Apply RobustScaler
+scaler = RobustScaler()
+data_scaled = scaler.fit_transform(df)
+      
+# Convert the scaled data back to a DataFrame for easier 
+viewing
+df_scaled = pd.DataFrame(data_scaled, columns=[‘Feature1’, 
+‘Feature2’])
+     
+print(“Original Data:”)
+print(df)
+print(“\nScaled Data:”)
+print(df_scaled)
+The preceding code produces the output represented in Figure 3.12.
+FIGURE 3.12 Robust scaling.
+As you can see in Figure 3.12, with robust scaling the scaled data frame is less
+sensitive to outliers than the original data frame. As a result of the
+transformation, outliers like [25, 23] don’t skew the new dataset for your
+feature.
+MinMax scaling. This standardization technique transforms features to
+a fixed range, usually between 0 and 1. This technique preserves the
+relationships between the features but does not address skewness.
+You can use the MinMaxScaler class from the sklearn.preprocessing
+module to scale your features with this approach, as shown in the following
+snippet:
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+     
+# Sample data
+data = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [−1, −2], 
+[−3, −4]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+      
+# Initialize MinMaxScaler
+scaler = MinMaxScaler()
+      
+# Fit and Transform
+data_scaled = scaler.fit_transform(df)
+df_scaled = pd.DataFrame(data_scaled, columns=[‘Feature1’, 
+‘Feature2’])
+     
+# Print results
+print(“Original Data:\n”, df)
+print(“\nScaled Data:\n”, df_scaled)
+MaxAbs scaling. MaxAbs scaling is a technique used to standardize
+data by scaling each feature data point to its maximum absolute value. As
+a result, each data point falls within the range [−1, 1].
+This technique is best suited to standardize sparse datasets or datasets with
+many 0 data points, because it preserves 0 entries while maintaining the
+original data distribution.
+You can use the MaxAbsScaler class from the sklearn.preprocessing
+module to scale your features with this approach, as shown in the following
+snippet:
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MaxAbsScaler
+      
+# Sample data
+data = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [−1, −2], 
+[−3, −4]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+      
+# Initialize MaxAbsScaler
+scaler = MaxAbsScaler()
+       
+# Fit and Transform
+data_scaled = scaler.fit_transform(df)
+df_scaled = pd.DataFrame(data_scaled, columns=[‘Feature1’, 
+‘Feature2’])
+       
+# Print results
+print(“Original Data:\n”, df)
+print(“\nScaled Data:\n”, df_scaled)
+Power transformations (Box-Cox, Yeo-Johnson). The variance of a
+dataset is the square of the standard deviation (
+). By definition, the
+variance is always a positive number and measures the spread of data
+points in a dataset, telling you how far each point is from the mean ( ).
+Mathematically, it’s the average of the squared differences from the
+mean. A high variance means data points are spread out from the mean; a
+low variance means they are close to the mean.
+Power transformations help stabilize variance and make data more normally
+distributed. Two common types are the Box-Cox transformation and the Yeo-
+Johnson transformation. The former works only on positive data, whereas the
+latter handles both positive and negative data.
+You can use the PowerTransformer class from the
+sklearn.preprocessing module to scale your features with this approach,
+as shown in the following snippet:
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import PowerTransformer
+      
+# Sample data
+data = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [−1, −2], 
+[−3, −4]])
+df = pd.DataFrame(data, columns=[‘Feature1’, ‘Feature2’])
+     
+# Initialize Yeo-Johnson Transformation
+pt = PowerTransformer(method=‘yeo-johnson’)
+      
+# Fit and Transform
+data_scaled = pt.fit_transform(df)
+df_scaled = pd.DataFrame(data_scaled, columns=[‘Feature1’, 
+‘Feature2’])
+      
+# Print results
+print(“Original Data:\n”, df)
+print(“\nScaled Data:\n”, df_scaled)
+Power transformations make your data more suitable for modeling by
+reducing skewness and stabilizing variance, leading to more robust and
+accurate models.
+Logarithmic Transformation
+As you learned previously, logarithmic transformation is a method to detect
+and manage outliers. It helps as a feature engineering technique for numerical
+data by reducing skewness, limiting the impact of outliers, and enhancing
+linear relationships. Here’s how:
+Reducing skewness. Many real-world datasets are right-skewed,
+meaning most data points cluster around lower values with a few outliers
+extending the “tail” toward higher values. Common examples include
+income distribution, where a small number of high earners create a long
+right tail, or test scores on a difficult exam where most students score
+lower with a few high achievers at the top. Applying a logarithmic
+transformation compresses this tail, making the distribution more
+symmetrical and closer to a normal distribution, which many ML
+algorithms handle better.
+Limiting the impact of outliers. High-value outliers can dominate and
+distort the scale of numerical data. Logarithmic transformation reduces
+the magnitude of these outliers, bringing them closer to the bulk of the
+data without outright removal.
+Enhancing linear relationships. For some data, the relationship
+between features and the target variable may be multiplicative or
+exponential rather than linear. Logarithmic transformation can linearize
+these relationships, making it easier for linear models to capture the
+underlying patterns.
+For example, consider the following dataset:
+[x,y] = [[3, 1], [4, 10], [5, 100], [6, 1000]]
+By transforming  to the 
+, the new dataset becomes as follows:
+[x,y] = [[3, 0], [4, 1], [5, 2], [6, 3]]
+By converting the data to a logarithmic scale, variations become more
+manageable, and the overall structure of the data is clearer. This
+transformation can significantly boost the performance and accuracy of many
+models.
+Logarithmic transformation can’t be directly applied to features with
+values of 0 or negative numbers because the logarithm of 0 and negative
+numbers is undefined, regardless of its base. In such scenarios, consider
+shifting your data to ensure all values are positive numbers, or use
+alternative transformations (e.g., cube root), which might be more suitable
+for your data.
+Square or Cube Root
+To handle high variance in numeric datasets (in addition to the power
+transformation covered earlier), consider using square-root or cube-root
+transformations. The square and cube root of a feature have an effect on the
+feature distribution. However, that impact is not as significant as logarithmic
+transformation. The cube root has its own advantage. It can be applied to
+negative values including 0. The square root can be applied only to positive
+values and 0.
+Binning
+Binning (also referred to as bucketing) is the process of dividing numerical,
+continuous data into discrete intervals or “bins.” This technique can simplify
+ML model development and make models more robust to outliers and noise.
+With binning, you transform numerical data into categorical data.
+For example, if you’re looking at automobiles data, you can convert the
+vehicle weight into five columns: is_minicompact, is_subcompact,
+is_compact, is_midsize, and is_large.
+Feature Engineering for Categorical Data
+Categorical data can capture important information about the relationships and
+characteristics of your data that numerical data might miss. Properly
+engineered categorical features can significantly enhance the performance of
+your ML models.
+Feature engineering for categorical data starts with encoding, which is the
+process of transforming your feature data from string format to a numerical
+format. The numerical format may be an integer, an array of integers, a matrix,
+or even a tensor of integers. Encoding is performed to allow ML algorithms to
+interpret and use this data as input, as most algorithms only understand
+numerical values.
+For example, if your categories are White, Black, and Red, you may encode
+this data into three vectors: [1, 0, 0] to represent White, [0, 1, 0] to
+represent Black, and [0, 0, 1] to represent Red.
+Label Encoding
+Label encoding—as the name suggests—labels each category of your
+categorical feature to a unique integer. For example, the categorical feature
+“Color” with values like this
+[“White”, “Black”, “Red”]
+becomes this
+[0, 1, 2]
+Although simple, this technique can be problematic for algorithms that assume
+ordered relationships in data, as it imposes an ordinal structure on categorical
+values.
+This encoding technique is best suited for tree-based ML algorithms because
+these algorithms can handle the ordinal relationship implied by label encoding.
+One-Hot Encoding
+One-hot encoding converts a categorical feature into a set of binary features,
+where each binary feature represents one possible category, with a value of 1
+if the category is present and 0 if it’s not.
+You can use the OneHotEncoder class from the sklearn.preprocessing
+module to encode your features with this approach, as shown in the following
+snippet:
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
+     
+# Sample data
+data = {‘Color’: [‘White’, ‘Black’, ‘Red’, ‘Blue’, 
+‘Green’, ‘Yellow’, ‘Pink’, ‘Brown’, ‘White’, ‘Black’]}
+df = pd.DataFrame(data)
+     
+# Initialize OneHotEncoder
+encoder = OneHotEncoder(sparse_output=False)
+       
+# Fit and transform the data
+one_hot = encoder.fit_transform(df[[‘Color’]])
+      
+# Convert to DataFrame for easier viewing
+one_hot_df = pd.DataFrame(one_hot, 
+columns=encoder.get_feature_names_out([‘Color’]))
+     
+# Print results
+print(“Original Data:\n”, df)
+print(“\nOne-Hot Encoded Data:\n”, one_hot_df)
+Figure 3.13 shows the result produced by this program.
+FIGURE 3.13 One-hot encoding.
+As you can see, the original dataset had one categorical feature, “Color,” with
+10 data points (categories): White, Black, Red, Blue, Green, Yellow, Pink,
+Brown, White, and Black.
+The one-hot encoded dataset has been transformed into eight numerical
+features, equal to the number of distinct colors: Color_Black, Color_Blue,
+Color_Brown, Color_Green, Color_Pink, Color_Red, Color_White, and
+Color_Yellow. Each of them has 10 data points.
+One-hot encoding is a good choice for features with a small set of categorical
+data and for non-tree-based ML algorithms, such as linear regression, k-NN,
+and neural networks. These algorithms will be covered in the next chapter.
+One-hot encoding increases the dimensionality of your feature dataset.
+This can become a problem, especially when dealing with high-cardinality
+features (those with many unique categories). However, the impact largely
+depends on the ML algorithm you’re using and the nature of your data.
+You can mitigate the risk of high dimensionality by performing techniques
+like binary encoding instead, as explained in the next section. Another
+approach is to use the principal component analysis (PCA) algorithm after
+one-hot encoding. See Chapter 4 for more information.
+Binary Encoding
+Binary encoding is an effective technique to handle categorical data without
+“exploding” the dimensionality of your feature dataset as one-hot encoding
+might. It works by converting each category value to its corresponding binary
+number and then splitting the binary number into individual bits as separate
+features (columns).
+Think of binary encoding as a way to compact the number of features resulting
+from the one-hot-encoding technique.
+In the following example, we used the BinaryEncoder class from the
+category_encoders module to binary-encode the same dataset in the
+previous example:
+import category_encoders as ce
+import pandas as pd
+      
+# Sample data
+data = {‘Color’: [‘White’, ‘Black’, ‘Red’, ‘Blue’, 
+‘Green’, ‘Yellow’, ‘Pink’, ‘Brown’, ‘White’, ‘Black’]}
+df = pd.DataFrame(data)
+      
+# Initialize Binary Encoder
+encoder = ce.BinaryEncoder(cols=[‘Color’])
+      
+# Fit and Transform the data
+df_binary_encoded = encoder.fit_transform(df)
+      
+# Print results
+print(“Original Data:\n”, df)
+print(“\nBinary Encoded Data:\n”, df_binary_encoded)
+Figure 3.14 displays the output of this transformation.
+FIGURE 3.14 Binary encoding.
+As a result of binary-encoding our 10 non-distinct categories, the new dataset
+has only four numerical features (instead of eight).
+Why four? Because the original dataset had eight distinct categories, which
+can be represented in binary format using four bits. Notice how the number of
+data points (10) doesn’t change upon transforming the data.
+Binary encoding is best suited to address the shortcomings of one-hot
+encoding, because it mitigates the dimensionality “explosion” resulting from
+creating one new feature for each unique category.
+However, when compared to one-hot encoding, binary encoding can lead to a
+loss of information within categorical data, which could have a negative
+impact on your model performance. This is because binary encoding
+compresses categorical data into fewer bits, causing distinctions between
+categories to be blurred.
+Feature Hashing
+This technique uses a hash function to convert high-cardinality categorical
+data into a fixed number of numerical features that you, as an ML engineer,
+get to choose.
+Feature hashing is efficient and highly scalable because the result of the
+transformation is a fixed-size vector, keeping memory usage in check. Here’s
+how it works at a high level:
+Input feature. The feature hash function receives a feature value,
+which could be a word, a category, or any other identifiable attribute
+from your data.
+Hash function application. The feature is processed by the hash
+function, which returns a unique integer value (hash value) based on the
+value of the feature.
+Modulo operation (optional). To ensure the hash value falls within the
+desired range (usually the size of the feature vector), the hash value is
+often taken modulo a predefined number.
+Vector update. The calculated hash value is used as an index to update
+the corresponding element in the feature vector.
+By leveraging a hash function, this approach transforms data rapidly, thus
+making it suitable for large datasets. Although collisions can occur, the
+aggregation of values usually mitigates the impact, especially with large
+enough hash buckets.
+As a result, feature hashing strikes a balance between preserving information
+and maintaining computational efficiency. It is an excellent solution to feature
+engineer high-cardinality categorical data in an efficient yet cost-effective
+manner.
+You can use the FeatureHasher class from the sklearn.
+feature_extraction module to hash your features with this approach, as
+shown in the following snippet:
+import pandas as pd
+from sklearn.feature_extraction import FeatureHasher
+     
+# Sample data
+data = [{‘Color’: ‘White’}, {‘Color’: ‘Black’}, {‘Color’: 
+‘Red’}, {‘Color’: ‘Blue’}, {‘Color’: ‘Green’}, {‘Color’: 
+‘Yellow’}, {‘Color’: ‘Pink’}, {‘Color’: ‘Brown’}, 
+{‘Color’: ‘White’}, {‘Color’: ‘Black’}]
+         
+# Convert to DataFrame for viewing before transformation
+df = pd.DataFrame(data)
+        
+print(“Original Data:”)
+print(df)
+       
+# Initialize FeatureHasher
+hasher = FeatureHasher(n_features=3, input_type=‘dict’)
+      
+# Fit and transform the data
+hashed_features = hasher.transform(data)
+      
+# Convert the hashed features to a DataFrame for easier 
+viewing
+hashed_df = pd.DataFrame(hashed_features.toarray(), 
+columns=[f’feature_{i}’ for i in 
+range(hashed_features.shape[1])])
+       
+print(“\nHashed Data:”)
+print(hashed_df)
+Figure 3.15 displays the hashed features generated by this program.
+FIGURE 3.15 Feature hashing.
+Notice how the FeatureHasher class applies feature hashing to convert the
+categorical data (10 categories) into a fixed-size vector for each category. In
+this example, we set the number of features in the constructor of the
+FeatureHasher class. This number has been set to 3.
+As a result, the 10 categories have been hashed into 10 vectors. Each vector
+comprises of three integers, one for each of the three features.
+Feature Engineering for Time-Series Data
+Time-series data was introduced at the beginning of this chapter and is
+different from standard tabular data because it is captured repeatedly over
+time, with each successive data point dependent on its past values. Think of a
+time series like watching a movie—each scene depends on the previous ones.
+The time dimension plays a key role in time-series data.
+Amazon SageMaker Data Wrangler provides a low-code solution to time-
+series data processing with the ability to clean, transform, and prepare data
+faster. It also enables data scientists to engineer time-series data in adherence
+to their forecasting model’s input format requirements.
+To perform feature engineering on a time-series dataset, we need first to
+understand the patterns present in our dataset. Amazon SageMaker Data
+Wrangler offers a number of visualizations, which provide valuable leads to
+data scientists and analysts into existing patterns and can help you choose a
+modeling strategy. After we understand the patterns present in our dataset, we
+can start to engineer new features aimed at increasing the accuracy of the
+forecasting models.
+Featurize Datetime
+It’s best practice to start the feature engineering process for time-series data by
+disambiguating date/time features. Date/time features are created from the
+timestamp column and provide an optimal way for ML engineers to start the
+feature engineering process. The Featurize datetime time-series
+transformation lets us break down a date/time feature by adding the
+date_month, date_day, date_week_of_year, date_day_of_year, and
+date_quarter new features to our dataset. Because we’re providing the
+date/time components as separate features, we enable ML algorithms to detect
+patterns for improving prediction accuracy.
+Encode Categorical
+Date/time features aren’t limited to integer values. You may also choose to
+consider certain extracted date/time features as categorical variables and
+represent them as one-hot-encoded features, with each column containing
+binary values. To do so, leverage the One-hot encode transformation. The
+newly created date_quarter feature contains values from 0 to 3 and can be
+one-hot encoded using four binary columns, one column for each of the four
+quarters.
+Lag Feature
+To increase model accuracy, it is best practice to create lag features for the
+target variable (or label). Lag features are values at prior timestamps that are
+helpful in predicting future values. They also help identify autocorrelation
+(also known as serial correlation) patterns in the residual series by quantifying
+the relationship of the observation with observations at previous time steps.
+Autocorrelation is similar to regular correlation but between the values in a
+series and its past values. Amazon SageMaker Data Wrangler provides the
+Lag features transformation, which helps create multiple lag features over a
+specified window size.
+Rolling Window Features
+Amazon SageMaker Data Wrangler implements automatic time-series feature
+extraction capabilities using the open-source tsfresh package. With the
+time-series feature extraction transformation, you can automate the feature
+extraction process. This eliminates the time and effort otherwise spent
+manually implementing signal processing libraries. For the exam, you need to
+know that features can be extracted using the Rolling window features
+transformation, which computes statistical properties across a set of
+observations defined by the window size.
+After feature engineering the time-series dataset, we are ready to use the
+transformed dataset as input for a forecasting ML algorithm.
+Techniques for Unstructured Data
+Unstructured data, such as images, text, audio, and videos, doesn’t fit neatly
+into tables and often lacks a predefined format. AWS offers a comprehensive
+ecosystem of products and services that make feature engineering for
+unstructured data more manageable and efficient.
+In the upcoming sections, we will cover the techniques you need to know for
+the exam that apply to image and textual data.
+Feature Engineering for Image Data
+Just like structured data, feature engineering for image data is a critical step in
+developing effective ML models. This process involves extracting meaningful
+features from images, such as edges, textures, and colors, to improve the
+performance of image recognition and classification tasks by providing the
+model with more relevant information about the data.
+For example, at the beginning of the chapter, we used an image of a car
+(Figure 3.4) to show you what features could be extracted from this
+unstructured data.
+To perform feature extraction on images, you primarily leverage pre-trained
+vision models within Amazon SageMaker JumpStart, often by processing
+them through a convolutional neural network (CNN) and retrieving the
+resulting feature vectors. These pre-trained vision models include models for
+object detection, image classification, and many others.
+You can also use services like Amazon Rekognition for basic image analysis
+and feature extraction, depending on your use case. Amazon Rekognition can
+detect objects, scenes, text, and faces in images, providing high-level features
+without the need for extensive manual effort. For instance, Amazon
+Rekognition can identify and extract features such as labels and bounding
+boxes around objects, which are essential for tasks like object detection and
+image classification.
+Once features are extracted, transforming them into a suitable format is
+essential. Amazon SageMaker Data Wrangler allows you to perform
+exploratory data analysis (EDA) and apply transformations like normalization
+and dimensionality reduction. This step ensures your features are optimized
+for model training. For example, you can normalize pixel values to a common
+scale or apply PCA to reduce the dimensionality of your feature set.
+Efficiently storing and managing your engineered features is crucial for
+streamlined workflows. As you learned at the beginning of the chapter,
+Amazon SageMaker Feature Store provides a centralized repository for feature
+storage, making it easy to share and reuse features across different models and
+projects. This ensures consistency and saves time, as you don’t have to re-
+extract features for every new model.
+Feature Engineering for Textual Data
+In today’s data-driven world, textual data is everywhere, from social media
+posts to customer reviews and beyond. Extracting meaningful insights from
+this unstructured data requires effective feature engineering. AWS provides a
+powerful ecosystem of products and services to streamline this process and
+turn raw text into valuable features for ML models.
+Amazon Comprehend is a powerful tool for extracting high-level features
+from text. It can detect entities, key phrases, sentiment, and language,
+providing rich insights without extensive manual effort. Additionally, Amazon
+Textract can extract text from documents, turning unstructured data into
+structured information.
+For more customized feature extraction, Amazon SageMaker offers built-in
+algorithms and frameworks. These algorithms can be used to train models and
+extract specific features like word embeddings (e.g., Word2Vec) or perform
+topic modeling (e.g., Latent Dirichlet Allocation). These algorithms will be
+discussed in detail in Chapter 4.
+The following are some essential techniques you need to know for the exam.
+Tokenization
+Tokenization is the process of splitting text into smaller units, such as words
+or phrases, called tokens. This is the first step in preparing text data for
+modeling.
+For example, the sentence “Machine learning is fascinating” is
+tokenized into [“Machine”, “learning”, “is”, “fascinating”].
+Tokenization is a key component used by Amazon Bedrock foundation models
+(FMs) to understand and process user prompts. By breaking down the input
+text into smaller tokens, these models can effectively interpret the meaning
+and context of the user’s request. For example, a prompt like “Generate an
+image of a sunset” would be divided into individual words and symbols,
+allowing the model to analyze each element and understand the overall
+directive. This token-based approach ensures that the model can handle
+complex and nuanced instructions with high accuracy and relevance.
+Moreover, tokenization plays a key role in the pricing model for using
+Amazon Bedrock FMs. The cost of utilizing these models is determined by the
+number of input tokens processed and the output tokens generated. This token-
+based billing system ensures that users are charged fairly based on the actual
+computational resources consumed. For example, a longer and more detailed
+prompt would require more tokens and thus incur a higher cost compared to a
+shorter, simpler prompt. In Chapter 4, we will introduce a practical example
+demonstrating how to generate an image from a simple prompt using an FM
+available in Amazon Bedrock, showcasing the efficiency and effectiveness of
+token-based processing.
+Stop-Words Removal
+Stop words are common words (e.g., “the”, “is”, “and”) that often do not
+contribute meaningful information. Removing them can reduce noise and
+improve model performance.
+For example, removing “is” and “the” from “The cat is on the mat”
+would result in [“cat”, “on”, “mat”].
+Stemming and Lemmatization
+These techniques reduce words to their base or root form. Stemming cuts off
+prefixes/suffixes, whereas lemmatization uses linguistic rules.
+For example, “running” becomes “run”.
+N-grams
+N-grams are contiguous sequences of n items from a given text. They capture
+context and relationships between words.
+For example, for a bi-gram (i.e., a contiguous sequence of two words), the
+sentence “Machine learning is fun” is transformed to [(“Machine”,
+“learning”), (“learning”, “is”), (“is”, “fun”)].
+Word Embeddings
+Word embeddings like Word2Vec and GloVe convert words into continuous
+vectors that capture semantic meaning, preserving relationships between
+words. This makes the data more suitable for ML models.
+For example, “King” and “Queen” might be close in vector space, reflecting
+their semantic similarity.
+Data Labeling
+In the realm of ML, data labeling and feature engineering are two intertwined
+processes that are fundamental to building effective models. They both
+transform raw data into a structured form that ML algorithms can understand
+and learn from.
+Feature engineering is focused on selecting, modifying, and creating new
+features from raw data to improve model performance, whereas data labeling
+involves enriching raw data with metadata in the form of meaningful labels
+that denote the actual predictions or specific attributes. For supervised
+learning, this step is fundamental as it provides the ground truth that models
+learn from. By labeling data, you provide the model with the “correct
+answers” to learn from and predict against.
+Labels act as a reference point, guiding the learning process of algorithms.
+They define what the model is supposed to predict or classify. For example, in
+a dataset of animal images, labeling each image as “cat” or “dog” allows the
+model to learn to distinguish between these animals.
+Amazon SageMaker Ground Truth
+With AWS, you perform data labeling using Amazon SageMaker Ground
+Truth, a service specifically designed to streamline and enhance the data
+labeling process. This service combines advanced automation with human-in-
+the-loop capabilities to deliver high-quality labeled datasets efficiently. Here is
+the high-level process:
+Store data. Upload your raw data (images, text, etc.) to Amazon S3.
+Create separate folders or buckets to organize your data based on the type
+or project.
+Create a labeling job. In Amazon SageMaker Ground Truth, define
+the task and instructions.
+Automated labeling. Choose the type of data you are labeling (e.g.,
+image classification, text classification, object detection), and specify the
+input dataset stored in S3. Select Automated Data Labeling to use pre-
+trained ML models to label a subset of your data, and configure the
+labeling algorithm settings and parameters.
+Human review. Annotators review and correct the labels, ensuring
+accuracy. This step can be performed by Amazon Mechanical Turk, a
+private workforce, or third-party vendors. Amazon Mechanical Turk
+(MTurk) is a crowdsourcing marketplace that connects businesses with a
+global workforce of workers to complete tasks that are difficult for
+computers to do, data labeling being one of them.
+Data labeling and validation. Amazon SageMaker Ground Truth
+provides a user-friendly interface for labelers to annotate data. Annotators
+review and correct the automated labels, adding tags, bounding boxes, or
+other relevant annotations as needed. You can even implement quality
+control measures, such as consensus labeling (multiple annotators label
+the same data) and audit sampling (a subset of labels is reviewed by
+experts).
+Store labeled data. You can keep the labeled data in your S3 bucket, or
+you can automatically save it in Amazon SageMaker Feature Store for
+easy access during model training and inference. Either way, make sure
+you keep the labeled data versioned to track changes.
+Model training. Use the labeled data to train your models in Amazon
+SageMaker.
+With the right mix of automation and human labeling intervention, Amazon
+SageMaker Ground Truth provides a robust solution for creating accurate and
+reliable labeled datasets, which are crucial for building high-performing ML
+models.
+Managing Class Imbalance
+So far, you have learned how to transform your dataset by first cleaning the
+raw data, then performing feature engineering on your data, and finally
+labeling the data. This last step is a fundamental aspect of ML because it
+focuses on providing the correct predictions to each data point so that your
+ML model can quickly learn during training.
+With your ML problem framed and your data carefully processed, you would
+think you are now ready to select an ML algorithm and start the training
+process, right? Not quite yet!
+Your dataset may look good syntactically as a result of selecting, extracting,
+and creating features, but not semantically due to an uneven distribution of
+labels. For examples, in a healthcare use case, consider a dataset where the
+majority class represents healthy individuals and the minority class represents
+patients with a rare disease. The goal of your ML problem is to predict a
+disease accurately. When your dataset presents a disproportionate class of
+labels—just like in this scenario with a majority class with healthy individuals
+—you are dealing with a class imbalance.
+Class imbalance leads to a model that is biased toward the majority class. This
+can significantly impact the performance and fairness of the model,
+particularly in cases where the minority class is of critical importance, like in
+our healthcare use case.
+The good news is that AWS offers a comprehensive suite of products and
+services to address class imbalance, ensuring that your models are not only
+accurate but also ethical and unbiased.
+Before delving into how AWS addresses this challenge, let’s review what
+approach you can pursue to tackle class imbalance and the resulting biases.
+Class-Imbalance Mitigation Techniques
+Data augmentation is generally considered a best practice to generate more
+minority labeled data, thereby bridging the gap between majority and minority
+classes. Techniques like image augmentation (rotations, flips, and color
+adjustments) for image data, or text augmentation (synonym replacement,
+random insertion) for text data, can create diverse and representative samples.
+However, data augmentation may not always be feasible due to cost, compute
+resources availability, and time constraints. In such scenarios, consider using
+the following options:
+Oversampling. This technique involves increasing the number of data
+points of the minority class by duplicating existing examples or
+generating synthetic ones. The synthetic minority over-sampling
+technique (SMOTE) is a popular method that creates synthetic samples
+by interpolating between existing minority class examples. This helps
+balance the dataset without simply duplicating records.
+Undersampling. This technique works by randomly removing data
+points from the majority class, thereby making the class distribution more
+even with the minority class. Although it can be effective, undersampling
+may lead to a loss of valuable information, potentially impacting the
+model’s performance.
+Class weighting. While computing loss during training, this technique
+assigns higher weights to the ML algorithm for misclassifying the
+minority class, thereby forcing the model to pay more attention to it.
+Data augmentation is different from synthetic data. Data augmentation
+artificially creates new data from the existing training data, whereas
+synthetic data is generated data that does not use the original dataset.
+Amazon SageMaker Clarify
+Amazon SageMaker Clarify helps address class imbalance by providing pre-
+training bias metrics to detect and mitigate bias in your datasets. Each metric
+corresponds to a different notion of fairness.
+These metrics are critical to ensure your models are fair and unbiased from the
+start. Table 3.1 shows two of the most commonly used metrics: Class
+Imbalance (CI) and Difference in Proportions of Labels (DPL).
+TABLE 3.1
+Examples of pre-training bias metrics.
+Bias metric
+Interpretation
+Class Imbalance (CI)
+Normalized range: [−1, +1]
+0: no class imbalance
++1: complete imbalance toward majority
+class
+−1: complete imbalance toward minority
+class
+Difference in Proportions
+of Labels (DPL)
+Range for normalized binary and
+multicategory facet labels: [−1, +1]
+Range for continuous facet labels: [−∞, +∞]
+0: equal proportion of positive outcomes
+between facets
++1: facet a has a highest proportion of
+positive outcomes
+−1: facet d has a highest proportion of
+positive outcomes
+Equal opportunity
+difference (EOD)
+Object detection bias
+Predictive parity difference
+(PPD)
+Image classification bias
+In the context of class imbalance biases with Amazon SageMaker Clarify, a
+facet denotes a specific feature in your dataset that you want to analyze for
+potential bias.
+Facets are used to identify and measure how different subgroups within your
+data might be affected by class imbalance. With Amazon SageMaker Clarify,
+facet a denotes the feature value that defines a demographic that bias favors,
+and facet d denotes the feature value that defines a demographic that bias
+disfavors.
+For example, if you’re analyzing a dataset of credit card transactions, facets
+may include features like is_fraudulent whose value can be 1 (true) or 0
+(false). Let’s say this feature has 99.9% values of 0 to indicate that 99.9% of
+the transactions in the dataset are not fraudulent. By examining these facet
+values (1 or 0), Amazon SageMaker Clarify can help you understand if certain
+subgroups of any of these feature values are underrepresented or
+overrepresented in your training data, which could lead to biased model
+predictions.
+Other pre-training bias metrics can be found at
+https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-
+measure-data-bias.html.
+Even though the range of each metric varies, all of them have the common
+characteristic that a value 0 (or near 0) denotes no class imbalance.
+By computing these pre-training bias metrics, you can determine the next
+course of actions for your dataset in preparation for training. In our example,
+assuming facet a is 0, we would likely obtain a CI close to 1. As a result, we
+would need to undersample.
+The BiasConfig class is part of the sagemaker.clarify library. This
+library helps you detect and mitigate bias in ML models. The BiasConfig
+class is used to configure the bias analysis settings for your dataset.
+Data Splitting
+After managing class imbalance, your data is finally ready to be split into
+training, validation, and test datasets.
+Data splitting refers to dividing your dataset into separate subsets for training,
+validation, and testing purposes. This is a critical step in ML to ensure that
+your model is trained effectively and evaluated accurately. Let’s see what
+should be part of each dataset and, most important, what their intended
+purpose is:
+Training dataset. The training dataset is used to teach the model. It’s
+where the model learns patterns and relationships within the data. During
+training, the model uses this data to adjust its parameters and iteratively
+learns to minimize errors and improve predictions. For example, you may
+feed a model numerous labeled examples of emails (spam versus not
+spam) to teach it how to classify incoming emails.
+Validation dataset. The validation dataset is used to evaluate the
+model’s performance by fine-tuning the model’s hyperparameters. One of
+the benefits of using a validation dataset is to prevent a model from
+overfitting by ensuring the model generalizes well to unseen data.
+Test dataset. The test dataset is (and should be) made up of data the
+model has never seen before. After training and validation, the model’s
+performance is measured on the test dataset to attain an unbiased
+evaluation of how well the model generalizes to new data. For example,
+you may create a test dataset by using a separate set of emails that the
+model hasn’t seen before to test its accuracy in classifying spam versus
+not spam.
+In summary, the training dataset is used to build the model, the validation
+dataset helps tune the model and prevents overfitting, whereas the test dataset
+provides an unbiased evaluation of the model’s performance.
+Think of training, validation, and test datasets as stages in preparing for an
+important exam. The training dataset is like the study materials you use to
+learn the subject thoroughly, allowing you to understand and internalize
+the information. The validation dataset resembles the practice exams you
+take to assess your readiness, identify areas for improvement, and make
+necessary adjustments without it influencing your core learning process.
+Finally, the test dataset is similar to the actual exam you take at a test
+center with a proctor, objectively evaluating your knowledge and
+performance based on unseen questions, ensuring you are well prepared
+for real-world scenarios. This metaphor highlights the distinct yet
+interconnected roles each dataset plays in developing a successful and
+reliable ML model.
+To effectively split data for ML—according to best practices—consider
+allocating approximately 60–80% for training to ensure the model learns and
+acquires a comprehensive understanding of the data. Use 10–20% for
+validation to fine-tune model parameters without influencing the training
+process, ensuring unbiased performance evaluation. The final 10–20% is
+reserved for testing, serving as the ultimate gauge of the model’s ability to
+generalize to new, unseen data. Proper partitioning is a key aspect of feature
+engineering, as it prevents data leakage, avoids overfitting, and provides an
+accurate measure of how well your ML model will perform in real-world
+scenarios, impacting its overall reliability and effectiveness.
+Data leakage occurs when some test data “leaks” into the training dataset.
+This is a common pitfall that can severely compromise the integrity of ML
+models. When data leakage happens, the model learns information that it
+would not have access to in a real-world scenario, leading to artificially
+inflated performance metrics and poor generalization to new, unseen data.
+Avoiding data leakage is crucial to ensure that the model’s performance is
+accurately evaluated and that it can generalize well to real-world
+situations. Effective techniques to prevent data leakage include
+maintaining a clear separation between training and test datasets, using
+cross-validation, and carefully monitoring data preprocessing steps. As a
+best practice, always normalize/standardize your data after you have
+already split your data into training and test datasets. If data leakage is
+detected, it is essential to re-evaluate the model using a properly separated
+dataset to obtain a fair assessment of its performance.
+AWS offers Amazon SageMaker Data Wrangler to help you with dataset
+splitting. Let’s see how in more detail.
+Amazon SageMaker Data Wrangler
+In addition to being your one-stop shop for feature engineering, Amazon
+SageMaker Data Wrangler can assist you by splitting your dataset into
+training, validation, and test datasets with minimal to no code. Moreover,
+specifically you can use the split data transformation based on these four
+commonly used techniques:
+Random split. This technique ensures that each subset (training,
+validation, test) has a similar distribution of categories, preventing bias
+toward any particular class. This method is particularly useful when you
+don’t need to preserve the order of your input data.
+Order split. This technique ensures that data is split in a way that order
+is preserved, preventing data leakage by ensuring that past or future
+information doesn’t overlap across the train, validation, and test datasets.
+This is particularly useful for time-series data or any scenario where the
+order of data points is critical.
+Stratified split. This technique ensures that each subset maintains the
+same proportion of categories as the original dataset. This is particularly
+useful for classification problems with imbalanced data, as it helps
+maintain the distribution of classes across all subsets, leading to more
+reliable model evaluation and training.
+Split by key. This technique ensures that no combination of values
+across the input columns occurs in more than one of the splits. This is
+particularly useful for avoiding data leakage in unordered data. It also
+enables consistent grouping by keeping related data together, thereby
+preserving the integrity of the splits.
+After choosing the split data transformation technique, you can specify the
+percentages for the training, validation, and test datasets. For example, you
+might allocate 70% for training, 20% for validation, and 10% for testing. You
+can finally apply the split data transformation, and Amazon SageMaker Data
+Wrangler will automatically split your dataset into the specified subsets.
+Summary
+In this chapter, you learned what you need to do to prepare your raw dataset as
+a meaningful set of features, which stores the relevant content of your data, in
+a suitable format that can be fed to and ultimately understood by an ML
+algorithm to produce accurate and reliable predictions.
+The different types of data (categorical, numerical, textual, image, time-series)
+were introduced to logically group the different data transformation
+techniques.
+By engineering your data with feature selection and extraction, you learned
+how to pursue a minimalistic approach (dimensionality reduction) to
+selectively choose the relevant features that matter to your ML model. All
+aspects of data cleaning were covered, with emphasis on outliers detection and
+removal, as well as missing-data-imputation methods. Feature engineering
+techniques for numerical, categorical, time-series, and unstructured data were
+provided, with examples in the Python programming language.
+You learned how Amazon SageMaker Data Wrangler and Amazon SageMaker
+Feature Store are best suited to perform feature engineering and to store,
+share, and manage the resulting features, respectively.
+Finally, you learned how to develop an effective labeling strategy with
+Amazon SageMaker Ground Truth, how to mitigate class imbalance with
+Amazon SageMaker Clarify, and how to split your processed dataset into
+training, validation, and test datasets by using Amazon SageMaker Data
+Wrangler.
+In the next chapters, you will learn how to choose a modeling approach, how
+to train and refine your model, and how to evaluate its performance.
+Exam Essentials
+Know the feature engineering techniques that handle outliers. To handle
+outliers in feature engineering, it’s essential to apply techniques that mitigate
+their impact on your ML model. These methods include removing outliers
+altogether (whenever possible) or transforming them using approaches such as
+logarithmic transformation, which can reduce the skewness of your data.
+Additionally, imputation methods such as replacing outliers with the median
+or mean value can be effective in maintaining the integrity of the dataset while
+reducing their impact on the resulting ML model.
+Know the feature engineering techniques that handle skewness. To
+handle skewness, techniques like logarithmic transformation, square root
+transformation, and Box-Cox or Yeo-Johnson transformations are excellent
+choices. These techniques can help normalize distributions and make them
+more suitable for statistical analysis, especially when dealing with skewed
+data where the majority of values are clustered toward one side of the
+distribution with a long tail on the other.
+Know the feature engineering techniques that do not handle skewness. 
+Z-score standardization doesn’t directly address skewness. It scales the data to
+have a mean of 0 and a standard deviation of 1, but if the original data is
+skewed, it remains skewed after transformation.
+MinMax scaling doesn’t directly address skewness either. It resizes data
+to fit within a specific range, typically from 0 to 1, but doesn’t transform
+the data distribution. If your data is skewed, skewness remains even after
+scaling.
+Know when to perform feature engineering with normalization versus
+standardization. Normalization is useful when scale matters, whereas
+standardization is preferred when the distribution is key.
+Know the feature engineering techniques that are used for
+standardization. For standardization—whose purpose is to ensure that each
+feature in your dataset contributes equally to the ML model’s performance—
+consider using Z-score for normally distributed data.
+Know the feature engineering techniques that are used for
+normalization. For normalization—whose purpose is to scale each feature
+in your dataset to the same range (usually 0 to 1)—consider using the MinMax
+scaling technique.
+Know the feature engineering techniques that are used for categorical
+data. Use label encoding for categorical ordinal data and tree-based ML
+models. Use one-hot encoding for small sets of categorical, nominal data and
+non-tree-based ML models. Use binary encoding to reduce the dimensionality
+caused by one-hot-encoding techniques. Use feature hashing for high-
+cardinality categorical data, especially in use cases where compute resources
+need to be optimized and the solution must be cost-effective.
+Know the feature engineering techniques that are used for image data. 
+For image data you can extract features from your raw dataset with Amazon
+SageMaker JumpStart. Amazon Rekognition is also a valid option for basic
+image analysis and feature extraction, depending on your use case. After
+extracting your relevant features from the dataset, you can leverage Amazon
+SageMaker Data Wrangler to transform your dataset for normalization and
+dimensionality reduction. Finally, you can store your features in Amazon
+SageMaker Feature Store.
+Know the feature engineering techniques that are used for textual data. 
+For textual data, you can extract features from your raw dataset with Amazon
+Comprehend or Amazon Textract. For more customized feature extraction,
+Amazon SageMaker allows you to use tokenization, stemming, and
+lemmatization to perform basic selection of words or to reduce words to their
+root form for subsequent semantic analysis.
+Know the AWS services that are used for data labeling. For data labeling
+—whose purpose is to enrich your dataset with the actual predictions or
+meaningful metadata that helps your model to learn faster—consider using
+Amazon SageMaker Ground Truth.
+Know how to manage class imbalance. To mitigate the risks introduced by
+class imbalance, select a feature that is sensitive to bias (facet), and consider
+computing the pre-training bias metrics (provided by Amazon SageMaker
+Clarify) for that feature, such as Class Imbalance (CI) or Difference in
+Proportions of Labels (DPL). Determine the appropriate strategy accordingly.
+This can be data oversampling, undersampling, or class weighting.
+Know the differences between training, validation, and test datasets. 
+The training dataset is where the model learns patterns, relationships, and
+features from the data. Essentially, it’s where the model gets its “education.”
+After the model has been trained, the validation dataset helps in adjusting
+hyperparameters and tuning the model to improve its performance and
+generalization to unseen data. It’s like a practice test before the final exam.
+The test dataset is used to evaluate the model’s overall performance. It
+provides an unbiased assessment of how well the model generalizes to new,
+unseen data. Think of it as the final exam that determines the model’s grade.
+Review Questions
+1. You are preparing a dataset that contains numerical, categorical, and
+ordinal features. To train a predictive model and to increase its prediction
+accuracy, you need to transform the categorical features into numerical
+values. Which feature engineering solution is best suited for this use
+case?
+A. One-hot encoding
+B. Feature scaling
+C. Feature extraction
+D. Date formatting
+2. You want to convert a column in your training data into binary values.
+Which technique is best suited for this transformation?
+A. One-hot encoding
+B. Tokenization
+C. Label encoding
+D. Feature hashing
+3. During data preparation, you discover missing values on some columns
+of a dataset containing categorical features. You need to ensure that this
+will not misrepresent the data and reduce the model reliability. What
+solution is best suited for this use case?
+A. Amazon SageMaker Clarify
+B. Multiple imputations
+C. Drop the feature
+D. Recollect the data
+4. You are training a model, and during data analysis you observe different
+input variables that vary significantly. You want to ensure that your
+dataset does not have features with a larger value that greatly influence
+the model’s predictive capability. Which transformation is best suited in
+this scenario?
+A. Normalization
+B. Standardization
+C. Binning
+D. One-hot encoding
+5. You are preparing a dataset that has several categorical features, each
+with high cardinality. You want to efficiently feature-engineer the dataset
+in a cost-effective way. What solution fits best this use case?
+A. Label encoding
+B. Lag features
+C. Binary encoding
+D. Feature hashing
+6. A model trained to recognize cars is not performing well. You need to re-
+engineer the features in the image dataset to ensure better performance.
+What solution best fits this scenario?
+A. Tokenization using Amazon SageMaker Data Wrangler
+B. Lag feature using Amazon SageMaker Data Wrangler
+C. Binning using Amazon SageMaker Data Wrangler
+D. Amazon SageMaker JumpStart
+7. Which advanced technique is commonly used in feature engineering for
+textual data to convert words into numerical vectors that capture semantic
+meaning?
+A. One-hot encoding
+B. Tokenization
+C. Word embeddings
+D. Normalization
+8. What is the most common technique used to handle class imbalance in
+machine learning datasets?
+A. Data encoding
+B. Data augmentation
+C. Feature scaling
+D. Data splitting
+9. Which AWS services can be used for data labeling in AWS?
+A. Amazon Comprehend
+B. Amazon SageMaker Ground Truth
+C. Amazon Rekognition
+D. Amazon SageMaker Clarify
+10. What is the purpose of splitting a dataset into training, validation, and test
+datasets in machine learning?
+A. To improve the model’s accuracy
+B. To ensure the model has diverse data
+C. To prevent overfitting and evaluate model performance
+D. To simplify data processing
